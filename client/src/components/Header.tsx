@@ -44,7 +44,9 @@ export default function Header() {
               <Phone className="w-4 h-4" />
               1-800-CARE-NOW
             </a>
-            <Button data-testid="button-get-started">Get Started</Button>
+            <Button asChild data-testid="button-get-started">
+              <a href="https://app.carehubapp.com/#/signUpSelection">Get Started</a>
+            </Button>
           </div>
 
           <Button
@@ -81,8 +83,8 @@ export default function Header() {
                   <Phone className="w-4 h-4" />
                   1-800-CARE-NOW
                 </a>
-                <Button className="w-full" data-testid="button-mobile-get-started">
-                  Get Started
+                <Button asChild className="w-full" data-testid="button-mobile-get-started">
+                  <a href="https://app.carehubapp.com/#/signUpSelection">Get Started</a>
                 </Button>
               </div>
             </nav>
