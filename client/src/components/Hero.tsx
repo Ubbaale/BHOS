@@ -44,12 +44,13 @@ export default function Hero() {
               <a href="https://app.carehubapp.com/#/signUpSelection">Find Workers</a>
             </Button>
             <Button
+              asChild
               size="lg"
               variant="outline"
               className="backdrop-blur-sm bg-white/10 border-white/30 text-white hover:bg-white/20"
               data-testid="button-post-jobs"
             >
-              Post Jobs
+              <a href="https://app.carehubapp.com/#/signUpSelection/signUp">Post Jobs</a>
             </Button>
           </div>
 
