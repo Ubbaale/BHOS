@@ -27,7 +27,7 @@ export default function Hero() {
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-20">
         <div className="max-w-2xl">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
-            We're No.1 New England 24/7 Healthcare Staffing Solutions
+            We're No.1 New England 24/7 Healthcare Dispatch Solutions
           </h1>
           <p className="text-lg md:text-xl text-white/90 leading-relaxed mb-8">
             At your finger tip dispatch a qualified nurses, CNAs, and healthcare workers to your facility, 
