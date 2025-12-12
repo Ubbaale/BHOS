@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,9 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { AlertTriangle, CheckCircle2, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Upload, Loader2 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import type { Job, Ticket } from "@shared/schema";
 
 const issueSchema = z.object({
   shiftId: z.string().min(1, "Please select a shift"),
@@ -35,13 +38,6 @@ const issueSchema = z.object({
 
 type IssueFormData = z.infer<typeof issueSchema>;
 
-// todo: remove mock functionality
-const mockShifts = [
-  { id: "shift-001", label: "Dec 10, 2024 - Memorial Hospital (Night Shift)" },
-  { id: "shift-002", label: "Dec 8, 2024 - Sunrise Senior Living (Day Shift)" },
-  { id: "shift-003", label: "Dec 5, 2024 - HomeCare Plus (Evening Shift)" },
-];
-
 const categories = [
   { value: "late_cancellation", label: "Late Cancellation" },
   { value: "payment_issue", label: "Payment Issue" },
@@ -52,7 +48,11 @@ const categories = [
 
 export default function IssueReport() {
   const [submitted, setSubmitted] = useState(false);
-  const [ticketNumber, setTicketNumber] = useState("");
+  const [ticketId, setTicketId] = useState("");
+
+  const { data: jobs = [] } = useQuery<Job[]>({
+    queryKey: ["/api/jobs"],
+  });
 
   const form = useForm<IssueFormData>({
     resolver: zodResolver(issueSchema),
@@ -65,12 +65,19 @@ export default function IssueReport() {
     },
   });
 
+  const createTicketMutation = useMutation({
+    mutationFn: async (data: IssueFormData) => {
+      const response = await apiRequest("POST", "/api/tickets", data);
+      return response.json() as Promise<Ticket>;
+    },
+    onSuccess: (ticket) => {
+      setTicketId(ticket.id);
+      setSubmitted(true);
+    },
+  });
+
   const onSubmit = (data: IssueFormData) => {
-    console.log("Issue submitted:", data);
-    // todo: remove mock functionality
-    const ticket = `TKT-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    setTicketNumber(ticket);
-    setSubmitted(true);
+    createTicketMutation.mutate(data);
   };
 
   if (submitted) {
@@ -88,8 +95,8 @@ export default function IssueReport() {
               </p>
               <div className="bg-muted rounded-md p-4 mb-6">
                 <p className="text-sm text-muted-foreground">Ticket Number</p>
-                <p className="text-xl font-mono font-semibold" data-testid="text-ticket-number">
-                  {ticketNumber}
+                <p className="text-lg font-mono font-semibold break-all" data-testid="text-ticket-number">
+                  {ticketId}
                 </p>
               </div>
               <Button
@@ -137,19 +144,24 @@ export default function IssueReport() {
                   name="shiftId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Select Shift</FormLabel>
+                      <FormLabel>Select Shift/Job</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-shift">
-                            <SelectValue placeholder="Choose a recent shift" />
+                            <SelectValue placeholder="Choose a job posting" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {mockShifts.map((shift) => (
-                            <SelectItem key={shift.id} value={shift.id}>
-                              {shift.label}
+                          {jobs.map((job) => (
+                            <SelectItem key={job.id} value={job.id.toString()}>
+                              {job.title} - {job.facility}
                             </SelectItem>
                           ))}
+                          {jobs.length === 0 && (
+                            <SelectItem value="general" disabled>
+                              No jobs available
+                            </SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -282,8 +294,20 @@ export default function IssueReport() {
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full" data-testid="button-submit-issue">
-                  Submit Issue
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={createTicketMutation.isPending}
+                  data-testid="button-submit-issue"
+                >
+                  {createTicketMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit Issue"
+                  )}
                 </Button>
               </form>
             </Form>

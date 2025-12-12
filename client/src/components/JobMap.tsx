@@ -1,74 +1,13 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MapPin, Clock, DollarSign, Building2 } from "lucide-react";
-
-// todo: remove mock functionality
-const mockJobs = [
-  {
-    id: 1,
-    title: "Registered Nurse - ICU",
-    facility: "Memorial Hospital",
-    location: "Los Angeles, CA",
-    lat: 34.0522,
-    lng: -118.2437,
-    pay: "$55-65/hr",
-    shift: "Night Shift",
-    urgency: "immediate",
-    requirements: ["RN License", "BLS", "ACLS"],
-  },
-  {
-    id: 2,
-    title: "CNA - Long Term Care",
-    facility: "Sunrise Senior Living",
-    location: "San Diego, CA",
-    lat: 32.7157,
-    lng: -117.1611,
-    pay: "$22-28/hr",
-    shift: "Day Shift",
-    urgency: "within_24hrs",
-    requirements: ["CNA Certification", "CPR"],
-  },
-  {
-    id: 3,
-    title: "LPN - Home Health",
-    facility: "HomeCare Plus",
-    location: "San Francisco, CA",
-    lat: 37.7749,
-    lng: -122.4194,
-    pay: "$35-42/hr",
-    shift: "Flexible",
-    urgency: "scheduled",
-    requirements: ["LPN License", "Home Care Experience"],
-  },
-  {
-    id: 4,
-    title: "Medical Assistant",
-    facility: "Family Medical Clinic",
-    location: "Sacramento, CA",
-    lat: 38.5816,
-    lng: -121.4944,
-    pay: "$20-26/hr",
-    shift: "Day Shift",
-    urgency: "within_24hrs",
-    requirements: ["MA Certification", "EHR Experience"],
-  },
-  {
-    id: 5,
-    title: "RN - Emergency Department",
-    facility: "County General Hospital",
-    location: "Fresno, CA",
-    lat: 36.7378,
-    lng: -119.7871,
-    pay: "$58-70/hr",
-    shift: "Evening Shift",
-    urgency: "immediate",
-    requirements: ["RN License", "TNCC", "ACLS"],
-  },
-];
+import type { Job } from "@shared/schema";
 
 const urgencyColors: Record<string, string> = {
   immediate: "bg-red-500 dark:bg-red-600",
@@ -99,12 +38,12 @@ function createMarkerIcon(urgency: string) {
   });
 }
 
-function MapController({ selectedJob }: { selectedJob: typeof mockJobs[0] | null }) {
+function MapController({ selectedJob }: { selectedJob: Job | null }) {
   const map = useMap();
 
   useEffect(() => {
     if (selectedJob) {
-      map.flyTo([selectedJob.lat, selectedJob.lng], 12, { duration: 0.5 });
+      map.flyTo([parseFloat(selectedJob.lat), parseFloat(selectedJob.lng)], 12, { duration: 0.5 });
     }
   }, [selectedJob, map]);
 
@@ -112,7 +51,32 @@ function MapController({ selectedJob }: { selectedJob: typeof mockJobs[0] | null
 }
 
 export default function JobMap() {
-  const [selectedJob, setSelectedJob] = useState<typeof mockJobs[0] | null>(null);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+
+  const { data: jobs = [], isLoading } = useQuery<Job[]>({
+    queryKey: ["/api/jobs"],
+  });
+
+  if (isLoading) {
+    return (
+      <section id="jobs" className="py-20 bg-card">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-12">
+            <Skeleton className="h-10 w-96 mx-auto mb-4" />
+            <Skeleton className="h-6 w-80 mx-auto" />
+          </div>
+          <div className="flex flex-col lg:flex-row gap-6">
+            <Skeleton className="lg:w-[60%] h-[400px] lg:h-[500px] rounded-md" />
+            <div className="lg:w-[40%] space-y-4">
+              <Skeleton className="h-40" />
+              <Skeleton className="h-40" />
+              <Skeleton className="h-40" />
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section id="jobs" className="py-20 bg-card">
@@ -139,10 +103,10 @@ export default function JobMap() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               <MapController selectedJob={selectedJob} />
-              {mockJobs.map((job) => (
+              {jobs.map((job) => (
                 <Marker
                   key={job.id}
-                  position={[job.lat, job.lng]}
+                  position={[parseFloat(job.lat), parseFloat(job.lng)]}
                   icon={createMarkerIcon(job.urgency)}
                   eventHandlers={{
                     click: () => setSelectedJob(job),
@@ -174,61 +138,69 @@ export default function JobMap() {
               </Badge>
             </div>
 
-            {mockJobs.map((job) => (
-              <Card
-                key={job.id}
-                className={`cursor-pointer hover-elevate transition-all ${
-                  selectedJob?.id === job.id ? "ring-2 ring-primary" : ""
-                }`}
-                onClick={() => setSelectedJob(job)}
-                data-testid={`card-job-${job.id}`}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4 mb-3">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Building2 className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">{job.facility}</span>
-                      </div>
-                      <h3 className="font-semibold">{job.title}</h3>
-                    </div>
-                    <Badge
-                      variant="secondary"
-                      className={`${urgencyColors[job.urgency]} text-white no-default-hover-elevate`}
-                    >
-                      {urgencyLabels[job.urgency]}
-                    </Badge>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-3">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-4 h-4" />
-                      {job.location}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
-                      {job.shift}
-                    </span>
-                    <span className="flex items-center gap-1 font-semibold text-foreground">
-                      <DollarSign className="w-4 h-4" />
-                      {job.pay}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {job.requirements.map((req, i) => (
-                      <Badge key={i} variant="secondary" className="text-xs no-default-hover-elevate">
-                        {req}
-                      </Badge>
-                    ))}
-                  </div>
-
-                  <Button className="w-full" data-testid={`button-apply-${job.id}`}>
-                    Apply Now
-                  </Button>
+            {jobs.length === 0 ? (
+              <Card>
+                <CardContent className="p-6 text-center text-muted-foreground">
+                  No jobs available at the moment. Check back soon!
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              jobs.map((job) => (
+                <Card
+                  key={job.id}
+                  className={`cursor-pointer hover-elevate transition-all ${
+                    selectedJob?.id === job.id ? "ring-2 ring-primary" : ""
+                  }`}
+                  onClick={() => setSelectedJob(job)}
+                  data-testid={`card-job-${job.id}`}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Building2 className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">{job.facility}</span>
+                        </div>
+                        <h3 className="font-semibold">{job.title}</h3>
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className={`${urgencyColors[job.urgency]} text-white no-default-hover-elevate`}
+                      >
+                        {urgencyLabels[job.urgency]}
+                      </Badge>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-3">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-4 h-4" />
+                        {job.location}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        {job.shift}
+                      </span>
+                      <span className="flex items-center gap-1 font-semibold text-foreground">
+                        <DollarSign className="w-4 h-4" />
+                        {job.pay}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {job.requirements.map((req, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs no-default-hover-elevate">
+                          {req}
+                        </Badge>
+                      ))}
+                    </div>
+
+                    <Button className="w-full" data-testid={`button-apply-${job.id}`}>
+                      Apply Now
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </div>
       </div>
