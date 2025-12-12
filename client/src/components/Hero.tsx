@@ -30,11 +30,12 @@ export default function Hero() {
 
           <div className="flex flex-col sm:flex-row gap-4 mb-12">
             <Button
+              asChild
               size="lg"
               className="backdrop-blur-sm bg-white/90 text-foreground hover:bg-white"
               data-testid="button-find-workers"
             >
-              Find Workers
+              <a href="https://app.carehubapp.com/#/signUpSelection">Find Workers</a>
             </Button>
             <Button
               size="lg"
