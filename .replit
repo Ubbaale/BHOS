@@ -40,3 +40,8 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_mem_db:1.0.0", "sendgrid:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+SENDGRID_FROM_EMAIL = "ss@myace.app"
