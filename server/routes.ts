@@ -90,6 +90,7 @@ export async function registerRoutes(
       }
       
       sendIssueNotification({
+        ticketId: ticketId,
         category: parsed.category,
         priority: parsed.priority,
         description: parsed.description,

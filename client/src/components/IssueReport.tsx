@@ -8,13 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Form,
@@ -34,21 +27,13 @@ const ALLOWED_FILE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'application
 
 const issueSchema = z.object({
   shiftId: z.string().min(1, "Please enter a shift or job reference"),
-  category: z.string().min(1, "Please select a category"),
+  category: z.string().min(1, "Please enter an issue category"),
   priority: z.string().min(1, "Please select a priority"),
   description: z.string().min(10, "Description must be at least 10 characters"),
   email: z.string().email("Please enter a valid email"),
 });
 
 type IssueFormData = z.infer<typeof issueSchema>;
-
-const categories = [
-  { value: "late_cancellation", label: "Late Cancellation" },
-  { value: "payment_issue", label: "Payment Issue" },
-  { value: "facility_concern", label: "Facility Concern" },
-  { value: "schedule_conflict", label: "Schedule Conflict" },
-  { value: "other", label: "Other" },
-];
 
 export default function IssueReport() {
   const [submitted, setSubmitted] = useState(false);
@@ -225,20 +210,13 @@ export default function IssueReport() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Issue Category</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-category">
-                            <SelectValue placeholder="Select issue type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {categories.map((cat) => (
-                            <SelectItem key={cat.value} value={cat.value}>
-                              {cat.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <Input
+                          placeholder="Enter issue type (e.g., Payment Issue, Schedule Conflict)"
+                          data-testid="input-category"
+                          {...field}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
