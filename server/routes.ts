@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertJobSchema, insertTicketSchema } from "@shared/schema";
 import { z } from "zod";
+import { sendIssueNotification } from "./email";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -61,6 +62,14 @@ export async function registerRoutes(
     try {
       const parsed = insertTicketSchema.parse(req.body);
       const ticket = await storage.createTicket(parsed);
+      
+      sendIssueNotification({
+        category: parsed.category,
+        priority: parsed.priority,
+        description: parsed.description,
+        email: parsed.email
+      });
+      
       res.status(201).json(ticket);
     } catch (error) {
       if (error instanceof z.ZodError) {
