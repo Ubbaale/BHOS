@@ -1,5 +1,3 @@
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Phone, Mail, MapPin } from "lucide-react";
 import { SiFacebook, SiLinkedin, SiInstagram, SiApple, SiGoogleplay } from "react-icons/si";
 
@@ -117,23 +115,6 @@ export default function Footer() {
             </ul>
           </div>
 
-          <div>
-            <h4 className="font-semibold mb-4">Newsletter</h4>
-            <p className="text-sm opacity-70 mb-4">
-              Stay updated on new opportunities
-            </p>
-            <div className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="Enter email"
-                className="bg-background/10 border-background/20 text-background placeholder:text-background/50"
-                data-testid="input-newsletter"
-              />
-              <Button variant="secondary" data-testid="button-subscribe">
-                Subscribe
-              </Button>
-            </div>
-          </div>
         </div>
 
         <div className="border-t border-background/20 pt-8 pb-8">
