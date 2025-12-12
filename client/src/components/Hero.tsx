@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Users, Clock, Award } from "lucide-react";
-import heroImage from "@assets/generated_images/diverse_healthcare_team_collaborating.png";
+import heroVideo from "@assets/generated_videos/healthcare_aide_caring_for_elderly.mp4";
 
 export default function Hero() {
   const trustIndicators = [
@@ -10,12 +10,18 @@ export default function Hero() {
   ];
 
   return (
-    <section className="relative min-h-[80vh] flex items-center">
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: `url(${heroImage})` }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/60 to-black/40" />
+    <section className="relative min-h-[80vh] flex items-center overflow-hidden">
+      <div className="absolute inset-0">
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover"
+        >
+          <source src={heroVideo} type="video/mp4" />
+        </video>
+        <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/70 to-black/50" />
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-20">
