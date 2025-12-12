@@ -18,9 +18,9 @@ export default function Header() {
         <div className="flex items-center justify-between gap-4 h-16">
           <a href="#" className="flex items-center gap-2" data-testid="link-home">
             <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">CS</span>
+              <span className="text-primary-foreground font-bold text-sm">CH</span>
             </div>
-            <span className="font-semibold text-lg">CareStaff Pro</span>
+            <span className="font-semibold text-lg">Carehub</span>
           </a>
 
           <nav className="hidden md:flex items-center gap-6">

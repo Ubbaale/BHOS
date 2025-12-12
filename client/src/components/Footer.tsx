@@ -38,9 +38,9 @@ export default function Footer() {
           <div className="lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">CS</span>
+                <span className="text-primary-foreground font-bold text-sm">CH</span>
               </div>
-              <span className="font-semibold text-lg">CareStaff Pro</span>
+              <span className="font-semibold text-lg">Carehub</span>
             </div>
             <p className="text-sm opacity-70 mb-6">
               Your trusted partner for healthcare staffing solutions. Available 24/7.
@@ -55,12 +55,12 @@ export default function Footer() {
                 1-800-CARE-NOW
               </a>
               <a
-                href="mailto:support@carestaffpro.com"
+                href="mailto:support@carehub.com"
                 className="flex items-center gap-2 text-sm opacity-90 hover:opacity-100"
                 data-testid="link-footer-email"
               >
                 <Mail className="w-4 h-4" />
-                support@carestaffpro.com
+                support@carehub.com
               </a>
               <p className="flex items-center gap-2 text-sm opacity-70">
                 <MapPin className="w-4 h-4" />
@@ -141,7 +141,7 @@ export default function Footer() {
 
         <div className="border-t border-background/20 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-sm opacity-70">
-            2024 CareStaff Pro. All rights reserved.
+            2024 Carehub. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
             <a

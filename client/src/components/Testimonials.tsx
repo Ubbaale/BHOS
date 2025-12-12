@@ -10,7 +10,7 @@ const testimonials = [
     facility: "Memorial Hospital",
     location: "Los Angeles, CA",
     rating: 5,
-    text: "CareStaff Pro has been invaluable for our staffing needs. Their response time is incredible, and the nurses they send are always qualified and professional.",
+    text: "Carehub has been invaluable for our staffing needs. Their response time is incredible, and the nurses they send are always qualified and professional.",
   },
   {
     name: "Michael Chen",
@@ -18,7 +18,7 @@ const testimonials = [
     facility: "Travel Nurse",
     location: "San Francisco, CA",
     rating: 5,
-    text: "I've been working with CareStaff Pro for 2 years. They always find me great assignments with competitive pay. The app makes everything so easy!",
+    text: "I've been working with Carehub for 2 years. They always find me great assignments with competitive pay. The app makes everything so easy!",
   },
   {
     name: "Emily Rodriguez",
@@ -26,7 +26,7 @@ const testimonials = [
     facility: "Sunrise Senior Living",
     location: "San Diego, CA",
     rating: 5,
-    text: "We rely on CareStaff Pro for last-minute coverage. They've never let us down. The quality of caregivers is consistently excellent.",
+    text: "We rely on Carehub for last-minute coverage. They've never let us down. The quality of caregivers is consistently excellent.",
   },
 ];
 
