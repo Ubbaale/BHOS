@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Stethoscope, Heart, UserCheck, Activity, AlertCircle, Calendar } from "lucide-react";
+import { Stethoscope, Heart, UserCheck, Activity, AlertCircle, Calendar, Car } from "lucide-react";
 
 const services = [
   {
@@ -31,6 +31,11 @@ const services = [
     icon: Calendar,
     title: "Long-term Contracts",
     description: "Travel nursing and extended placement options for ongoing needs.",
+  },
+  {
+    icon: Car,
+    title: "Transportation Services",
+    description: "Reliable transportation to doctor's appointments and medical visits for patients and elderly persons.",
   },
 ];
 
