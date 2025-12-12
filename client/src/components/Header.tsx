@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X, Phone } from "lucide-react";
+import logoImg from "@assets/Screenshot_2025-12-11_223813_1765510798530.jpg";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -17,9 +18,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex items-center justify-between gap-4 h-16">
           <a href="#" className="flex items-center gap-2" data-testid="link-home">
-            <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">CH</span>
-            </div>
+            <img src={logoImg} alt="Carehub Logo" className="h-10 w-auto" />
             <span className="font-semibold text-lg">Carehub</span>
           </a>
 
