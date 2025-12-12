@@ -39,16 +39,23 @@ export async function getUncachableSendGridClient() {
   };
 }
 
+export interface FileAttachment {
+  content: string;
+  filename: string;
+  type: string;
+  disposition: 'attachment';
+}
+
 export async function sendIssueNotification(ticket: {
   category: string;
   priority: string;
   description: string;
   email: string;
-}) {
+}, attachment?: FileAttachment) {
   try {
     const { client, fromEmail } = await getUncachableSendGridClient();
     
-    const msg = {
+    const msg: any = {
       to: 'info@carehubapp.com',
       from: fromEmail,
       subject: `[Carehub Issue] ${ticket.priority.toUpperCase()} - ${ticket.category}`,
@@ -80,8 +87,13 @@ ${ticket.description}
 </table>
 <h3>Description</h3>
 <p style="background: #f5f5f5; padding: 16px; border-radius: 4px;">${ticket.description.replace(/\n/g, '<br>')}</p>
+${attachment ? '<p style="color: #666; font-size: 14px;">Attachment included in this email.</p>' : ''}
       `.trim()
     };
+
+    if (attachment) {
+      msg.attachments = [attachment];
+    }
 
     await client.send(msg);
     console.log('Issue notification email sent to info@carehubapp.com');

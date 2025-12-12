@@ -24,10 +24,13 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { AlertTriangle, CheckCircle2, Upload, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Upload, Loader2, X, FileText, Image } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { Job, Ticket } from "@shared/schema";
 import healthcareWorkersImg from "@assets/stock_images/healthcare_worker_nu_5a5f652a.jpg";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const ALLOWED_FILE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
 
 const issueSchema = z.object({
   shiftId: z.string().min(1, "Please select a shift"),
@@ -50,6 +53,8 @@ const categories = [
 export default function IssueReport() {
   const [submitted, setSubmitted] = useState(false);
   const [ticketId, setTicketId] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   const { data: jobs = [] } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -66,14 +71,64 @@ export default function IssueReport() {
     },
   });
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    setFileError(null);
+    
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+    
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      setFileError("Invalid file type. Only PNG, JPG, and PDF files are allowed.");
+      setSelectedFile(null);
+      return;
+    }
+    
+    if (file.size > MAX_FILE_SIZE) {
+      setFileError("File is too large. Maximum size is 10MB.");
+      setSelectedFile(null);
+      return;
+    }
+    
+    setSelectedFile(file);
+  };
+
+  const removeFile = () => {
+    setSelectedFile(null);
+    setFileError(null);
+  };
+
   const createTicketMutation = useMutation({
     mutationFn: async (data: IssueFormData) => {
-      const response = await apiRequest("POST", "/api/tickets", data);
+      const formData = new FormData();
+      formData.append('shiftId', data.shiftId);
+      formData.append('category', data.category);
+      formData.append('priority', data.priority);
+      formData.append('description', data.description);
+      formData.append('email', data.email);
+      
+      if (selectedFile) {
+        formData.append('attachment', selectedFile);
+      }
+      
+      const response = await fetch('/api/tickets', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to submit ticket');
+      }
+      
       return response.json() as Promise<Ticket>;
     },
     onSuccess: (ticket) => {
       setTicketId(ticket.id);
       setSubmitted(true);
+      setSelectedFile(null);
     },
   });
 
@@ -287,16 +342,53 @@ export default function IssueReport() {
                 />
 
                 <div>
-                  <Label className="mb-2 block">Attachments (Optional - Coming Soon)</Label>
-                  <div className="border-2 border-dashed rounded-md p-6 text-center opacity-60 cursor-not-allowed">
-                    <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      File upload coming soon
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      PNG, JPG, PDF up to 10MB
-                    </p>
-                  </div>
+                  <Label className="mb-2 block">Attachment (Optional)</Label>
+                  {selectedFile ? (
+                    <div className="border rounded-md p-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {selectedFile.type === 'application/pdf' ? (
+                          <FileText className="w-8 h-8 text-red-500 flex-shrink-0" />
+                        ) : (
+                          <Image className="w-8 h-8 text-blue-500 flex-shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={removeFile}
+                        data-testid="button-remove-file"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed rounded-md p-6 text-center block cursor-pointer hover-elevate transition-colors">
+                      <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        Click to upload a file
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        PNG, JPG, PDF up to 10MB
+                      </p>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".png,.jpg,.jpeg,.pdf"
+                        onChange={handleFileChange}
+                        data-testid="input-file"
+                      />
+                    </label>
+                  )}
+                  {fileError && (
+                    <p className="text-sm text-destructive mt-2">{fileError}</p>
+                  )}
                 </div>
 
                 <Button 
