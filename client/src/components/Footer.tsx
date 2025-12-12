@@ -61,7 +61,7 @@ export default function Footer() {
               </a>
               <p className="flex items-center gap-2 text-sm opacity-70">
                 <MapPin className="w-4 h-4" />
-                Los Angeles, CA
+                Massachusetts
               </p>
             </div>
           </div>
