@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Phone, Mail, MapPin } from "lucide-react";
 import { SiFacebook, SiLinkedin, SiInstagram } from "react-icons/si";
+import logoImg from "@assets/fine_1765554954245.png";
 
 const footerLinks = {
   company: [
@@ -37,6 +38,7 @@ export default function Footer() {
         <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-12 mb-12">
           <div className="lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
+              <img src={logoImg} alt="Carehub Logo" className="h-10 w-auto" />
               <span className="font-semibold text-lg">Carehub</span>
             </div>
             <p className="text-sm opacity-70 mb-6">
