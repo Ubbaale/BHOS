@@ -46,6 +46,6 @@ export const tickets = pgTable("tickets", {
   status: text("status").notNull().default("open"),
 });
 
-export const insertTicketSchema = createInsertSchema(tickets).omit({ id: true, status: true });
+export const insertTicketSchema = createInsertSchema(tickets).omit({ status: true });
 export type InsertTicket = z.infer<typeof insertTicketSchema>;
 export type Ticket = typeof tickets.$inferSelect;

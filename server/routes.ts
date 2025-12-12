@@ -76,7 +76,8 @@ export async function registerRoutes(
   app.post("/api/tickets", upload.single('attachment'), async (req, res) => {
     try {
       const parsed = insertTicketSchema.parse(req.body);
-      const ticket = await storage.createTicket(parsed);
+      const ticketId = "CH" + Math.random().toString(36).substring(2, 7).toUpperCase();
+      const ticket = await storage.createTicket({ ...parsed, id: ticketId });
       
       let attachment: FileAttachment | undefined;
       if (req.file) {
