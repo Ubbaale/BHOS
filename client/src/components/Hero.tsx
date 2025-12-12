@@ -50,7 +50,7 @@ export default function Hero() {
               className="backdrop-blur-sm bg-white/10 border-white/30 text-white hover:bg-white/20"
               data-testid="button-post-jobs"
             >
-              <a href="https://app.carehubapp.com/#/signUpSelection/signUp">Post Jobs</a>
+              <a href="https://app.carehubapp.com/#/login">Post Jobs</a>
             </Button>
           </div>
 
