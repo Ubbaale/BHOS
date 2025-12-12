@@ -37,12 +37,12 @@ export default function Header() {
 
           <div className="hidden md:flex items-center gap-4">
             <a
-              href="tel:1-800-CARE-NOW"
+              href="tel:774-581-9700"
               className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
               data-testid="link-phone"
             >
               <Phone className="w-4 h-4" />
-              1-800-CARE-NOW
+              774-581-9700
             </a>
             <Button asChild data-testid="button-get-started">
               <a href="https://app.carehubapp.com/#/login">Get Started</a>
@@ -76,12 +76,12 @@ export default function Header() {
               ))}
               <div className="pt-4 flex flex-col gap-2">
                 <a
-                  href="tel:1-800-CARE-NOW"
+                  href="tel:774-581-9700"
                   className="flex items-center gap-2 px-2 py-2 text-sm font-medium"
                   data-testid="link-mobile-phone"
                 >
                   <Phone className="w-4 h-4" />
-                  1-800-CARE-NOW
+                  774-581-9700
                 </a>
                 <Button asChild className="w-full" data-testid="button-mobile-get-started">
                   <a href="https://app.carehubapp.com/#/login">Get Started</a>

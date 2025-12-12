@@ -44,12 +44,12 @@ export default function Footer() {
             </p>
             <div className="space-y-3">
               <a
-                href="tel:1-800-CARE-NOW"
+                href="tel:774-581-9700"
                 className="flex items-center gap-2 text-sm opacity-90 hover:opacity-100"
                 data-testid="link-footer-phone"
               >
                 <Phone className="w-4 h-4" />
-                1-800-CARE-NOW
+                774-581-9700
               </a>
               <a
                 href="mailto:support@carehub.com"
