@@ -12,7 +12,7 @@ const footerLinks = {
   ],
   workers: [
     { name: "Find Jobs", href: "#jobs" },
-    { name: "Submit Resume", href: "#" },
+    { name: "Submit Resume", href: "https://app.carehubapp.com/#/signUpSelection/signUp" },
     { name: "Benefits", href: "#" },
     { name: "Training", href: "#" },
   ],
