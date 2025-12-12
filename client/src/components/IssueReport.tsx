@@ -27,6 +27,7 @@ import {
 import { AlertTriangle, CheckCircle2, Upload, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { Job, Ticket } from "@shared/schema";
+import healthcareWorkersImg from "@assets/stock_images/healthcare_workers_n_1da03f47.jpg";
 
 const issueSchema = z.object({
   shiftId: z.string().min(1, "Please select a shift"),
@@ -82,8 +83,13 @@ export default function IssueReport() {
 
   if (submitted) {
     return (
-      <section id="report" className="py-20 bg-background">
-        <div className="max-w-2xl mx-auto px-6">
+      <section id="report" className="py-20 relative overflow-hidden">
+        <div 
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${healthcareWorkersImg})` }}
+        />
+        <div className="absolute inset-0 bg-background/90 dark:bg-background/95" />
+        <div className="max-w-2xl mx-auto px-6 relative z-10">
           <Card>
             <CardContent className="p-8 text-center">
               <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -117,8 +123,13 @@ export default function IssueReport() {
   }
 
   return (
-    <section id="report" className="py-20 bg-background">
-      <div className="max-w-2xl mx-auto px-6">
+    <section id="report" className="py-20 relative overflow-hidden">
+      <div 
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${healthcareWorkersImg})` }}
+      />
+      <div className="absolute inset-0 bg-background/90 dark:bg-background/95" />
+      <div className="max-w-2xl mx-auto px-6 relative z-10">
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
