@@ -93,8 +93,8 @@ export default function JobMap() {
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="lg:w-[60%] h-[400px] lg:h-[500px] rounded-md overflow-hidden border">
             <MapContainer
-              center={[36.7783, -119.4179]}
-              zoom={6}
+              center={[39.8283, -98.5795]}
+              zoom={4}
               className="h-full w-full"
               scrollWheelZoom={true}
             >
