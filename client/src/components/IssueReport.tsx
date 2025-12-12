@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,14 +26,14 @@ import {
 } from "@/components/ui/form";
 import { AlertTriangle, CheckCircle2, Upload, Loader2, X, FileText, Image } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import type { Job, Ticket } from "@shared/schema";
+import type { Ticket } from "@shared/schema";
 import healthcareWorkersImg from "@assets/stock_images/healthcare_worker_nu_5a5f652a.jpg";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_FILE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
 
 const issueSchema = z.object({
-  shiftId: z.string().min(1, "Please select a shift"),
+  shiftId: z.string().min(1, "Please enter a shift or job reference"),
   category: z.string().min(1, "Please select a category"),
   priority: z.string().min(1, "Please select a priority"),
   description: z.string().min(10, "Description must be at least 10 characters"),
@@ -55,10 +55,6 @@ export default function IssueReport() {
   const [ticketId, setTicketId] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
-
-  const { data: jobs = [] } = useQuery<Job[]>({
-    queryKey: ["/api/jobs"],
-  });
 
   const form = useForm<IssueFormData>({
     resolver: zodResolver(issueSchema),
@@ -210,26 +206,14 @@ export default function IssueReport() {
                   name="shiftId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Select Shift/Job</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-shift">
-                            <SelectValue placeholder="Choose a job posting" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {jobs.map((job) => (
-                            <SelectItem key={job.id} value={job.id.toString()}>
-                              {job.title} - {job.facility}
-                            </SelectItem>
-                          ))}
-                          {jobs.length === 0 && (
-                            <SelectItem value="general" disabled>
-                              No jobs available
-                            </SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
+                      <FormLabel>Shift/Job Reference</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Enter shift ID, job title, or reference"
+                          data-testid="input-shift"
+                          {...field}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
