@@ -30,7 +30,7 @@ export default function Hero() {
             We're No.1 New England 24/7 Healthcare Staffing Solutions
           </h1>
           <p className="text-lg md:text-xl text-white/90 leading-relaxed mb-8">
-            We dispatch qualified nurses, CNAs, and healthcare workers to your facility, 
+            At your finger tip dispatch a qualified nurses, CNAs, and healthcare workers to your facility, 
             home, or organization. Reliable care when you need it most.
           </p>
 
