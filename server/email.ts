@@ -160,8 +160,11 @@ The Carehub Team
     console.log('Confirmation email sent to', ticket.email);
 
     return true;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to send issue notification email:', error);
+    if (error?.response?.body) {
+      console.error('SendGrid error details:', JSON.stringify(error.response.body, null, 2));
+    }
     return false;
   }
 }
