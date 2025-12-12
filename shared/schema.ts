@@ -30,7 +30,9 @@ export const jobs = pgTable("jobs", {
   requirements: text("requirements").array().notNull(),
 });
 
-export const insertJobSchema = createInsertSchema(jobs).omit({ id: true });
+export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).extend({
+  requirements: z.array(z.string()).min(1, "At least one requirement is required"),
+});
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type Job = typeof jobs.$inferSelect;
 

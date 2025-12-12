@@ -276,21 +276,15 @@ export default function IssueReport() {
                 />
 
                 <div>
-                  <Label className="mb-2 block">Attachments (Optional)</Label>
-                  <div className="border-2 border-dashed rounded-md p-6 text-center hover-elevate cursor-pointer transition-colors">
+                  <Label className="mb-2 block">Attachments (Optional - Coming Soon)</Label>
+                  <div className="border-2 border-dashed rounded-md p-6 text-center opacity-60 cursor-not-allowed">
                     <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
                     <p className="text-sm text-muted-foreground">
-                      Drop files here or click to upload
+                      File upload coming soon
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       PNG, JPG, PDF up to 10MB
                     </p>
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".png,.jpg,.jpeg,.pdf"
-                      data-testid="input-file"
-                    />
                   </div>
                 </div>
 
