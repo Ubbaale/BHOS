@@ -6,61 +6,44 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, DollarSign, Building2 } from "lucide-react";
+import { MapPin, Clock, DollarSign, Building2 } from "lucide-react";
+import type { Job } from "@shared/schema";
 
-interface CarehubJob {
-  Id: string;
-  Title: string;
-  Description: string;
-  City: string;
-  State: string;
-  ZipCode: string;
-  Latitude: number;
-  Longitude: number;
-  HourlyRate: number;
-  SubcategoryName: string;
-  FirstName?: string;
-  LastName?: string;
-  CompanyName?: string;
-}
+const urgencyColors: Record<string, string> = {
+  immediate: "bg-red-500 dark:bg-red-600",
+  within_24hrs: "bg-amber-500 dark:bg-amber-600",
+  scheduled: "bg-green-500 dark:bg-green-600",
+};
 
-interface CarehubApiResponse {
-  Code: string;
-  Status: string;
-  Body: {
-    CurrentPage: number;
-    TotalRecords: number;
-    ItemList: CarehubJob[];
+const urgencyLabels: Record<string, string> = {
+  immediate: "Immediate",
+  within_24hrs: "Within 24hrs",
+  scheduled: "Scheduled",
+};
+
+function createMarkerIcon(urgency: string) {
+  const colors: Record<string, string> = {
+    immediate: "#ef4444",
+    within_24hrs: "#f59e0b",
+    scheduled: "#22c55e",
   };
-}
 
-interface MapJob {
-  id: string;
-  title: string;
-  facility: string;
-  location: string;
-  lat: number;
-  lng: number;
-  pay: string;
-  category: string;
-  isAvailable: boolean;
-}
+  const color = colors[urgency] || "#3b82f6";
 
-function createAvailableMarkerIcon() {
   return L.divIcon({
     className: "custom-marker",
-    html: `<div style="background-color: #22c55e; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
+    html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
 }
 
-function MapController({ selectedJob }: { selectedJob: MapJob | null }) {
+function MapController({ selectedJob }: { selectedJob: Job | null }) {
   const map = useMap();
 
   useEffect(() => {
     if (selectedJob) {
-      map.flyTo([selectedJob.lat, selectedJob.lng], 12, { duration: 0.5 });
+      map.flyTo([parseFloat(selectedJob.lat), parseFloat(selectedJob.lng)], 12, { duration: 0.5 });
     }
   }, [selectedJob, map]);
 
@@ -68,25 +51,11 @@ function MapController({ selectedJob }: { selectedJob: MapJob | null }) {
 }
 
 export default function JobMap() {
-  const [selectedJob, setSelectedJob] = useState<MapJob | null>(null);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
-  const { data: carehubData, isLoading } = useQuery<CarehubApiResponse>({
-    queryKey: ["/api/carehub-jobs"],
+  const { data: jobs = [], isLoading } = useQuery<Job[]>({
+    queryKey: ["/api/jobs"],
   });
-
-  const jobs: MapJob[] = (carehubData?.Body?.ItemList || [])
-    .filter((job) => job.Latitude && job.Longitude)
-    .map((job) => ({
-      id: job.Id,
-      title: job.Title || job.SubcategoryName || "Healthcare Position",
-      facility: job.CompanyName || `${job.FirstName || ""} ${job.LastName || ""}`.trim() || "Healthcare Facility",
-      location: `${job.City}, ${job.State} ${job.ZipCode}`,
-      lat: job.Latitude,
-      lng: job.Longitude,
-      pay: `$${job.HourlyRate}/hr`,
-      category: job.SubcategoryName || "General",
-      isAvailable: true,
-    }));
 
   if (isLoading) {
     return (
@@ -137,8 +106,8 @@ export default function JobMap() {
               {jobs.map((job) => (
                 <Marker
                   key={job.id}
-                  position={[job.lat, job.lng]}
-                  icon={createAvailableMarkerIcon()}
+                  position={[parseFloat(job.lat), parseFloat(job.lng)]}
+                  icon={createMarkerIcon(job.urgency)}
                   eventHandlers={{
                     click: () => setSelectedJob(job),
                   }}
@@ -157,9 +126,15 @@ export default function JobMap() {
 
           <div className="lg:w-[40%] max-h-[500px] overflow-y-auto space-y-4">
             <div className="flex flex-wrap items-center gap-2 mb-4">
-              <span className="text-sm text-muted-foreground">Status:</span>
+              <span className="text-sm text-muted-foreground">Urgency:</span>
+              <Badge variant="secondary" className="bg-red-500 text-white no-default-hover-elevate">
+                Immediate
+              </Badge>
+              <Badge variant="secondary" className="bg-amber-500 text-white no-default-hover-elevate">
+                Within 24hrs
+              </Badge>
               <Badge variant="secondary" className="bg-green-500 text-white no-default-hover-elevate">
-                Available
+                Scheduled
               </Badge>
             </div>
 
@@ -190,9 +165,9 @@ export default function JobMap() {
                       </div>
                       <Badge
                         variant="secondary"
-                        className="bg-green-500 text-white no-default-hover-elevate"
+                        className={`${urgencyColors[job.urgency]} text-white no-default-hover-elevate`}
                       >
-                        Available
+                        {urgencyLabels[job.urgency]}
                       </Badge>
                     </div>
 
@@ -202,14 +177,22 @@ export default function JobMap() {
                         {job.location}
                       </span>
                       <span className="flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        {job.shift}
+                      </span>
+                      <span className="flex items-center gap-1 font-semibold text-foreground">
                         <DollarSign className="w-4 h-4" />
                         {job.pay}
                       </span>
                     </div>
 
-                    <Badge variant="secondary" className="text-xs no-default-hover-elevate mb-4">
-                      {job.category}
-                    </Badge>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {job.requirements.map((req, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs no-default-hover-elevate">
+                          {req}
+                        </Badge>
+                      ))}
+                    </div>
 
                     <Button className="w-full" data-testid={`button-apply-${job.id}`}>
                       Apply Now
