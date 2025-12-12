@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Phone, Mail, MapPin } from "lucide-react";
-import { SiFacebook, SiLinkedin, SiInstagram } from "react-icons/si";
+import { SiFacebook, SiLinkedin, SiInstagram, SiApple, SiGoogleplay } from "react-icons/si";
 
 const footerLinks = {
   company: [
@@ -132,6 +132,43 @@ export default function Footer() {
               <Button variant="secondary" data-testid="button-subscribe">
                 Subscribe
               </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-background/20 pt-8 pb-8">
+          <div className="text-center">
+            <h4 className="font-semibold mb-4">Carehub App Now Available</h4>
+            <p className="text-sm opacity-70 mb-6">
+              Download the Carehub app on iOS and Android
+            </p>
+            <div className="flex flex-wrap justify-center gap-4">
+              <a
+                href="https://apps.apple.com/us/app/care-hub-app/id6444679914"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 bg-background/10 hover:bg-background/20 transition-colors px-4 py-2 rounded-md"
+                data-testid="link-app-store"
+              >
+                <SiApple className="w-6 h-6" />
+                <div className="text-left">
+                  <div className="text-xs opacity-70">Download on the</div>
+                  <div className="text-sm font-semibold">App Store</div>
+                </div>
+              </a>
+              <a
+                href="https://play.google.com/store/apps/details?id=com.fieldhcp.app&pcampaignid=web_share"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 bg-background/10 hover:bg-background/20 transition-colors px-4 py-2 rounded-md"
+                data-testid="link-google-play"
+              >
+                <SiGoogleplay className="w-5 h-5" />
+                <div className="text-left">
+                  <div className="text-xs opacity-70">Get it on</div>
+                  <div className="text-sm font-semibold">Google Play</div>
+                </div>
+              </a>
             </div>
           </div>
         </div>
