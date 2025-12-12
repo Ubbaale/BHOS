@@ -7,6 +7,9 @@ import { sendIssueNotification, FileAttachment } from "./email";
 import multer from "multer";
 import path from "path";
 
+const CAREHUB_API_URL = "https://admin.carehubapp.com/APIs/Employer/MainSearch";
+const CAREHUB_API_TOKEN = process.env.CAREHUB_API_TOKEN;
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -32,6 +35,48 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching jobs:", error);
       res.status(500).json({ message: "Failed to fetch jobs" });
+    }
+  });
+
+  app.get("/api/carehub-jobs", async (_req, res) => {
+    try {
+      if (!CAREHUB_API_TOKEN) {
+        return res.status(500).json({ message: "Carehub API token not configured" });
+      }
+
+      const response = await fetch(CAREHUB_API_URL, {
+        method: "POST",
+        headers: {
+          "accept": "*/*",
+          "authorization": `token ${CAREHUB_API_TOKEN}`,
+          "content-type": "application/json; charset=utf-8",
+          "origin": "https://app.carehubapp.com"
+        },
+        body: JSON.stringify({
+          currentPage: 1,
+          pageSize: 100,
+          Saved: false,
+          filters: {
+            SubcategoryIDs: null,
+            HourlyRates: null,
+            SearchString: null,
+            RadiusKm: null,
+            Latitude: null,
+            Longitude: null
+          }
+        })
+      });
+
+      if (!response.ok) {
+        console.error("Carehub API error:", response.status, response.statusText);
+        return res.status(response.status).json({ message: "Failed to fetch from Carehub API" });
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching Carehub jobs:", error);
+      res.status(500).json({ message: "Failed to fetch Carehub jobs" });
     }
   });
 
