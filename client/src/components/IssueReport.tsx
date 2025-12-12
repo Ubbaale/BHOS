@@ -27,7 +27,7 @@ import {
 import { AlertTriangle, CheckCircle2, Upload, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { Job, Ticket } from "@shared/schema";
-import healthcareWorkersImg from "@assets/stock_images/healthcare_workers_n_1da03f47.jpg";
+import healthcareWorkersImg from "@assets/stock_images/healthcare_worker_nu_5a5f652a.jpg";
 
 const issueSchema = z.object({
   shiftId: z.string().min(1, "Please select a shift"),
