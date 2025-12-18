@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,22 +21,16 @@ const urgencyLabels: Record<string, string> = {
   scheduled: "Scheduled",
 };
 
-function createMarkerIcon(urgency: string) {
-  const colors: Record<string, string> = {
-    immediate: "#ef4444",
-    within_24hrs: "#f59e0b",
-    scheduled: "#22c55e",
-  };
-
-  const color = colors[urgency] || "#3b82f6";
-
+function createGreenMarkerIcon() {
   return L.divIcon({
     className: "custom-marker",
-    html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
+    html: `<div style="background-color: #22c55e; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
 }
+
+const greenMarkerIcon = createGreenMarkerIcon();
 
 function MapController({ selectedJob }: { selectedJob: Job | null }) {
   const map = useMap();
@@ -52,10 +46,64 @@ function MapController({ selectedJob }: { selectedJob: Job | null }) {
 
 export default function JobMap() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const queryClient = useQueryClient();
+  const wsRef = useRef<WebSocket | null>(null);
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
   });
+
+  const handleWebSocketMessage = useCallback((event: MessageEvent) => {
+    try {
+      const { type, job } = JSON.parse(event.data);
+      
+      queryClient.setQueryData<Job[]>(["/api/jobs"], (oldJobs = []) => {
+        if (type === "add") {
+          const exists = oldJobs.some(j => j.id === job.id);
+          if (exists) {
+            return oldJobs.map(j => j.id === job.id ? job : j);
+          }
+          return [...oldJobs, job];
+        } else if (type === "remove") {
+          return oldJobs.filter(j => j.id !== job.id);
+        } else if (type === "update") {
+          return oldJobs.map(j => j.id === job.id ? job : j);
+        }
+        return oldJobs;
+      });
+
+      if (type === "remove" && selectedJob?.id === job.id) {
+        setSelectedJob(null);
+      }
+    } catch (error) {
+      console.error("Error processing WebSocket message:", error);
+    }
+  }, [queryClient, selectedJob]);
+
+  useEffect(() => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws/jobs`;
+    
+    const connect = () => {
+      wsRef.current = new WebSocket(wsUrl);
+      
+      wsRef.current.onmessage = handleWebSocketMessage;
+      
+      wsRef.current.onclose = () => {
+        setTimeout(connect, 3000);
+      };
+      
+      wsRef.current.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+    };
+    
+    connect();
+    
+    return () => {
+      wsRef.current?.close();
+    };
+  }, [handleWebSocketMessage]);
 
   if (isLoading) {
     return (
@@ -107,7 +155,7 @@ export default function JobMap() {
                 <Marker
                   key={job.id}
                   position={[parseFloat(job.lat), parseFloat(job.lng)]}
-                  icon={createMarkerIcon(job.urgency)}
+                  icon={greenMarkerIcon}
                   eventHandlers={{
                     click: () => setSelectedJob(job),
                   }}
