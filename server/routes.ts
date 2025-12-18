@@ -1,11 +1,23 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { insertJobSchema, insertTicketSchema } from "@shared/schema";
 import { z } from "zod";
 import { sendIssueNotification, FileAttachment } from "./email";
 import multer from "multer";
 import path from "path";
+
+const clients: Set<WebSocket> = new Set();
+
+function broadcastJobUpdate(type: "add" | "remove" | "update", job: any) {
+  const message = JSON.stringify({ type, job });
+  clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -25,9 +37,21 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws/jobs" });
+  
+  wss.on("connection", (ws) => {
+    clients.add(ws);
+    console.log("WebSocket client connected");
+    
+    ws.on("close", () => {
+      clients.delete(ws);
+      console.log("WebSocket client disconnected");
+    });
+  });
+  
   app.get("/api/jobs", async (_req, res) => {
     try {
-      const jobs = await storage.getAllJobs();
+      const jobs = await storage.getAvailableJobs();
       res.json(jobs);
     } catch (error) {
       console.error("Error fetching jobs:", error);
@@ -53,6 +77,7 @@ export async function registerRoutes(
     try {
       const parsed = insertJobSchema.parse(req.body);
       const job = await storage.createJob(parsed);
+      broadcastJobUpdate("add", job);
       res.status(201).json(job);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -60,6 +85,33 @@ export async function registerRoutes(
       }
       console.error("Error creating job:", error);
       res.status(500).json({ message: "Failed to create job" });
+    }
+  });
+
+  app.patch("/api/jobs/:id/status", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { status } = req.body;
+      
+      if (!status || !["available", "filled"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status. Must be 'available' or 'filled'" });
+      }
+      
+      const job = await storage.updateJobStatus(id, status);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      if (status === "filled") {
+        broadcastJobUpdate("remove", job);
+      } else {
+        broadcastJobUpdate("add", job);
+      }
+      
+      res.json(job);
+    } catch (error) {
+      console.error("Error updating job status:", error);
+      res.status(500).json({ message: "Failed to update job status" });
     }
   });
 

@@ -22,12 +22,15 @@ export const jobs = pgTable("jobs", {
   title: text("title").notNull(),
   facility: text("facility").notNull(),
   location: text("location").notNull(),
+  zipCode: text("zip_code"),
+  state: text("state"),
   lat: numeric("lat").notNull(),
   lng: numeric("lng").notNull(),
   pay: text("pay").notNull(),
   shift: text("shift").notNull(),
   urgency: text("urgency").notNull(),
   requirements: text("requirements").array().notNull(),
+  status: text("status").notNull().default("available"),
 });
 
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).extend({
