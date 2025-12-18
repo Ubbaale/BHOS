@@ -69,12 +69,15 @@ export async function registerRoutes(
     try {
       const { latitude = 39.8283, longitude = -98.5795, pageSize = 100 } = req.body;
       
+      const basicAuth = getFieldHcpBasicAuth();
+      console.log("Calling FieldHCP API with auth...");
+      
       const response = await fetch(FIELDHCP_API_URL, {
         method: "POST",
         headers: {
           "accept": "*/*",
+          "Authorization": `Basic ${basicAuth}`,
           "authorization": `token ${FIELDHCP_AUTH_TOKEN}`,
-          "Authorization": `Basic ${getFieldHcpBasicAuth()}`,
           "content-type": "application/json; charset=utf-8",
           "origin": "https://app.carehubapp.com",
           "referer": "https://app.carehubapp.com/"
@@ -94,11 +97,13 @@ export async function registerRoutes(
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`FieldHCP API error: ${response.status}`);
+      const data = await response.json();
+      
+      if (data.Code === "401") {
+        console.error("FieldHCP Auth failed:", data.Status);
+        return res.status(401).json({ message: data.Status });
       }
 
-      const data = await response.json();
       res.json(data);
     } catch (error) {
       console.error("Error fetching external jobs:", error);
