@@ -8,6 +8,12 @@ import { sendIssueNotification, FileAttachment } from "./email";
 import multer from "multer";
 import path from "path";
 
+const FIELDHCP_API_URL = "https://admin.carehubapp.com/APIs/Employer/JobSearch";
+const FIELDHCP_AUTH_TOKEN = process.env.FIELDHCP_AUTH_TOKEN || "";
+const FIELDHCP_USERNAME = process.env.FIELDHCP_USERNAME || "";
+const FIELDHCP_PASSWORD = process.env.FIELDHCP_PASSWORD || "";
+const getFieldHcpBasicAuth = () => Buffer.from(`${FIELDHCP_USERNAME}:${FIELDHCP_PASSWORD}`).toString("base64");
+
 const clients: Set<WebSocket> = new Set();
 
 function broadcastJobUpdate(type: "add" | "remove" | "update", job: any) {
@@ -56,6 +62,47 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching jobs:", error);
       res.status(500).json({ message: "Failed to fetch jobs" });
+    }
+  });
+
+  app.post("/api/external-jobs", async (req, res) => {
+    try {
+      const { latitude = 39.8283, longitude = -98.5795, pageSize = 100 } = req.body;
+      
+      const response = await fetch(FIELDHCP_API_URL, {
+        method: "POST",
+        headers: {
+          "accept": "*/*",
+          "authorization": `token ${FIELDHCP_AUTH_TOKEN}`,
+          "Authorization": `Basic ${getFieldHcpBasicAuth()}`,
+          "content-type": "application/json; charset=utf-8",
+          "origin": "https://app.carehubapp.com",
+          "referer": "https://app.carehubapp.com/"
+        },
+        body: JSON.stringify({
+          currentPage: 1,
+          pageSize: pageSize,
+          Saved: false,
+          filters: {
+            SubcategoryIDs: null,
+            HourlyRates: null,
+            SearchString: null,
+            RadiusKm: null,
+            Latitude: latitude,
+            Longitude: longitude
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`FieldHCP API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching external jobs:", error);
+      res.status(500).json({ message: "Failed to fetch external jobs", error: String(error) });
     }
   });
 
