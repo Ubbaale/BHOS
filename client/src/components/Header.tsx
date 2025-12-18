@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X, Phone } from "lucide-react";
 import logoImg from "@assets/Screenshot_2025-12-11_223813_1765510798530.jpg";
+import JobPostingForm from "./JobPostingForm";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -44,6 +45,7 @@ export default function Header() {
               <Phone className="w-4 h-4" />
               774-581-9700
             </a>
+            <JobPostingForm />
             <Button asChild data-testid="button-get-started">
               <a href="https://app.carehubapp.com/#/login">Get Started</a>
             </Button>
@@ -83,6 +85,9 @@ export default function Header() {
                   <Phone className="w-4 h-4" />
                   774-581-9700
                 </a>
+                <div className="px-2">
+                  <JobPostingForm />
+                </div>
                 <Button asChild className="w-full" data-testid="button-mobile-get-started">
                   <a href="https://app.carehubapp.com/#/login">Get Started</a>
                 </Button>
