@@ -69,15 +69,14 @@ export async function registerRoutes(
     try {
       const { latitude = 39.8283, longitude = -98.5795, pageSize = 100 } = req.body;
       
-      const basicAuth = getFieldHcpBasicAuth();
-      console.log("Calling FieldHCP API with auth...");
+      const authToken = FIELDHCP_AUTH_TOKEN || getFieldHcpBasicAuth();
+      console.log("Calling FieldHCP API...");
       
       const response = await fetch(FIELDHCP_API_URL, {
         method: "POST",
         headers: {
           "accept": "*/*",
-          "Authorization": `Basic ${basicAuth}`,
-          "authorization": `token ${FIELDHCP_AUTH_TOKEN}`,
+          "Authorization": `Basic ${authToken}`,
           "content-type": "application/json; charset=utf-8",
           "origin": "https://app.carehubapp.com",
           "referer": "https://app.carehubapp.com/"
