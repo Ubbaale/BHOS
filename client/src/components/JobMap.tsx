@@ -1,38 +1,68 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Clock, DollarSign, Building2 } from "lucide-react";
+import { MapPin, Clock, DollarSign, Building2, ExternalLink } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import type { Job } from "@shared/schema";
+
+interface ExternalJob {
+  GigId: number;
+  Title: string;
+  FreelancerName: string;
+  HourlyRate: number;
+  CategoryName: string;
+  City: string;
+  State: string;
+  Country: string;
+  Lat: number;
+  Long: number;
+  Skills: string[];
+  Distance?: number;
+}
+
+interface ExternalJobsResponse {
+  Code: string;
+  Status: string;
+  Body: {
+    ItemList: ExternalJob[];
+    TotalRecords: number;
+  };
+}
 
 const urgencyColors: Record<string, string> = {
   immediate: "bg-red-500 dark:bg-red-600",
   within_24hrs: "bg-amber-500 dark:bg-amber-600",
   scheduled: "bg-green-500 dark:bg-green-600",
+  external: "bg-blue-500 dark:bg-blue-600",
 };
 
 const urgencyLabels: Record<string, string> = {
   immediate: "Immediate",
   within_24hrs: "Within 24hrs",
   scheduled: "Scheduled",
+  external: "External",
 };
 
-function createGreenMarkerIcon() {
+function createMarkerIcon(color: string) {
   return L.divIcon({
     className: "custom-marker",
-    html: `<div style="background-color: #22c55e; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
+    html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
 }
 
-const greenMarkerIcon = createGreenMarkerIcon();
+const greenMarkerIcon = createMarkerIcon("#22c55e");
+const blueMarkerIcon = createMarkerIcon("#3b82f6");
 
-function MapController({ selectedJob }: { selectedJob: Job | null }) {
+type CombinedJob = Job & { isExternal?: boolean };
+
+function MapController({ selectedJob }: { selectedJob: CombinedJob | null }) {
   const map = useMap();
 
   useEffect(() => {
@@ -45,13 +75,53 @@ function MapController({ selectedJob }: { selectedJob: Job | null }) {
 }
 
 export default function JobMap() {
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [selectedJob, setSelectedJob] = useState<CombinedJob | null>(null);
+  const [externalJobs, setExternalJobs] = useState<CombinedJob[]>([]);
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
 
-  const { data: jobs = [], isLoading } = useQuery<Job[]>({
+  const { data: localJobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
   });
+
+  useEffect(() => {
+    const fetchExternalJobs = async () => {
+      try {
+        const response = await apiRequest("POST", "/api/external-jobs", {
+          latitude: 39.8283,
+          longitude: -98.5795,
+          pageSize: 100,
+        });
+        const data: ExternalJobsResponse = await response.json();
+        
+        if (data.Code === "200" && data.Body?.ItemList) {
+          const mapped: CombinedJob[] = data.Body.ItemList.map((ext) => ({
+            id: ext.GigId,
+            title: ext.Title,
+            facility: ext.FreelancerName,
+            location: `${ext.City}, ${ext.State}`,
+            zipCode: null,
+            state: ext.State,
+            lat: String(ext.Lat),
+            lng: String(ext.Long),
+            pay: `$${ext.HourlyRate}/hr`,
+            shift: ext.CategoryName,
+            urgency: "external" as const,
+            requirements: ext.Skills || [],
+            status: "available" as const,
+            isExternal: true,
+          }));
+          setExternalJobs(mapped);
+        }
+      } catch (error) {
+        console.error("Failed to fetch external jobs:", error);
+      }
+    };
+    
+    fetchExternalJobs();
+  }, []);
+
+  const jobs: CombinedJob[] = [...localJobs.map(j => ({ ...j, isExternal: false })), ...externalJobs];
 
   const handleWebSocketMessage = useCallback((event: MessageEvent) => {
     try {
@@ -153,9 +223,9 @@ export default function JobMap() {
               <MapController selectedJob={selectedJob} />
               {jobs.map((job) => (
                 <Marker
-                  key={job.id}
+                  key={`${job.isExternal ? 'ext' : 'local'}-${job.id}`}
                   position={[parseFloat(job.lat), parseFloat(job.lng)]}
-                  icon={greenMarkerIcon}
+                  icon={job.isExternal ? blueMarkerIcon : greenMarkerIcon}
                   eventHandlers={{
                     click: () => setSelectedJob(job),
                   }}
@@ -165,6 +235,11 @@ export default function JobMap() {
                       <p className="font-semibold">{job.title}</p>
                       <p className="text-sm text-muted-foreground">{job.facility}</p>
                       <p className="text-sm font-medium text-primary">{job.pay}</p>
+                      {job.isExternal && (
+                        <p className="text-xs text-blue-500 mt-1 flex items-center gap-1">
+                          <ExternalLink className="w-3 h-3" /> External Listing
+                        </p>
+                      )}
                     </div>
                   </Popup>
                 </Marker>
@@ -184,6 +259,9 @@ export default function JobMap() {
               <Badge variant="secondary" className="bg-green-500 text-white no-default-hover-elevate">
                 Scheduled
               </Badge>
+              <Badge variant="secondary" className="bg-blue-500 text-white no-default-hover-elevate">
+                External
+              </Badge>
             </div>
 
             {jobs.length === 0 ? (
@@ -195,12 +273,12 @@ export default function JobMap() {
             ) : (
               jobs.map((job) => (
                 <Card
-                  key={job.id}
+                  key={`${job.isExternal ? 'ext' : 'local'}-${job.id}`}
                   className={`cursor-pointer hover-elevate transition-all ${
-                    selectedJob?.id === job.id ? "ring-2 ring-primary" : ""
+                    selectedJob?.id === job.id && selectedJob?.isExternal === job.isExternal ? "ring-2 ring-primary" : ""
                   }`}
                   onClick={() => setSelectedJob(job)}
-                  data-testid={`card-job-${job.id}`}
+                  data-testid={`card-job-${job.isExternal ? 'ext' : 'local'}-${job.id}`}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-4 mb-3">
