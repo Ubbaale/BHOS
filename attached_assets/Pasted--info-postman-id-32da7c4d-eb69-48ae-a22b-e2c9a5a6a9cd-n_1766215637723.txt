@@ -1,0 +1,113 @@
+{
+	"info": {
+		"_postman_id": "32da7c4d-eb69-48ae-a22b-e2c9a5a6a9cd",
+		"name": "CareHub",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "4486216"
+	},
+	"item": [
+		{
+			"name": "JobSearch",
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{
+							"key": "password",
+							"value": "WelcomeFieldHcpAuth",
+							"type": "string"
+						},
+						{
+							"key": "username",
+							"value": "Fieldcp-Auth",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "accept",
+						"value": "*/*"
+					},
+					{
+						"key": "accept-language",
+						"value": "en-IN,en;q=0.9,hi-IN;q=0.8,hi;q=0.7,en-GB;q=0.6,en-US;q=0.5,gu;q=0.4"
+					},
+					{
+						"key": "authorization",
+						"value": "token bHJPTlRQdTRPaWQxMXdjdDFacEIKb0pCOEVUd0FRU1dhdktZd3hQSjkKcU5sbGlwVmQ0RERRTFVwaWZwY2wKQTd1TUxMS2V4ZjBVbjNFUmxJYkwKM3g4YUtWcjVXNmc4Zm1HOVZkWFo=:9fedaaf3-803d-475b-b63a-355d827a067a"
+					},
+					{
+						"key": "content-type",
+						"value": "application/json; charset=utf-8"
+					},
+					{
+						"key": "origin",
+						"value": "https://app.carehubapp.com"
+					},
+					{
+						"key": "priority",
+						"value": "u=1, i"
+					},
+					{
+						"key": "referer",
+						"value": "https://app.carehubapp.com/"
+					},
+					{
+						"key": "sec-ch-ua",
+						"value": "\"Chromium\";v=\"142\", \"Google Chrome\";v=\"142\", \"Not_A Brand\";v=\"99\""
+					},
+					{
+						"key": "sec-ch-ua-mobile",
+						"value": "?0"
+					},
+					{
+						"key": "sec-ch-ua-platform",
+						"value": "\"Windows\""
+					},
+					{
+						"key": "sec-fetch-dest",
+						"value": "empty"
+					},
+					{
+						"key": "sec-fetch-mode",
+						"value": "cors"
+					},
+					{
+						"key": "sec-fetch-site",
+						"value": "same-site"
+					},
+					{
+						"key": "user-agent",
+						"value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\"currentPage\":1,\"pageSize\":10,\"Saved\":false,\"filters\":{\"SubcategoryIDs\":null,\"HourlyRates\":null,\"SearchString\":null,\"RadiusKm\":null,\"Latitude\":21.1944011,\"Longitude\":72.8648289}}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://admin.carehubapp.com/APIs/Employer/JobSearch",
+					"protocol": "https",
+					"host": [
+						"admin",
+						"carehubapp",
+						"com"
+					],
+					"path": [
+						"APIs",
+						"Employer",
+						"JobSearch"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
