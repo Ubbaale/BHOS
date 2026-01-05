@@ -119,6 +119,13 @@ Database tables:
 - Document storage in `/uploads/kyc` directory (max 10MB, PNG/JPG/PDF)
 - Drivers must complete KYC verification before accepting rides
 
+### Payment System (Deferred)
+- **Current Status**: Payment integration not yet configured (user dismissed Stripe setup)
+- **Workflow**: Patients post rides for free → Drivers claim from pool → Fare calculated on completion
+- **Fare Structure**: $20 base + $2.50/mile, $22 minimum
+- **Future Integration**: Stripe payment processing can be added when ready
+- **Note**: To enable payments, user needs to complete Stripe integration setup
+
 ### Routes
 - `/` - Landing page with job map, services, and issue reporting
 - `/book-ride` - Patient ride booking form with map
