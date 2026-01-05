@@ -92,6 +92,8 @@ export const driverProfiles = pgTable("driver_profiles", {
   isAvailable: boolean("is_available").default(true),
   currentLat: numeric("current_lat"),
   currentLng: numeric("current_lng"),
+  applicationStatus: text("application_status").notNull().default("pending"),
+  rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
