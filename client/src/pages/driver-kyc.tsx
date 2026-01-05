@@ -43,13 +43,20 @@ const US_STATES = [
 export default function DriverKyc() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const [driverId] = useState(() => {
-    const stored = localStorage.getItem("selectedDriverId");
-    return stored ? parseInt(stored) : 1;
+  
+  const { data: drivers = [] } = useQuery<DriverProfile[]>({
+    queryKey: ["/api/drivers/approved"],
   });
 
+  const storedDriverId = localStorage.getItem("selectedDriverId");
+  const parsedDriverId = storedDriverId ? parseInt(storedDriverId) : null;
+  
+  // If no driver ID is stored, use the first approved driver
+  const effectiveDriverId = parsedDriverId || (drivers.length > 0 ? drivers[0].id : null);
+
   const { data: driver, isLoading } = useQuery<DriverProfile>({
-    queryKey: ["/api/drivers", driverId],
+    queryKey: ["/api/drivers", effectiveDriverId],
+    enabled: !!effectiveDriverId,
   });
 
   const [formData, setFormData] = useState({
@@ -75,11 +82,11 @@ export default function DriverKyc() {
 
   const updateKycMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const response = await apiRequest("PATCH", `/api/drivers/${driverId}/kyc`, data);
+      const response = await apiRequest("PATCH", `/api/drivers/${effectiveDriverId}/kyc`, data);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/drivers", driverId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/drivers", effectiveDriverId] });
       toast({
         title: "Information Saved",
         description: "Your KYC information has been updated.",
@@ -100,7 +107,7 @@ export default function DriverKyc() {
       formData.append("document", file);
       formData.append("documentType", documentType);
       
-      const response = await fetch(`/api/drivers/${driverId}/kyc/upload`, {
+      const response = await fetch(`/api/drivers/${effectiveDriverId}/kyc/upload`, {
         method: "POST",
         body: formData,
         credentials: "include",
@@ -112,7 +119,7 @@ export default function DriverKyc() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/drivers", driverId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/drivers", effectiveDriverId] });
       setUploadingDoc(null);
       toast({
         title: "Document Uploaded",
@@ -131,11 +138,11 @@ export default function DriverKyc() {
 
   const submitKycMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", `/api/drivers/${driverId}/kyc/submit`);
+      const response = await apiRequest("POST", `/api/drivers/${effectiveDriverId}/kyc/submit`);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/drivers", driverId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/drivers", effectiveDriverId] });
       toast({
         title: "KYC Submitted",
         description: "Your documents have been submitted for review.",

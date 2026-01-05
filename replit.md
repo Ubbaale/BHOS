@@ -101,12 +101,21 @@ Database tables:
 - Self-service driver application form at `/driver/apply`
 - Admin dashboard for reviewing applications at `/admin/drivers`
 - Application status workflow: Pending → Approved/Rejected
-- Driver dashboard only accessible for approved drivers
+- Driver dashboard only accessible for approved and KYC-verified drivers
 - Rejection reason tracking for transparency
+
+### KYC Verification
+- Two-stage driver verification: (1) initial application approval, (2) KYC document verification
+- Document upload for driver's license, vehicle registration, insurance, and profile photo
+- KYC status workflow: Not Submitted → Pending Review → Approved/Rejected
+- Admin KYC review dashboard with document viewing and approval/rejection
+- Document storage in `/uploads/kyc` directory (max 10MB, PNG/JPG/PDF)
+- Drivers must complete KYC verification before accepting rides
 
 ### Routes
 - `/` - Landing page with job map, services, and issue reporting
 - `/book-ride` - Patient ride booking form with map
-- `/driver` - Driver dashboard for ride management (approved drivers only)
+- `/driver` - Driver dashboard for ride management (KYC-verified drivers only)
 - `/driver/apply` - Driver application form for new drivers
-- `/admin/drivers` - Admin dashboard for managing driver applications
+- `/driver/kyc` - KYC verification page for document upload
+- `/admin/drivers` - Admin dashboard for managing driver applications and KYC verification
