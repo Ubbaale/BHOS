@@ -18,6 +18,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import {
   Form,
   FormControl,
@@ -28,7 +30,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign } from "lucide-react";
+import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield } from "lucide-react";
 import type { Ride } from "@shared/schema";
 
 const BASE_FARE = 20.00;
@@ -82,6 +84,11 @@ const bookRideSchema = z.object({
   appointmentTime: z.string().min(1, "Appointment time is required"),
   mobilityNeeds: z.array(z.string()).optional(),
   notes: z.string().optional(),
+  paymentType: z.enum(["self_pay", "insurance"]).default("self_pay"),
+  insuranceProvider: z.string().optional(),
+  memberId: z.string().optional(),
+  groupNumber: z.string().optional(),
+  priorAuthNumber: z.string().optional(),
 });
 
 type BookRideFormData = z.infer<typeof bookRideSchema>;
@@ -169,8 +176,15 @@ export default function BookRide() {
       appointmentTime: "",
       mobilityNeeds: [],
       notes: "",
+      paymentType: "self_pay",
+      insuranceProvider: "",
+      memberId: "",
+      groupNumber: "",
+      priorAuthNumber: "",
     },
   });
+
+  const paymentType = form.watch("paymentType");
 
   const createRideMutation = useMutation({
     mutationFn: async (data: BookRideFormData) => {
@@ -540,6 +554,103 @@ export default function BookRide() {
                           </div>
                         ))}
                       </div>
+                    </div>
+
+                    <div className="border-t pt-4">
+                      <FormField
+                        control={form.control}
+                        name="paymentType"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-1">
+                              <CreditCard className="w-4 h-4" /> Payment Method
+                            </FormLabel>
+                            <FormControl>
+                              <RadioGroup
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                                className="flex gap-4"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <RadioGroupItem value="self_pay" id="self_pay" data-testid="radio-self-pay" />
+                                  <Label htmlFor="self_pay" className="cursor-pointer">Self Pay</Label>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <RadioGroupItem value="insurance" id="insurance" data-testid="radio-insurance" />
+                                  <Label htmlFor="insurance" className="cursor-pointer">Insurance</Label>
+                                </div>
+                              </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {paymentType === "insurance" && (
+                        <div className="mt-4 p-4 bg-muted rounded-md space-y-4">
+                          <div className="flex items-center gap-2 text-sm font-medium">
+                            <Shield className="w-4 h-4" />
+                            Insurance Information
+                          </div>
+                          <FormField
+                            control={form.control}
+                            name="insuranceProvider"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Insurance Provider</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="e.g., Medicare, Medicaid, Blue Cross" {...field} data-testid="input-insurance-provider" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                              control={form.control}
+                              name="memberId"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Member ID</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="Member ID number" {...field} data-testid="input-member-id" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="groupNumber"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Group Number</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="Group number (if applicable)" {...field} data-testid="input-group-number" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                          <FormField
+                            control={form.control}
+                            name="priorAuthNumber"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Prior Authorization Number (Optional)</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="If you have a prior auth number" {...field} data-testid="input-prior-auth" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Your insurance will be billed for this ride. You may be responsible for any copays or non-covered amounts.
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <FormField
