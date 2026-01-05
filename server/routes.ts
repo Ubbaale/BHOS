@@ -489,6 +489,151 @@ export async function registerRoutes(
     }
   });
 
+  // KYC document upload endpoint
+  const kycUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => {
+        const uploadDir = path.join(process.cwd(), "uploads", "kyc");
+        require("fs").mkdirSync(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+      },
+      filename: (_req, file, cb) => {
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        cb(null, uniqueSuffix + "-" + file.originalname);
+      },
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "application/pdf"];
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error("Invalid file type. Only PNG, JPG, and PDF files are allowed."));
+      }
+    },
+  });
+
+  app.post("/api/drivers/:id/kyc/upload", kycUpload.single("document"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { documentType } = req.body;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      if (!["driversLicense", "vehicleRegistration", "insurance", "profilePhoto"].includes(documentType)) {
+        return res.status(400).json({ message: "Invalid document type" });
+      }
+
+      const filePath = `/uploads/kyc/${file.filename}`;
+      const fieldMap: Record<string, string> = {
+        driversLicense: "driversLicenseDoc",
+        vehicleRegistration: "vehicleRegistrationDoc",
+        insurance: "insuranceDoc",
+        profilePhoto: "profilePhotoDoc",
+      };
+
+      const updateData: Record<string, string> = {
+        [fieldMap[documentType]]: filePath,
+      };
+
+      const driver = await storage.updateDriverKyc(id, updateData);
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+
+      res.json({ path: filePath, driver });
+    } catch (error) {
+      console.error("Error uploading KYC document:", error);
+      res.status(500).json({ message: "Failed to upload document" });
+    }
+  });
+
+  app.patch("/api/drivers/:id/kyc", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const kycData = req.body;
+
+      const driver = await storage.updateDriverKyc(id, kycData);
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+
+      res.json(driver);
+    } catch (error) {
+      console.error("Error updating driver KYC:", error);
+      res.status(500).json({ message: "Failed to update KYC information" });
+    }
+  });
+
+  app.post("/api/drivers/:id/kyc/submit", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const driver = await storage.getDriver(id);
+      
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+
+      // Check if all required documents are uploaded
+      if (!driver.driversLicenseDoc || !driver.vehicleRegistrationDoc || !driver.insuranceDoc) {
+        return res.status(400).json({ 
+          message: "Please upload all required documents before submitting for review",
+          missing: {
+            driversLicense: !driver.driversLicenseDoc,
+            vehicleRegistration: !driver.vehicleRegistrationDoc,
+            insurance: !driver.insuranceDoc,
+          }
+        });
+      }
+
+      const updatedDriver = await storage.updateDriverKycStatus(id, "pending_review");
+      res.json(updatedDriver);
+    } catch (error) {
+      console.error("Error submitting KYC for review:", error);
+      res.status(500).json({ message: "Failed to submit KYC for review" });
+    }
+  });
+
+  app.post("/api/drivers/:id/kyc/approve", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { notes } = req.body;
+      const driver = await storage.updateDriverKycStatus(id, "approved", notes);
+      
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+
+      res.json(driver);
+    } catch (error) {
+      console.error("Error approving KYC:", error);
+      res.status(500).json({ message: "Failed to approve KYC" });
+    }
+  });
+
+  app.post("/api/drivers/:id/kyc/reject", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { notes } = req.body;
+      const driver = await storage.updateDriverKycStatus(id, "rejected", notes);
+      
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+
+      res.json(driver);
+    } catch (error) {
+      console.error("Error rejecting KYC:", error);
+      res.status(500).json({ message: "Failed to reject KYC" });
+    }
+  });
+
+  // Serve uploaded KYC files
+  app.use("/uploads/kyc", require("express").static(path.join(process.cwd(), "uploads", "kyc")));
+
   app.get("/api/push/vapid-public-key", (_req, res) => {
     res.json({ publicKey: getVapidPublicKey() });
   });

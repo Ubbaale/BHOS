@@ -94,6 +94,26 @@ export const driverProfiles = pgTable("driver_profiles", {
   currentLng: numeric("current_lng"),
   applicationStatus: text("application_status").notNull().default("pending"),
   rejectionReason: text("rejection_reason"),
+  // KYC fields
+  driversLicenseNumber: text("drivers_license_number"),
+  driversLicenseExpiry: text("drivers_license_expiry"),
+  driversLicenseState: text("drivers_license_state"),
+  insuranceProvider: text("insurance_provider"),
+  insurancePolicyNumber: text("insurance_policy_number"),
+  insuranceExpiry: text("insurance_expiry"),
+  vehicleYear: text("vehicle_year"),
+  vehicleMake: text("vehicle_make"),
+  vehicleModel: text("vehicle_model"),
+  vehicleColor: text("vehicle_color"),
+  // Document uploads (file paths)
+  driversLicenseDoc: text("drivers_license_doc"),
+  vehicleRegistrationDoc: text("vehicle_registration_doc"),
+  insuranceDoc: text("insurance_doc"),
+  profilePhotoDoc: text("profile_photo_doc"),
+  // KYC verification status
+  kycStatus: text("kyc_status").notNull().default("not_submitted"),
+  kycNotes: text("kyc_notes"),
+  kycVerifiedAt: timestamp("kyc_verified_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -109,7 +129,25 @@ export const insertDriverProfileSchema = z.object({
   isAvailable: z.boolean().optional(),
   currentLat: z.string().optional(),
   currentLng: z.string().optional(),
+  // KYC fields
+  driversLicenseNumber: z.string().optional(),
+  driversLicenseExpiry: z.string().optional(),
+  driversLicenseState: z.string().optional(),
+  insuranceProvider: z.string().optional(),
+  insurancePolicyNumber: z.string().optional(),
+  insuranceExpiry: z.string().optional(),
+  vehicleYear: z.string().optional(),
+  vehicleMake: z.string().optional(),
+  vehicleModel: z.string().optional(),
+  vehicleColor: z.string().optional(),
+  driversLicenseDoc: z.string().optional(),
+  vehicleRegistrationDoc: z.string().optional(),
+  insuranceDoc: z.string().optional(),
+  profilePhotoDoc: z.string().optional(),
 });
+
+export const kycStatuses = ["not_submitted", "pending_review", "approved", "rejected"] as const;
+export type KycStatus = typeof kycStatuses[number];
 export type InsertDriverProfile = z.infer<typeof insertDriverProfileSchema>;
 export type DriverProfile = typeof driverProfiles.$inferSelect;
 

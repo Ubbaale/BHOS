@@ -43,6 +43,8 @@ export interface IStorage {
   createDriver(driver: InsertDriverProfile): Promise<DriverProfile>;
   updateDriverAvailability(id: number, isAvailable: boolean): Promise<DriverProfile | undefined>;
   updateDriverApplicationStatus(id: number, status: string, rejectionReason?: string): Promise<DriverProfile | undefined>;
+  updateDriverKyc(id: number, kycData: Partial<InsertDriverProfile>): Promise<DriverProfile | undefined>;
+  updateDriverKycStatus(id: number, kycStatus: string, kycNotes?: string): Promise<DriverProfile | undefined>;
   
   getPatient(id: number): Promise<PatientProfile | undefined>;
   createPatient(patient: InsertPatientProfile): Promise<PatientProfile>;
@@ -188,6 +190,26 @@ export class DatabaseStorage implements IStorage {
   async updateDriverApplicationStatus(id: number, status: string, rejectionReason?: string): Promise<DriverProfile | undefined> {
     const [driver] = await db.update(driverProfiles)
       .set({ applicationStatus: status, rejectionReason })
+      .where(eq(driverProfiles.id, id))
+      .returning();
+    return driver;
+  }
+
+  async updateDriverKyc(id: number, kycData: Partial<InsertDriverProfile>): Promise<DriverProfile | undefined> {
+    const [driver] = await db.update(driverProfiles)
+      .set(kycData as any)
+      .where(eq(driverProfiles.id, id))
+      .returning();
+    return driver;
+  }
+
+  async updateDriverKycStatus(id: number, kycStatus: string, kycNotes?: string): Promise<DriverProfile | undefined> {
+    const updateData: any = { kycStatus, kycNotes };
+    if (kycStatus === "approved") {
+      updateData.kycVerifiedAt = new Date();
+    }
+    const [driver] = await db.update(driverProfiles)
+      .set(updateData)
       .where(eq(driverProfiles.id, id))
       .returning();
     return driver;
