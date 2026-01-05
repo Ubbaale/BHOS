@@ -31,9 +31,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign } from "lucide-react";
 import type { Ride } from "@shared/schema";
 
-const BASE_FARE = 5.00;
+const BASE_FARE = 20.00;
 const PER_MILE_RATE = 2.50;
-const MINIMUM_FARE = 10.00;
+const MINIMUM_FARE = 22.00;
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 3959;
