@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText } from "lucide-react";
+import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText, Navigation } from "lucide-react";
 import type { Ride } from "@shared/schema";
 
 const BASE_FARE = 20.00;
@@ -282,6 +282,7 @@ export default function BookRide() {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookedRide, setBookedRide] = useState<Ride | null>(null);
   const [fareEstimate, setFareEstimate] = useState<{ distance: number; fare: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
 
   useEffect(() => {
     if (pickupPos && dropoffPos) {
@@ -361,6 +362,64 @@ export default function BookRide() {
   const toggleMobilityNeed = (need: string) => {
     setSelectedNeeds((prev) =>
       prev.includes(need) ? prev.filter((n) => n !== need) : [...prev, need]
+    );
+  };
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "Location Not Supported",
+        description: "Your browser doesn't support location services.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        handlePickupChange(latitude, longitude);
+        
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
+          );
+          const data = await response.json();
+          const address = data.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+          form.setValue("pickupAddress", address);
+          
+          toast({
+            title: "Location Found",
+            description: "Your current location has been set as the pickup address.",
+          });
+        } catch (error) {
+          form.setValue("pickupAddress", `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+          toast({
+            title: "Location Set",
+            description: "Coordinates set. You may want to add a street address.",
+          });
+        }
+        
+        setIsLocating(false);
+      },
+      (error) => {
+        setIsLocating(false);
+        let message = "Unable to get your location.";
+        if (error.code === error.PERMISSION_DENIED) {
+          message = "Location permission denied. Please allow location access.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          message = "Location information unavailable.";
+        } else if (error.code === error.TIMEOUT) {
+          message = "Location request timed out.";
+        }
+        toast({
+          title: "Location Error",
+          description: message,
+          variant: "destructive",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
@@ -603,7 +662,21 @@ export default function BookRide() {
                       name="pickupAddress"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Pickup Address</FormLabel>
+                          <div className="flex items-center justify-between gap-2">
+                            <FormLabel>Pickup Address</FormLabel>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={useMyLocation}
+                              disabled={isLocating}
+                              className="text-xs"
+                              data-testid="button-use-my-location"
+                            >
+                              <Navigation className="w-3 h-3 mr-1" />
+                              {isLocating ? "Locating..." : "Use My Location"}
+                            </Button>
+                          </div>
                           <FormControl>
                             <AddressAutocomplete
                               onPlaceSelect={(address, lat, lng) => {
