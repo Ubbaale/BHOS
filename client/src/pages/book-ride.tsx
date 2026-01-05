@@ -492,6 +492,12 @@ export default function BookRide() {
                 </div>
               </div>
               <div className="flex gap-4 justify-center flex-wrap">
+                <Link href={`/track/${bookedRide.id}`}>
+                  <Button data-testid="button-track-ride">
+                    <MapPin className="w-4 h-4 mr-2" />
+                    Track Your Ride
+                  </Button>
+                </Link>
                 <Button onClick={() => navigate("/")} variant="outline" data-testid="button-back-home">
                   Back to Home
                 </Button>

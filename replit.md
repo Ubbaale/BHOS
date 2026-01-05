@@ -40,8 +40,10 @@ Database tables:
 - `users` - User authentication (id, username, password)
 - `jobs` - Healthcare job listings (title, facility, location, lat/lng, pay, shift, urgency, requirements)
 - `tickets` - Issue/support tickets (category, priority, description, email, status)
-- `rides` - Medical transportation ride requests (patient info, pickup/dropoff locations, appointment time, status, mobility needs)
+- `rides` - Medical transportation ride requests (patient info, pickup/dropoff locations, appointment time, status, mobility needs, verification codes, ETA)
 - `ride_events` - Ride status change history and audit trail
+- `ride_messages` - In-app chat messages between drivers and patients
+- `trip_shares` - Trip sharing records for emergency contacts
 - `driver_profiles` - Driver information (name, phone, vehicle, accessibility capabilities)
 - `patient_profiles` - Patient information (name, contact, mobility needs, emergency contact)
 
@@ -126,9 +128,26 @@ Database tables:
 - **Future Integration**: Stripe payment processing can be added when ready
 - **Note**: To enable payments, user needs to complete Stripe integration setup
 
+### In-App Chat
+- Real-time messaging between drivers and patients during active rides
+- WebSocket-based communication for instant message delivery
+- Quick message templates for drivers ("I've arrived", "On my way", etc.)
+- Chat available only during active ride statuses (accepted → in_progress)
+- Message history stored in database for audit purposes
+
+### Safety Features (Uber-Inspired)
+- **Trip Sharing**: Patients can share live trip status with emergency contacts via unique share codes
+- **SOS Button**: One-tap emergency 911 calling for immediate assistance
+- **Driver Information Display**: Patient sees driver photo, name, vehicle info, and ratings
+- **Verification Code**: Unique 4-digit code shown to patient before boarding for driver verification
+- **ETA Tracking**: Real-time estimated arrival times updated by drivers
+- **Trip Tracking Page**: Dedicated `/track/:id` page for patients to monitor ride progress
+
 ### Routes
 - `/` - Landing page with job map, services, and issue reporting
 - `/book-ride` - Patient ride booking form with map
+- `/track/:id` - Ride tracking page with driver info, chat, and safety features
+- `/receipt/:id` - Trip receipt for insurance reimbursement
 - `/driver` - Driver dashboard for ride management (KYC-verified drivers only)
 - `/driver/apply` - Driver application form for new drivers
 - `/driver/kyc` - KYC verification page for document upload
