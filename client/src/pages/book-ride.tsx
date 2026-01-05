@@ -3,10 +3,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useLocation } from "wouter";
+import Autocomplete from "react-google-autocomplete";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -73,6 +74,8 @@ interface LocationPickerProps {
 }
 
 function LocationPicker({ onPickupChange, onDropoffChange, pickupPos, dropoffPos, mode }: LocationPickerProps) {
+  const map = useMap();
+  
   useMapEvents({
     click(e) {
       if (mode === "pickup") {
@@ -82,6 +85,18 @@ function LocationPicker({ onPickupChange, onDropoffChange, pickupPos, dropoffPos
       }
     },
   });
+
+  useEffect(() => {
+    if (pickupPos) {
+      map.flyTo(pickupPos, 14);
+    }
+  }, [pickupPos, map]);
+
+  useEffect(() => {
+    if (dropoffPos) {
+      map.flyTo(dropoffPos, 14);
+    }
+  }, [dropoffPos, map]);
 
   return (
     <>
@@ -359,7 +374,28 @@ export default function BookRide() {
                         <FormItem>
                           <FormLabel>Pickup Address</FormLabel>
                           <FormControl>
-                            <Input placeholder="Enter pickup address" {...field} data-testid="input-pickup-address" />
+                            <Autocomplete
+                              apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
+                              onPlaceSelected={(place) => {
+                                if (place.formatted_address) {
+                                  field.onChange(place.formatted_address);
+                                }
+                                if (place.geometry?.location) {
+                                  const lat = place.geometry.location.lat();
+                                  const lng = place.geometry.location.lng();
+                                  handlePickupChange(lat, lng);
+                                }
+                              }}
+                              options={{
+                                types: ["address"],
+                                componentRestrictions: { country: "us" },
+                                fields: ["formatted_address", "geometry", "name"],
+                              }}
+                              defaultValue={field.value}
+                              placeholder="Start typing an address..."
+                              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                              data-testid="input-pickup-address"
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -373,7 +409,28 @@ export default function BookRide() {
                         <FormItem>
                           <FormLabel>Dropoff Address (Medical Facility)</FormLabel>
                           <FormControl>
-                            <Input placeholder="Enter medical facility address" {...field} data-testid="input-dropoff-address" />
+                            <Autocomplete
+                              apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
+                              onPlaceSelected={(place) => {
+                                if (place.formatted_address) {
+                                  field.onChange(place.formatted_address);
+                                }
+                                if (place.geometry?.location) {
+                                  const lat = place.geometry.location.lat();
+                                  const lng = place.geometry.location.lng();
+                                  handleDropoffChange(lat, lng);
+                                }
+                              }}
+                              options={{
+                                types: ["address"],
+                                componentRestrictions: { country: "us" },
+                                fields: ["formatted_address", "geometry", "name"],
+                              }}
+                              defaultValue={field.value}
+                              placeholder="Start typing an address..."
+                              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                              data-testid="input-dropoff-address"
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
