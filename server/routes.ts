@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses } from "@shared/schema";
 import { z } from "zod";
 import { sendIssueNotification, FileAttachment } from "./email";
 import multer from "multer";
@@ -15,10 +15,20 @@ const FIELDHCP_PASSWORD = process.env.FIELDHCP_PASSWORD || "";
 const getFieldHcpBasicAuth = () => Buffer.from(`${FIELDHCP_USERNAME}:${FIELDHCP_PASSWORD}`).toString("base64");
 
 const clients: Set<WebSocket> = new Set();
+const rideClients: Set<WebSocket> = new Set();
 
 function broadcastJobUpdate(type: "add" | "remove" | "update", job: any) {
   const message = JSON.stringify({ type, job });
   clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+function broadcastRideUpdate(type: "new" | "update" | "status_change", ride: any) {
+  const message = JSON.stringify({ type, ride });
+  rideClients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(message);
     }
@@ -206,6 +216,207 @@ export async function registerRoutes(
       }
       console.error("Error creating ticket:", error);
       res.status(500).json({ message: "Failed to create ticket" });
+    }
+  });
+
+  const rideWss = new WebSocketServer({ server: httpServer, path: "/ws/rides" });
+  
+  rideWss.on("connection", (ws) => {
+    rideClients.add(ws);
+    console.log("Ride WebSocket client connected");
+    
+    ws.on("close", () => {
+      rideClients.delete(ws);
+      console.log("Ride WebSocket client disconnected");
+    });
+  });
+
+  app.get("/api/rides", async (_req, res) => {
+    try {
+      const rides = await storage.getActiveRides();
+      res.json(rides);
+    } catch (error) {
+      console.error("Error fetching rides:", error);
+      res.status(500).json({ message: "Failed to fetch rides" });
+    }
+  });
+
+  app.get("/api/rides/all", async (_req, res) => {
+    try {
+      const rides = await storage.getAllRides();
+      res.json(rides);
+    } catch (error) {
+      console.error("Error fetching all rides:", error);
+      res.status(500).json({ message: "Failed to fetch rides" });
+    }
+  });
+
+  app.get("/api/rides/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const ride = await storage.getRide(id);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      res.json(ride);
+    } catch (error) {
+      console.error("Error fetching ride:", error);
+      res.status(500).json({ message: "Failed to fetch ride" });
+    }
+  });
+
+  app.post("/api/rides", async (req, res) => {
+    try {
+      const parsed = insertRideSchema.parse(req.body);
+      const ride = await storage.createRide(parsed);
+      
+      await storage.createRideEvent({
+        rideId: ride.id,
+        status: "requested",
+        note: "Ride requested by patient"
+      });
+      
+      broadcastRideUpdate("new", ride);
+      res.status(201).json(ride);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid ride data", errors: error.errors });
+      }
+      console.error("Error creating ride:", error);
+      res.status(500).json({ message: "Failed to create ride" });
+    }
+  });
+
+  app.patch("/api/rides/:id/status", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { status, note } = req.body;
+      
+      if (!status || !rideStatuses.includes(status)) {
+        return res.status(400).json({ 
+          message: `Invalid status. Must be one of: ${rideStatuses.join(", ")}` 
+        });
+      }
+      
+      const ride = await storage.updateRideStatus(id, status);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      await storage.createRideEvent({
+        rideId: id,
+        status,
+        note: note || `Status changed to ${status}`
+      });
+      
+      broadcastRideUpdate("status_change", ride);
+      res.json(ride);
+    } catch (error) {
+      console.error("Error updating ride status:", error);
+      res.status(500).json({ message: "Failed to update ride status" });
+    }
+  });
+
+  app.post("/api/rides/:id/accept", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { driverId } = req.body;
+      
+      if (!driverId) {
+        return res.status(400).json({ message: "Driver ID is required" });
+      }
+      
+      const driver = await storage.getDriver(driverId);
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+      
+      const ride = await storage.assignDriver(rideId, driverId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      await storage.createRideEvent({
+        rideId,
+        status: "accepted",
+        note: `Accepted by driver: ${driver.fullName}`
+      });
+      
+      broadcastRideUpdate("status_change", ride);
+      res.json(ride);
+    } catch (error) {
+      console.error("Error accepting ride:", error);
+      res.status(500).json({ message: "Failed to accept ride" });
+    }
+  });
+
+  app.get("/api/rides/:id/events", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const events = await storage.getRideEvents(rideId);
+      res.json(events);
+    } catch (error) {
+      console.error("Error fetching ride events:", error);
+      res.status(500).json({ message: "Failed to fetch ride events" });
+    }
+  });
+
+  app.get("/api/drivers", async (_req, res) => {
+    try {
+      const drivers = await storage.getAvailableDrivers();
+      res.json(drivers);
+    } catch (error) {
+      console.error("Error fetching drivers:", error);
+      res.status(500).json({ message: "Failed to fetch drivers" });
+    }
+  });
+
+  app.get("/api/drivers/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const driver = await storage.getDriver(id);
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+      res.json(driver);
+    } catch (error) {
+      console.error("Error fetching driver:", error);
+      res.status(500).json({ message: "Failed to fetch driver" });
+    }
+  });
+
+  app.post("/api/drivers", async (req, res) => {
+    try {
+      const parsed = insertDriverProfileSchema.parse(req.body);
+      const driver = await storage.createDriver(parsed);
+      res.status(201).json(driver);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid driver data", errors: error.errors });
+      }
+      console.error("Error creating driver:", error);
+      res.status(500).json({ message: "Failed to create driver" });
+    }
+  });
+
+  app.patch("/api/drivers/:id/availability", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { isAvailable } = req.body;
+      
+      if (typeof isAvailable !== "boolean") {
+        return res.status(400).json({ message: "isAvailable must be a boolean" });
+      }
+      
+      const driver = await storage.updateDriverAvailability(id, isAvailable);
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+      
+      res.json(driver);
+    } catch (error) {
+      console.error("Error updating driver availability:", error);
+      res.status(500).json({ message: "Failed to update driver availability" });
     }
   });
 

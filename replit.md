@@ -40,6 +40,10 @@ Database tables:
 - `users` - User authentication (id, username, password)
 - `jobs` - Healthcare job listings (title, facility, location, lat/lng, pay, shift, urgency, requirements)
 - `tickets` - Issue/support tickets (category, priority, description, email, status)
+- `rides` - Medical transportation ride requests (patient info, pickup/dropoff locations, appointment time, status, mobility needs)
+- `ride_events` - Ride status change history and audit trail
+- `driver_profiles` - Driver information (name, phone, vehicle, accessibility capabilities)
+- `patient_profiles` - Patient information (name, contact, mobility needs, emergency contact)
 
 ### Key Design Decisions
 
@@ -72,3 +76,28 @@ Database tables:
 - Replit-specific plugins (cartographer, dev-banner, runtime-error-modal)
 - TypeScript with strict mode
 - PostCSS with autoprefixer
+
+## Features
+
+### Job Map & Staffing
+- Interactive nationwide map displaying healthcare job postings
+- Green markers for local database jobs, blue markers for external FieldHCP API jobs
+- Real-time job updates via WebSocket
+- Job posting form for facilities
+
+### Issue Reporting
+- Support ticket system with file attachments
+- Email notifications via SendGrid
+
+### Medical Ride-Hailing (NEMT)
+- Patient ride booking with interactive pickup/dropoff map selection
+- Mobility needs tracking (wheelchair, stretcher, walker, oxygen)
+- Driver dashboard for managing ride requests
+- Ride status workflow: Requested → Accepted → En Route → Arrived → In Progress → Completed
+- Real-time status updates via WebSocket
+- Ride history and event tracking
+
+### Routes
+- `/` - Landing page with job map, services, and issue reporting
+- `/book-ride` - Patient ride booking form with map
+- `/driver` - Driver dashboard for ride management

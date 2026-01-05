@@ -1,17 +1,20 @@
 import { useState } from "react";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Phone } from "lucide-react";
+import { Menu, X, Phone, Car, Truck } from "lucide-react";
 import logoImg from "@assets/Screenshot_2025-12-11_223813_1765510798530.jpg";
 import JobPostingForm from "./JobPostingForm";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [location] = useLocation();
 
   const navLinks = [
-    { name: "Services", href: "#services" },
-    { name: "Find Jobs", href: "#jobs" },
-    { name: "Report Issue", href: "#report" },
-    { name: "Contact", href: "#contact" },
+    { name: "Services", href: "#services", isAnchor: true },
+    { name: "Find Jobs", href: "#jobs", isAnchor: true },
+    { name: "Book Ride", href: "/book-ride", isAnchor: false },
+    { name: "Report Issue", href: "#report", isAnchor: true },
+    { name: "Contact", href: "#contact", isAnchor: true },
   ];
 
   return (
@@ -25,15 +28,34 @@ export default function Header() {
 
           <nav className="hidden md:flex items-center gap-6">
             {navLinks.map((link) => (
-              <a
-                key={link.name}
-                href={link.href}
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                data-testid={`link-nav-${link.name.toLowerCase().replace(" ", "-")}`}
-              >
-                {link.name}
-              </a>
+              link.isAnchor ? (
+                <a
+                  key={link.name}
+                  href={link.href}
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid={`link-nav-${link.name.toLowerCase().replace(" ", "-")}`}
+                >
+                  {link.name}
+                </a>
+              ) : (
+                <Link
+                  key={link.name}
+                  href={link.href}
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid={`link-nav-${link.name.toLowerCase().replace(" ", "-")}`}
+                >
+                  {link.name}
+                </Link>
+              )
             ))}
+            <Link
+              href="/driver"
+              className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="link-nav-driver"
+            >
+              <Truck className="w-4 h-4" />
+              Driver Portal
+            </Link>
           </nav>
 
           <div className="hidden md:flex items-center gap-4">
@@ -66,16 +88,37 @@ export default function Header() {
           <div className="md:hidden py-4 border-t">
             <nav className="flex flex-col gap-2">
               {navLinks.map((link) => (
-                <a
-                  key={link.name}
-                  href={link.href}
-                  className="px-2 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
-                  data-testid={`link-mobile-${link.name.toLowerCase().replace(" ", "-")}`}
-                >
-                  {link.name}
-                </a>
+                link.isAnchor ? (
+                  <a
+                    key={link.name}
+                    href={link.href}
+                    className="px-2 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                    data-testid={`link-mobile-${link.name.toLowerCase().replace(" ", "-")}`}
+                  >
+                    {link.name}
+                  </a>
+                ) : (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    className="px-2 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                    data-testid={`link-mobile-${link.name.toLowerCase().replace(" ", "-")}`}
+                  >
+                    {link.name}
+                  </Link>
+                )
               ))}
+              <Link
+                href="/driver"
+                className="flex items-center gap-2 px-2 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+                data-testid="link-mobile-driver"
+              >
+                <Truck className="w-4 h-4" />
+                Driver Portal
+              </Link>
               <div className="pt-4 flex flex-col gap-2">
                 <a
                   href="tel:774-581-9700"
