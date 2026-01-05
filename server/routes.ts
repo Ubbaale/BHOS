@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema } from "@shared/schema";
 import { z } from "zod";
 import { sendIssueNotification, FileAttachment } from "./email";
 import { saveSubscription, removeSubscription, getVapidPublicKey, notifyDriversOfNewRide, notifyPatientOfRideUpdate } from "./push";
@@ -19,6 +19,7 @@ const getFieldHcpBasicAuth = () => Buffer.from(`${FIELDHCP_USERNAME}:${FIELDHCP_
 
 const clients: Set<WebSocket> = new Set();
 const rideClients: Set<WebSocket> = new Set();
+const chatClients: Map<number, Set<WebSocket>> = new Map();
 
 function broadcastJobUpdate(type: "add" | "remove" | "update", job: any) {
   const message = JSON.stringify({ type, job });
@@ -36,6 +37,26 @@ function broadcastRideUpdate(type: "new" | "update" | "status_change", ride: any
       client.send(message);
     }
   });
+}
+
+function broadcastChatMessage(rideId: number, message: any) {
+  const clients = chatClients.get(rideId);
+  if (clients) {
+    const messageStr = JSON.stringify({ type: "chat", message });
+    clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(messageStr);
+      }
+    });
+  }
+}
+
+function generateVerificationCode(): string {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+function generateShareCode(): string {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
 const upload = multer({
@@ -697,6 +718,282 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error saving native push token:", error);
       res.status(500).json({ message: "Failed to save token" });
+    }
+  });
+
+  // Chat WebSocket
+  const chatWss = new WebSocketServer({ server: httpServer, path: "/ws/chat" });
+  
+  chatWss.on("connection", (ws, req) => {
+    const url = new URL(req.url || "", `http://${req.headers.host}`);
+    const rideId = parseInt(url.searchParams.get("rideId") || "0");
+    
+    if (rideId > 0) {
+      if (!chatClients.has(rideId)) {
+        chatClients.set(rideId, new Set());
+      }
+      chatClients.get(rideId)!.add(ws);
+      console.log(`Chat client connected for ride ${rideId}`);
+      
+      ws.on("close", () => {
+        chatClients.get(rideId)?.delete(ws);
+        if (chatClients.get(rideId)?.size === 0) {
+          chatClients.delete(rideId);
+        }
+        console.log(`Chat client disconnected for ride ${rideId}`);
+      });
+    }
+  });
+
+  // Chat API endpoints
+  app.get("/api/rides/:id/messages", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const messages = await storage.getRideMessages(rideId);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).json({ message: "Failed to fetch messages" });
+    }
+  });
+
+  app.post("/api/rides/:id/messages", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { senderType, message, isQuickMessage } = req.body;
+      
+      const parsed = insertRideMessageSchema.parse({
+        rideId,
+        senderType,
+        message,
+        isQuickMessage: isQuickMessage || false
+      });
+      
+      const rideMessage = await storage.createRideMessage(parsed);
+      broadcastChatMessage(rideId, rideMessage);
+      res.status(201).json(rideMessage);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid message data", errors: error.errors });
+      }
+      console.error("Error creating message:", error);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // Quick messages for drivers
+  app.post("/api/rides/:id/quick-message", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { messageType, senderType } = req.body;
+      
+      const quickMessages: Record<string, string> = {
+        "arrived": "I've arrived at the pickup location.",
+        "on_my_way": "I'm on my way to pick you up.",
+        "running_late": "Running a few minutes late. Will be there soon.",
+        "need_assistance": "Do you need any assistance getting to the vehicle?",
+        "waiting": "I'm waiting outside. Take your time.",
+        "at_destination": "We've arrived at your destination."
+      };
+      
+      const message = quickMessages[messageType];
+      if (!message) {
+        return res.status(400).json({ message: "Invalid quick message type" });
+      }
+      
+      const rideMessage = await storage.createRideMessage({
+        rideId,
+        senderType: senderType || "driver",
+        message,
+        isQuickMessage: true
+      });
+      
+      broadcastChatMessage(rideId, rideMessage);
+      res.status(201).json(rideMessage);
+    } catch (error) {
+      console.error("Error sending quick message:", error);
+      res.status(500).json({ message: "Failed to send quick message" });
+    }
+  });
+
+  // Trip sharing for safety
+  app.get("/api/rides/:id/shares", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const shares = await storage.getTripShares(rideId);
+      res.json(shares);
+    } catch (error) {
+      console.error("Error fetching trip shares:", error);
+      res.status(500).json({ message: "Failed to fetch trip shares" });
+    }
+  });
+
+  app.post("/api/rides/:id/share", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { contactName, contactPhone, contactEmail } = req.body;
+      
+      const shareCode = generateShareCode();
+      const tripShare = await storage.createTripShare({
+        rideId,
+        contactName,
+        contactPhone,
+        contactEmail,
+        shareCode
+      });
+      
+      res.status(201).json(tripShare);
+    } catch (error) {
+      console.error("Error creating trip share:", error);
+      res.status(500).json({ message: "Failed to share trip" });
+    }
+  });
+
+  app.delete("/api/shares/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const share = await storage.deactivateTripShare(id);
+      if (!share) {
+        return res.status(404).json({ message: "Share not found" });
+      }
+      res.json(share);
+    } catch (error) {
+      console.error("Error removing trip share:", error);
+      res.status(500).json({ message: "Failed to remove trip share" });
+    }
+  });
+
+  // Public trip tracking (for emergency contacts)
+  app.get("/api/track/:shareCode", async (req, res) => {
+    try {
+      const { shareCode } = req.params;
+      const share = await storage.getTripShareByCode(shareCode);
+      
+      if (!share) {
+        return res.status(404).json({ message: "Trip not found or link expired" });
+      }
+      
+      const ride = await storage.getRide(share.rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      let driver = null;
+      if (ride.driverId) {
+        driver = await storage.getDriver(ride.driverId);
+        if (driver) {
+          driver = {
+            fullName: driver.fullName,
+            vehicleType: driver.vehicleType,
+            vehiclePlate: driver.vehiclePlate,
+            vehicleColor: driver.vehicleColor,
+            vehicleMake: driver.vehicleMake,
+            vehicleModel: driver.vehicleModel,
+            profilePhotoDoc: driver.profilePhotoDoc
+          };
+        }
+      }
+      
+      res.json({
+        ride: {
+          id: ride.id,
+          status: ride.status,
+          pickupAddress: ride.pickupAddress,
+          dropoffAddress: ride.dropoffAddress,
+          estimatedArrivalTime: ride.estimatedArrivalTime,
+          pickupLat: ride.pickupLat,
+          pickupLng: ride.pickupLng,
+          dropoffLat: ride.dropoffLat,
+          dropoffLng: ride.dropoffLng
+        },
+        driver,
+        sharedWith: share.contactName
+      });
+    } catch (error) {
+      console.error("Error tracking trip:", error);
+      res.status(500).json({ message: "Failed to track trip" });
+    }
+  });
+
+  // Verification code for ride
+  app.post("/api/rides/:id/generate-code", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const code = generateVerificationCode();
+      const ride = await storage.setRideVerificationCode(rideId, code);
+      
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      res.json({ code, ride });
+    } catch (error) {
+      console.error("Error generating verification code:", error);
+      res.status(500).json({ message: "Failed to generate code" });
+    }
+  });
+
+  // Update ETA
+  app.patch("/api/rides/:id/eta", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { eta } = req.body;
+      
+      const ride = await storage.updateRideEta(rideId, new Date(eta));
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      broadcastRideUpdate("update", ride);
+      res.json(ride);
+    } catch (error) {
+      console.error("Error updating ETA:", error);
+      res.status(500).json({ message: "Failed to update ETA" });
+    }
+  });
+
+  // Get driver info for patient
+  app.get("/api/rides/:id/driver-info", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      if (!ride.driverId) {
+        return res.json({ driver: null, message: "No driver assigned yet" });
+      }
+      
+      const driver = await storage.getDriver(ride.driverId);
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+      
+      res.json({
+        driver: {
+          fullName: driver.fullName,
+          phone: driver.phone,
+          vehicleType: driver.vehicleType,
+          vehiclePlate: driver.vehiclePlate,
+          vehicleColor: driver.vehicleColor,
+          vehicleMake: driver.vehicleMake,
+          vehicleModel: driver.vehicleModel,
+          vehicleYear: driver.vehicleYear,
+          profilePhotoDoc: driver.profilePhotoDoc,
+          wheelchairAccessible: driver.wheelchairAccessible,
+          stretcherCapable: driver.stretcherCapable
+        },
+        ride: {
+          verificationCode: ride.verificationCode,
+          estimatedArrivalTime: ride.estimatedArrivalTime,
+          status: ride.status
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching driver info:", error);
+      res.status(500).json({ message: "Failed to fetch driver info" });
     }
   });
 

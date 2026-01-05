@@ -7,7 +7,9 @@ import {
   type DriverProfile, type InsertDriverProfile,
   type PatientProfile, type InsertPatientProfile,
   type NativePushToken,
-  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens
+  type RideMessage, type InsertRideMessage,
+  type TripShare, type InsertTripShare,
+  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ne, and } from "drizzle-orm";
@@ -51,6 +53,17 @@ export interface IStorage {
   
   saveNativePushToken(token: string, platform: string, userType: string, driverId?: number): Promise<void>;
   getNativePushTokens(userType?: string): Promise<NativePushToken[]>;
+  
+  getRideMessages(rideId: number): Promise<RideMessage[]>;
+  createRideMessage(message: InsertRideMessage): Promise<RideMessage>;
+  
+  getTripShares(rideId: number): Promise<TripShare[]>;
+  getTripShareByCode(shareCode: string): Promise<TripShare | undefined>;
+  createTripShare(tripShare: Omit<InsertTripShare, 'shareCode'> & { shareCode: string }): Promise<TripShare>;
+  deactivateTripShare(id: number): Promise<TripShare | undefined>;
+  
+  setRideVerificationCode(rideId: number, code: string): Promise<Ride | undefined>;
+  updateRideEta(rideId: number, eta: Date): Promise<Ride | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -240,6 +253,57 @@ export class DatabaseStorage implements IStorage {
       return db.select().from(nativePushTokens).where(eq(nativePushTokens.userType, userType));
     }
     return db.select().from(nativePushTokens);
+  }
+
+  async getRideMessages(rideId: number): Promise<RideMessage[]> {
+    return db.select().from(rideMessages)
+      .where(eq(rideMessages.rideId, rideId))
+      .orderBy(rideMessages.createdAt);
+  }
+
+  async createRideMessage(message: InsertRideMessage): Promise<RideMessage> {
+    const [rideMessage] = await db.insert(rideMessages).values(message).returning();
+    return rideMessage;
+  }
+
+  async getTripShares(rideId: number): Promise<TripShare[]> {
+    return db.select().from(tripShares)
+      .where(and(eq(tripShares.rideId, rideId), eq(tripShares.isActive, true)));
+  }
+
+  async getTripShareByCode(shareCode: string): Promise<TripShare | undefined> {
+    const [share] = await db.select().from(tripShares)
+      .where(and(eq(tripShares.shareCode, shareCode), eq(tripShares.isActive, true)));
+    return share;
+  }
+
+  async createTripShare(tripShare: Omit<InsertTripShare, 'shareCode'> & { shareCode: string }): Promise<TripShare> {
+    const [share] = await db.insert(tripShares).values(tripShare as any).returning();
+    return share;
+  }
+
+  async deactivateTripShare(id: number): Promise<TripShare | undefined> {
+    const [share] = await db.update(tripShares)
+      .set({ isActive: false })
+      .where(eq(tripShares.id, id))
+      .returning();
+    return share;
+  }
+
+  async setRideVerificationCode(rideId: number, code: string): Promise<Ride | undefined> {
+    const [ride] = await db.update(rides)
+      .set({ verificationCode: code })
+      .where(eq(rides.id, rideId))
+      .returning();
+    return ride;
+  }
+
+  async updateRideEta(rideId: number, eta: Date): Promise<Ride | undefined> {
+    const [ride] = await db.update(rides)
+      .set({ estimatedArrivalTime: eta })
+      .where(eq(rides.id, rideId))
+      .returning();
+    return ride;
   }
 }
 
