@@ -282,12 +282,43 @@ export default function DriverDashboard() {
                 <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No Driver Profile Found</h3>
                 <p className="text-muted-foreground mb-4">
-                  You need a driver profile to accept rides. Contact an administrator to set up your profile.
+                  You need a driver profile to accept rides. Apply to become a driver to get started.
+                </p>
+                <Button onClick={() => window.location.href = "/driver/apply"} data-testid="button-apply-driver">
+                  Apply to Drive
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {currentDriver && currentDriver.applicationStatus === "pending" && (
+            <Card className="mb-8">
+              <CardContent className="p-6 text-center">
+                <Clock className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Application Under Review</h3>
+                <p className="text-muted-foreground mb-4">
+                  Your driver application is currently being reviewed. You'll be able to accept rides once approved.
                 </p>
               </CardContent>
             </Card>
           )}
 
+          {currentDriver && currentDriver.applicationStatus === "rejected" && (
+            <Card className="mb-8">
+              <CardContent className="p-6 text-center">
+                <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Application Not Approved</h3>
+                <p className="text-muted-foreground mb-4">
+                  Unfortunately, your driver application was not approved. 
+                  {currentDriver.rejectionReason && (
+                    <span className="block mt-2">Reason: {currentDriver.rejectionReason}</span>
+                  )}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {(!currentDriver || currentDriver.applicationStatus === "approved") && (
           <div className="grid lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               <Tabs defaultValue="available" className="w-full">
@@ -431,6 +462,7 @@ export default function DriverDashboard() {
               </Card>
             </div>
           </div>
+          )}
         </div>
       </main>
       <Footer />

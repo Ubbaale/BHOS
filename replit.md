@@ -97,7 +97,16 @@ Database tables:
 - Real-time status updates via WebSocket
 - Ride history and event tracking
 
+### Driver Onboarding
+- Self-service driver application form at `/driver/apply`
+- Admin dashboard for reviewing applications at `/admin/drivers`
+- Application status workflow: Pending → Approved/Rejected
+- Driver dashboard only accessible for approved drivers
+- Rejection reason tracking for transparency
+
 ### Routes
 - `/` - Landing page with job map, services, and issue reporting
 - `/book-ride` - Patient ride booking form with map
-- `/driver` - Driver dashboard for ride management
+- `/driver` - Driver dashboard for ride management (approved drivers only)
+- `/driver/apply` - Driver application form for new drivers
+- `/admin/drivers` - Admin dashboard for managing driver applications
