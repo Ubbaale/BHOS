@@ -436,6 +436,59 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/drivers/all", async (_req, res) => {
+    try {
+      const drivers = await storage.getAllDrivers();
+      res.json(drivers);
+    } catch (error) {
+      console.error("Error fetching all drivers:", error);
+      res.status(500).json({ message: "Failed to fetch drivers" });
+    }
+  });
+
+  app.post("/api/drivers/apply", async (req, res) => {
+    try {
+      const parsed = insertDriverProfileSchema.parse(req.body);
+      const driver = await storage.createDriver(parsed);
+      res.status(201).json(driver);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid driver data", errors: error.errors });
+      }
+      console.error("Error creating driver application:", error);
+      res.status(500).json({ message: "Failed to submit driver application" });
+    }
+  });
+
+  app.post("/api/drivers/:id/approve", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const driver = await storage.updateDriverApplicationStatus(id, "approved");
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+      res.json(driver);
+    } catch (error) {
+      console.error("Error approving driver:", error);
+      res.status(500).json({ message: "Failed to approve driver" });
+    }
+  });
+
+  app.post("/api/drivers/:id/reject", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { reason } = req.body;
+      const driver = await storage.updateDriverApplicationStatus(id, "rejected", reason);
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+      res.json(driver);
+    } catch (error) {
+      console.error("Error rejecting driver:", error);
+      res.status(500).json({ message: "Failed to reject driver" });
+    }
+  });
+
   app.get("/api/push/vapid-public-key", (_req, res) => {
     res.json({ publicKey: getVapidPublicKey() });
   });

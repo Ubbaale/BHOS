@@ -38,9 +38,11 @@ export interface IStorage {
   createRideEvent(event: InsertRideEvent): Promise<RideEvent>;
   
   getAvailableDrivers(): Promise<DriverProfile[]>;
+  getAllDrivers(): Promise<DriverProfile[]>;
   getDriver(id: number): Promise<DriverProfile | undefined>;
   createDriver(driver: InsertDriverProfile): Promise<DriverProfile>;
   updateDriverAvailability(id: number, isAvailable: boolean): Promise<DriverProfile | undefined>;
+  updateDriverApplicationStatus(id: number, status: string, rejectionReason?: string): Promise<DriverProfile | undefined>;
   
   getPatient(id: number): Promise<PatientProfile | undefined>;
   createPatient(patient: InsertPatientProfile): Promise<PatientProfile>;
@@ -153,7 +155,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAvailableDrivers(): Promise<DriverProfile[]> {
-    return db.select().from(driverProfiles).where(eq(driverProfiles.isAvailable, true));
+    return db.select().from(driverProfiles).where(
+      and(
+        eq(driverProfiles.isAvailable, true),
+        eq(driverProfiles.applicationStatus, "approved")
+      )
+    );
+  }
+
+  async getAllDrivers(): Promise<DriverProfile[]> {
+    return db.select().from(driverProfiles).orderBy(desc(driverProfiles.createdAt));
   }
 
   async getDriver(id: number): Promise<DriverProfile | undefined> {
@@ -169,6 +180,14 @@ export class DatabaseStorage implements IStorage {
   async updateDriverAvailability(id: number, isAvailable: boolean): Promise<DriverProfile | undefined> {
     const [driver] = await db.update(driverProfiles)
       .set({ isAvailable })
+      .where(eq(driverProfiles.id, id))
+      .returning();
+    return driver;
+  }
+
+  async updateDriverApplicationStatus(id: number, status: string, rejectionReason?: string): Promise<DriverProfile | undefined> {
+    const [driver] = await db.update(driverProfiles)
+      .set({ applicationStatus: status, rejectionReason })
       .where(eq(driverProfiles.id, id))
       .returning();
     return driver;

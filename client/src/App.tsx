@@ -7,6 +7,8 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import BookRide from "@/pages/book-ride";
 import DriverDashboard from "@/pages/driver-dashboard";
+import DriverApply from "@/pages/driver-apply";
+import AdminDrivers from "@/pages/admin-drivers";
 
 function Router() {
   return (
@@ -14,6 +16,8 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/book-ride" component={BookRide} />
       <Route path="/driver" component={DriverDashboard} />
+      <Route path="/driver/apply" component={DriverApply} />
+      <Route path="/admin/drivers" component={AdminDrivers} />
       <Route component={NotFound} />
     </Switch>
   );
