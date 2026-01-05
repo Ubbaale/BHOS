@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import Autocomplete from "react-google-autocomplete";
 
 import Header from "@/components/Header";
@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield } from "lucide-react";
+import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText } from "lucide-react";
 import type { Ride } from "@shared/schema";
 
 const BASE_FARE = 20.00;
@@ -321,6 +321,12 @@ export default function BookRide() {
                 <Button onClick={() => navigate("/")} variant="outline" data-testid="button-back-home">
                   Back to Home
                 </Button>
+                <Link href={`/receipt/${bookedRide.id}`}>
+                  <Button variant="outline" data-testid="button-view-receipt">
+                    <FileText className="w-4 h-4 mr-2" />
+                    View Receipt
+                  </Button>
+                </Link>
                 <Button onClick={() => { setBookingSuccess(false); form.reset(); setPickupPos(null); setDropoffPos(null); }} data-testid="button-book-another">
                   Book Another Ride
                 </Button>

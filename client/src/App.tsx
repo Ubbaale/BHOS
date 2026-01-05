@@ -10,6 +10,7 @@ import DriverDashboard from "@/pages/driver-dashboard";
 import DriverApply from "@/pages/driver-apply";
 import DriverKyc from "@/pages/driver-kyc";
 import AdminDrivers from "@/pages/admin-drivers";
+import TripReceipt from "@/pages/trip-receipt";
 
 function Router() {
   return (
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/driver/apply" component={DriverApply} />
       <Route path="/driver/kyc" component={DriverKyc} />
       <Route path="/admin/drivers" component={AdminDrivers} />
+      <Route path="/receipt/:id" component={TripReceipt} />
       <Route component={NotFound} />
     </Switch>
   );
