@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,7 +7,6 @@ import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-lea
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useLocation, Link } from "wouter";
-import Autocomplete from "react-google-autocomplete";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -156,6 +155,128 @@ const mobilityOptions = [
   { id: "walker", label: "Walker/Cane" },
   { id: "oxygen", label: "Oxygen Tank" },
 ];
+
+interface AddressAutocompleteProps {
+  onPlaceSelect: (address: string, lat: number, lng: number) => void;
+  placeholder?: string;
+  value?: string;
+  testId?: string;
+}
+
+function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId }: AddressAutocompleteProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [localValue, setLocalValue] = useState(value);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const autocompleteRef = useRef<google.maps.places.PlaceAutocompleteElement | null>(null);
+  const onPlaceSelectRef = useRef(onPlaceSelect);
+
+  useEffect(() => {
+    onPlaceSelectRef.current = onPlaceSelect;
+  }, [onPlaceSelect]);
+
+  useEffect(() => {
+    setLocalValue(value);
+    if (autocompleteRef.current && value === "") {
+      const input = autocompleteRef.current.querySelector("input");
+      if (input) {
+        (input as HTMLInputElement).value = "";
+      }
+    }
+  }, [value]);
+
+  useEffect(() => {
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    if (!apiKey || !containerRef.current) return;
+
+    let mounted = true;
+
+    const loadPlacesLibrary = async () => {
+      try {
+        if (!window.google?.maps?.places) {
+          const existingScript = document.querySelector(`script[src*="maps.googleapis.com"]`);
+          if (!existingScript) {
+            const script = document.createElement("script");
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
+            script.async = true;
+            script.defer = true;
+            
+            await new Promise<void>((resolve, reject) => {
+              script.onload = () => resolve();
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+        }
+
+        await google.maps.importLibrary("places");
+        
+        if (!mounted || !containerRef.current) return;
+        
+        if (!autocompleteRef.current) {
+          const autocomplete = new google.maps.places.PlaceAutocompleteElement({
+            componentRestrictions: { country: "us" },
+          });
+          
+          autocomplete.style.width = "100%";
+          containerRef.current.innerHTML = "";
+          containerRef.current.appendChild(autocomplete);
+          autocompleteRef.current = autocomplete;
+          
+          autocomplete.addEventListener("gmp-placeselect", async (event: any) => {
+            const place = event.place;
+            await place.fetchFields({ fields: ["displayName", "formattedAddress", "location"] });
+            
+            const address = place.formattedAddress || place.displayName || "";
+            const lat = place.location?.lat() || 0;
+            const lng = place.location?.lng() || 0;
+            
+            setLocalValue(address);
+            onPlaceSelectRef.current(address, lat, lng);
+          });
+          
+          setIsLoaded(true);
+        }
+      } catch (error) {
+        console.error("Failed to load Google Places:", error);
+        if (mounted) setIsLoaded(false);
+      }
+    };
+
+    loadPlacesLibrary();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
+    return (
+      <Input
+        placeholder={placeholder}
+        value={localValue}
+        onChange={(e) => {
+          setLocalValue(e.target.value);
+        }}
+        onBlur={() => {
+          if (localValue) {
+            onPlaceSelect(localValue, 0, 0);
+          }
+        }}
+        data-testid={testId}
+      />
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="address-autocomplete-container" data-testid={testId}>
+      {!isLoaded && (
+        <Input placeholder="Loading address search..." disabled />
+      )}
+    </div>
+  );
+}
 
 export default function BookRide() {
   const [, navigate] = useLocation();
@@ -490,27 +611,14 @@ export default function BookRide() {
                         <FormItem>
                           <FormLabel>Pickup Address</FormLabel>
                           <FormControl>
-                            <Autocomplete
-                              apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
-                              onPlaceSelected={(place) => {
-                                if (place.formatted_address) {
-                                  field.onChange(place.formatted_address);
-                                }
-                                if (place.geometry?.location) {
-                                  const lat = place.geometry.location.lat();
-                                  const lng = place.geometry.location.lng();
-                                  handlePickupChange(lat, lng);
-                                }
+                            <AddressAutocomplete
+                              onPlaceSelect={(address, lat, lng) => {
+                                field.onChange(address);
+                                handlePickupChange(lat, lng);
                               }}
-                              options={{
-                                types: ["address"],
-                                componentRestrictions: { country: "us" },
-                                fields: ["formatted_address", "geometry", "name"],
-                              }}
-                              defaultValue={field.value}
                               placeholder="Start typing an address..."
-                              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                              data-testid="input-pickup-address"
+                              value={field.value}
+                              testId="input-pickup-address"
                             />
                           </FormControl>
                           <FormMessage />
@@ -525,27 +633,14 @@ export default function BookRide() {
                         <FormItem>
                           <FormLabel>Dropoff Address (Medical Facility)</FormLabel>
                           <FormControl>
-                            <Autocomplete
-                              apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
-                              onPlaceSelected={(place) => {
-                                if (place.formatted_address) {
-                                  field.onChange(place.formatted_address);
-                                }
-                                if (place.geometry?.location) {
-                                  const lat = place.geometry.location.lat();
-                                  const lng = place.geometry.location.lng();
-                                  handleDropoffChange(lat, lng);
-                                }
+                            <AddressAutocomplete
+                              onPlaceSelect={(address, lat, lng) => {
+                                field.onChange(address);
+                                handleDropoffChange(lat, lng);
                               }}
-                              options={{
-                                types: ["address"],
-                                componentRestrictions: { country: "us" },
-                                fields: ["formatted_address", "geometry", "name"],
-                              }}
-                              defaultValue={field.value}
                               placeholder="Start typing an address..."
-                              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                              data-testid="input-dropoff-address"
+                              value={field.value}
+                              testId="input-dropoff-address"
                             />
                           </FormControl>
                           <FormMessage />

@@ -286,3 +286,36 @@
     inset: -1px;
   }
 }
+
+/* Google Places Autocomplete Styling */
+.address-autocomplete-container {
+  width: 100%;
+}
+
+.address-autocomplete-container gmp-place-autocomplete {
+  width: 100%;
+  display: block;
+}
+
+.address-autocomplete-container gmp-place-autocomplete::part(input) {
+  height: 36px;
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--input));
+  background: transparent;
+  padding: 4px 12px;
+  font-size: 14px;
+  color: hsl(var(--foreground));
+  transition: border-color 0.2s;
+}
+
+.address-autocomplete-container gmp-place-autocomplete::part(input):focus {
+  outline: none;
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 1px hsl(var(--ring));
+}
+
+.address-autocomplete-container gmp-place-autocomplete::part(input)::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
