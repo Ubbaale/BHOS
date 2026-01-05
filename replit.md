@@ -98,6 +98,7 @@ Database tables:
 - Ride history and event tracking
 - Distance-based fare calculation: $20 base + $2.50/mile, $22 minimum (industry-standard NEMT pricing)
 - Google Places Autocomplete for address entry (requires VITE_GOOGLE_MAPS_API_KEY)
+- Insurance billing support: Self-pay or insurance payment options with provider, member ID, group number, and prior auth tracking
 
 ### Driver Onboarding
 - Self-service driver application form at `/driver/apply`

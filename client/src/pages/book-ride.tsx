@@ -89,6 +89,22 @@ const bookRideSchema = z.object({
   memberId: z.string().optional(),
   groupNumber: z.string().optional(),
   priorAuthNumber: z.string().optional(),
+}).refine((data) => {
+  if (data.paymentType === "insurance") {
+    return data.insuranceProvider && data.insuranceProvider.trim().length > 0;
+  }
+  return true;
+}, {
+  message: "Insurance provider is required when using insurance",
+  path: ["insuranceProvider"],
+}).refine((data) => {
+  if (data.paymentType === "insurance") {
+    return data.memberId && data.memberId.trim().length > 0;
+  }
+  return true;
+}, {
+  message: "Member ID is required when using insurance",
+  path: ["memberId"],
 });
 
 type BookRideFormData = z.infer<typeof bookRideSchema>;
@@ -285,6 +301,18 @@ export default function BookRide() {
                     <div>
                       <span className="text-muted-foreground">Estimated Fare:</span>
                       <p className="font-medium text-lg">${parseFloat(bookedRide.estimatedFare).toFixed(2)}</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-muted-foreground">Payment:</span>
+                    <Badge variant="secondary" className="ml-2" data-testid="badge-payment-type">
+                      {bookedRide.paymentType === "insurance" ? "Insurance" : "Self Pay"}
+                    </Badge>
+                  </div>
+                  {bookedRide.paymentType === "insurance" && bookedRide.insuranceProvider && (
+                    <div>
+                      <span className="text-muted-foreground">Provider:</span>
+                      <p className="font-medium">{bookedRide.insuranceProvider}</p>
                     </div>
                   )}
                 </div>

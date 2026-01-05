@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard } from "lucide-react";
 import type { Ride, DriverProfile } from "@shared/schema";
 
 const pickupIcon = new L.Icon({
@@ -177,6 +177,16 @@ function RideCard({ ride, driverId, onAction }: RideCardProps) {
               ${parseFloat(ride.estimatedFare).toFixed(2)}
             </span>
           )}
+          <span className="flex items-center gap-1">
+            <CreditCard className="w-4 h-4" />
+            {ride.paymentType === "insurance" ? (
+              <Badge variant="outline" className="text-xs no-default-hover-elevate">
+                {ride.insuranceProvider || "Insurance"}
+              </Badge>
+            ) : (
+              "Self Pay"
+            )}
+          </span>
         </div>
 
         {ride.notes && (
