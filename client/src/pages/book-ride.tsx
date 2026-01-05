@@ -164,10 +164,10 @@ interface AddressAutocompleteProps {
 }
 
 function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId }: AddressAutocompleteProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [localValue, setLocalValue] = useState(value);
   const [isLoaded, setIsLoaded] = useState(false);
-  const autocompleteRef = useRef<google.maps.places.PlaceAutocompleteElement | null>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const onPlaceSelectRef = useRef(onPlaceSelect);
 
   useEffect(() => {
@@ -176,17 +176,14 @@ function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId }:
 
   useEffect(() => {
     setLocalValue(value);
-    if (autocompleteRef.current && value === "") {
-      const input = autocompleteRef.current.querySelector("input");
-      if (input) {
-        (input as HTMLInputElement).value = "";
-      }
+    if (inputRef.current && value === "") {
+      inputRef.current.value = "";
     }
   }, [value]);
 
   useEffect(() => {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-    if (!apiKey || !containerRef.current) return;
+    if (!apiKey || !inputRef.current) return;
 
     let mounted = true;
 
@@ -196,7 +193,7 @@ function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId }:
           const existingScript = document.querySelector(`script[src*="maps.googleapis.com"]`);
           if (!existingScript) {
             const script = document.createElement("script");
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
             script.async = true;
             script.defer = true;
             
@@ -206,34 +203,40 @@ function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId }:
               document.head.appendChild(script);
             });
           } else {
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            await new Promise<void>((resolve) => {
+              const checkGoogle = () => {
+                if (window.google?.maps?.places) {
+                  resolve();
+                } else {
+                  setTimeout(checkGoogle, 100);
+                }
+              };
+              checkGoogle();
+            });
           }
         }
-
-        await google.maps.importLibrary("places");
         
-        if (!mounted || !containerRef.current) return;
+        if (!mounted || !inputRef.current) return;
         
         if (!autocompleteRef.current) {
-          const autocomplete = new google.maps.places.PlaceAutocompleteElement({
+          const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
             componentRestrictions: { country: "us" },
+            fields: ["formatted_address", "geometry", "name"],
           });
           
-          autocomplete.style.width = "100%";
-          containerRef.current.innerHTML = "";
-          containerRef.current.appendChild(autocomplete);
           autocompleteRef.current = autocomplete;
           
-          autocomplete.addEventListener("gmp-placeselect", async (event: any) => {
-            const place = event.place;
-            await place.fetchFields({ fields: ["displayName", "formattedAddress", "location"] });
+          autocomplete.addListener("place_changed", () => {
+            const place = autocomplete.getPlace();
             
-            const address = place.formattedAddress || place.displayName || "";
-            const lat = place.location?.lat() || 0;
-            const lng = place.location?.lng() || 0;
-            
-            setLocalValue(address);
-            onPlaceSelectRef.current(address, lat, lng);
+            if (place.geometry?.location) {
+              const address = place.formatted_address || place.name || "";
+              const lat = place.geometry.location.lat();
+              const lng = place.geometry.location.lng();
+              
+              setLocalValue(address);
+              onPlaceSelectRef.current(address, lat, lng);
+            }
           });
           
           setIsLoaded(true);
@@ -251,30 +254,21 @@ function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId }:
     };
   }, []);
 
-  if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
-    return (
-      <Input
-        placeholder={placeholder}
-        value={localValue}
-        onChange={(e) => {
-          setLocalValue(e.target.value);
-        }}
-        onBlur={() => {
-          if (localValue) {
-            onPlaceSelect(localValue, 0, 0);
-          }
-        }}
-        data-testid={testId}
-      />
-    );
-  }
+  const handleManualEntry = () => {
+    if (localValue && !isLoaded) {
+      onPlaceSelect(localValue, 0, 0);
+    }
+  };
 
   return (
-    <div ref={containerRef} className="address-autocomplete-container" data-testid={testId}>
-      {!isLoaded && (
-        <Input placeholder="Loading address search..." disabled />
-      )}
-    </div>
+    <Input
+      ref={inputRef}
+      placeholder={isLoaded ? placeholder : (import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? "Loading..." : placeholder)}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={handleManualEntry}
+      data-testid={testId}
+    />
   );
 }
 
