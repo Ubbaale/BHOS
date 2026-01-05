@@ -1,0 +1,377 @@
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useParams, Link } from "wouter";
+import Header from "@/components/Header";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { RideChat } from "@/components/RideChat";
+import { 
+  Car, Phone, MapPin, Clock, Shield, Share2, AlertTriangle, 
+  User, CheckCircle2, Navigation, MessageCircle, Accessibility
+} from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { Ride } from "@shared/schema";
+import { format } from "date-fns";
+
+interface DriverInfo {
+  driver: {
+    fullName: string;
+    phone: string;
+    vehicleType: string;
+    vehiclePlate: string;
+    vehicleColor: string | null;
+    vehicleMake: string | null;
+    vehicleModel: string | null;
+    vehicleYear: string | null;
+    profilePhotoDoc: string | null;
+    wheelchairAccessible: boolean | null;
+    stretcherCapable: boolean | null;
+  } | null;
+  ride: {
+    verificationCode: string | null;
+    estimatedArrivalTime: string | null;
+    status: string;
+  };
+}
+
+const statusSteps = [
+  { status: "requested", label: "Requested", icon: Clock },
+  { status: "accepted", label: "Driver Assigned", icon: User },
+  { status: "driver_enroute", label: "Driver En Route", icon: Navigation },
+  { status: "arrived", label: "Driver Arrived", icon: MapPin },
+  { status: "in_progress", label: "In Progress", icon: Car },
+  { status: "completed", label: "Completed", icon: CheckCircle2 },
+];
+
+export default function TrackRide() {
+  const { id } = useParams<{ id: string }>();
+  const rideId = parseInt(id || "0");
+  const [showChat, setShowChat] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareContact, setShareContact] = useState({ name: "", phone: "", email: "" });
+
+  const { data: ride, isLoading: rideLoading } = useQuery<Ride>({
+    queryKey: ["/api/rides", rideId],
+    refetchInterval: 10000,
+  });
+
+  const { data: driverInfo, isLoading: driverLoading } = useQuery<DriverInfo>({
+    queryKey: ["/api/rides", rideId, "driver-info"],
+    enabled: !!ride,
+    refetchInterval: 10000,
+  });
+
+  const shareTripMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/rides/${rideId}/share`, {
+        contactName: shareContact.name,
+        contactPhone: shareContact.phone,
+        contactEmail: shareContact.email || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      setShareDialogOpen(false);
+      setShareContact({ name: "", phone: "", email: "" });
+      queryClient.invalidateQueries({ queryKey: ["/api/rides", rideId, "shares"] });
+    },
+  });
+
+  const getCurrentStep = () => {
+    if (!ride) return 0;
+    const index = statusSteps.findIndex(s => s.status === ride.status);
+    return index >= 0 ? index : 0;
+  };
+
+  if (rideLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <div className="text-center py-12">Loading ride details...</div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!ride) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <div className="text-center py-12">
+            <h2 className="text-xl font-semibold mb-2">Ride not found</h2>
+            <Link href="/book-ride">
+              <Button>Book a New Ride</Button>
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  const currentStep = getCurrentStep();
+  const driver = driverInfo?.driver;
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      <main className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+            <h1 className="text-2xl font-bold" data-testid="text-ride-title">Track Your Ride</h1>
+            <Badge variant={ride.status === "completed" ? "default" : "secondary"} data-testid="badge-ride-status">
+              {ride.status.replace("_", " ").toUpperCase()}
+            </Badge>
+          </div>
+
+          <div className="mb-8 overflow-x-auto">
+            <div className="flex items-center min-w-max">
+              {statusSteps.map((step, index) => {
+                const StepIcon = step.icon;
+                const isActive = index <= currentStep;
+                const isCurrent = index === currentStep;
+                return (
+                  <div key={step.status} className="flex items-center">
+                    <div className={`flex flex-col items-center ${index > 0 ? "ml-2" : ""}`}>
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          isActive
+                            ? isCurrent
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-primary/20 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        <StepIcon className="w-5 h-5" />
+                      </div>
+                      <span className={`text-xs mt-1 ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
+                        {step.label}
+                      </span>
+                    </div>
+                    {index < statusSteps.length - 1 && (
+                      <div className={`w-8 h-0.5 mx-1 ${index < currentStep ? "bg-primary" : "bg-muted"}`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
+                <CardTitle className="text-base">Driver Information</CardTitle>
+                {driverInfo?.ride.verificationCode && (
+                  <Badge variant="outline" className="font-mono" data-testid="badge-verification-code">
+                    Code: {driverInfo.ride.verificationCode}
+                  </Badge>
+                )}
+              </CardHeader>
+              <CardContent>
+                {driverLoading ? (
+                  <p className="text-muted-foreground">Loading driver info...</p>
+                ) : driver ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      {driver.profilePhotoDoc ? (
+                        <img
+                          src={driver.profilePhotoDoc}
+                          alt={driver.fullName}
+                          className="w-16 h-16 rounded-full object-cover"
+                          data-testid="img-driver-photo"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                          <User className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div>
+                        <h3 className="font-semibold" data-testid="text-driver-name">{driver.fullName}</h3>
+                        <a href={`tel:${driver.phone}`} className="text-sm text-primary flex items-center gap-1">
+                          <Phone className="w-3 h-3" />
+                          {driver.phone}
+                        </a>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-muted/50 rounded-md p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Car className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm" data-testid="text-vehicle-info">
+                          {driver.vehicleColor} {driver.vehicleYear} {driver.vehicleMake} {driver.vehicleModel}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" data-testid="badge-plate">{driver.vehiclePlate}</Badge>
+                        <Badge variant="outline">{driver.vehicleType}</Badge>
+                      </div>
+                      {(driver.wheelchairAccessible || driver.stretcherCapable) && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Accessibility className="w-4 h-4 text-muted-foreground" />
+                          {driver.wheelchairAccessible && <Badge variant="outline">Wheelchair Accessible</Badge>}
+                          {driver.stretcherCapable && <Badge variant="outline">Stretcher Capable</Badge>}
+                        </div>
+                      )}
+                    </div>
+
+                    {driverInfo?.ride.estimatedArrivalTime && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Clock className="w-4 h-4" />
+                        <span>ETA: {format(new Date(driverInfo.ride.estimatedArrivalTime), "h:mm a")}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <Car className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>Waiting for a driver to accept your ride...</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-base">Trip Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-3 h-3 rounded-full bg-green-500 mt-1.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Pickup</p>
+                    <p className="text-sm" data-testid="text-pickup-address">{ride.pickupAddress}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-3 h-3 rounded-full bg-red-500 mt-1.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Dropoff</p>
+                    <p className="text-sm" data-testid="text-dropoff-address">{ride.dropoffAddress}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Appointment Time</p>
+                    <p className="text-sm" data-testid="text-appointment-time">
+                      {format(new Date(ride.appointmentTime), "MMM d, h:mm a")}
+                    </p>
+                  </div>
+                </div>
+                {ride.estimatedFare && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-bold" data-testid="text-fare">${parseFloat(ride.estimatedFare).toFixed(2)}</span>
+                    <span className="text-sm text-muted-foreground">Estimated Fare</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowChat(!showChat)}
+              disabled={!driver}
+              data-testid="button-toggle-chat"
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              {showChat ? "Hide Chat" : "Chat with Driver"}
+            </Button>
+
+            <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" data-testid="button-share-trip">
+                  <Share2 className="w-4 h-4 mr-2" />
+                  Share Trip
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Shield className="w-5 h-5" />
+                    Share Your Trip
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Share your trip with a trusted contact so they can track your ride in real-time.
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="contact-name">Contact Name</Label>
+                      <Input
+                        id="contact-name"
+                        value={shareContact.name}
+                        onChange={(e) => setShareContact(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="Emergency contact name"
+                        data-testid="input-share-name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="contact-phone">Phone Number</Label>
+                      <Input
+                        id="contact-phone"
+                        value={shareContact.phone}
+                        onChange={(e) => setShareContact(prev => ({ ...prev, phone: e.target.value }))}
+                        placeholder="(555) 123-4567"
+                        data-testid="input-share-phone"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="contact-email">Email (Optional)</Label>
+                      <Input
+                        id="contact-email"
+                        type="email"
+                        value={shareContact.email}
+                        onChange={(e) => setShareContact(prev => ({ ...prev, email: e.target.value }))}
+                        placeholder="contact@example.com"
+                        data-testid="input-share-email"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => shareTripMutation.mutate()}
+                    disabled={!shareContact.name || !shareContact.phone || shareTripMutation.isPending}
+                    className="w-full"
+                    data-testid="button-confirm-share"
+                  >
+                    {shareTripMutation.isPending ? "Sharing..." : "Share Trip"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Button
+              variant="destructive"
+              onClick={() => window.open("tel:911")}
+              data-testid="button-sos"
+            >
+              <AlertTriangle className="w-4 h-4 mr-2" />
+              Emergency SOS
+            </Button>
+
+            {ride.status === "completed" && (
+              <Link href={`/receipt/${ride.id}`}>
+                <Button variant="outline" data-testid="button-view-receipt">
+                  View Receipt
+                </Button>
+              </Link>
+            )}
+          </div>
+
+          {showChat && driver && (
+            <div className="mt-6 h-96">
+              <RideChat rideId={rideId} userType="patient" onClose={() => setShowChat(false)} />
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}

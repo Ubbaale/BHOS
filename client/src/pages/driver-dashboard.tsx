@@ -15,7 +15,9 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { RideChat } from "@/components/RideChat";
 import type { Ride, DriverProfile } from "@shared/schema";
 
 const pickupIcon = new L.Icon({
@@ -65,6 +67,8 @@ interface RideCardProps {
 
 function RideCard({ ride, driverId, onAction, isNew = false }: RideCardProps) {
   const { toast } = useToast();
+  const [showChat, setShowChat] = useState(false);
+  const isMyRide = ride.driverId === driverId;
 
   const acceptMutation = useMutation({
     mutationFn: async () => {
@@ -199,16 +203,35 @@ function RideCard({ ride, driverId, onAction, isNew = false }: RideCardProps) {
           </div>
         )}
 
-        {nextAction && (
-          <Button
-            className="w-full"
-            onClick={nextAction.action}
-            disabled={isPending}
-            data-testid={`button-action-${ride.id}`}
-          >
-            <nextAction.icon className="w-4 h-4 mr-2" />
-            {isPending ? "Processing..." : nextAction.label}
-          </Button>
+        <div className="flex gap-2 flex-wrap">
+          {nextAction && (
+            <Button
+              className="flex-1"
+              onClick={nextAction.action}
+              disabled={isPending}
+              data-testid={`button-action-${ride.id}`}
+            >
+              <nextAction.icon className="w-4 h-4 mr-2" />
+              {isPending ? "Processing..." : nextAction.label}
+            </Button>
+          )}
+          
+          {isMyRide && ride.status !== "requested" && ride.status !== "completed" && (
+            <Button
+              variant={showChat ? "secondary" : "outline"}
+              onClick={() => setShowChat(!showChat)}
+              data-testid={`button-chat-${ride.id}`}
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Chat
+            </Button>
+          )}
+        </div>
+
+        {showChat && isMyRide && (
+          <div className="mt-4 h-80 border rounded-md overflow-hidden">
+            <RideChat rideId={ride.id} userType="driver" onClose={() => setShowChat(false)} />
+          </div>
         )}
       </CardContent>
     </Card>

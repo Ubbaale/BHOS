@@ -11,12 +11,14 @@ import DriverApply from "@/pages/driver-apply";
 import DriverKyc from "@/pages/driver-kyc";
 import AdminDrivers from "@/pages/admin-drivers";
 import TripReceipt from "@/pages/trip-receipt";
+import TrackRide from "@/pages/track-ride";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/book-ride" component={BookRide} />
+      <Route path="/track/:id" component={TrackRide} />
       <Route path="/driver" component={DriverDashboard} />
       <Route path="/driver/apply" component={DriverApply} />
       <Route path="/driver/kyc" component={DriverKyc} />
