@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp } from "lucide-react";
 import type { Ride, DriverProfile } from "@shared/schema";
 
 const pickupIcon = new L.Icon({
@@ -60,9 +60,10 @@ interface RideCardProps {
   ride: Ride;
   driverId: number;
   onAction: () => void;
+  isNew?: boolean;
 }
 
-function RideCard({ ride, driverId, onAction }: RideCardProps) {
+function RideCard({ ride, driverId, onAction, isNew = false }: RideCardProps) {
   const { toast } = useToast();
 
   const acceptMutation = useMutation({
@@ -116,11 +117,14 @@ function RideCard({ ride, driverId, onAction }: RideCardProps) {
   const isPending = acceptMutation.isPending || updateStatusMutation.isPending;
 
   return (
-    <Card className="hover-elevate" data-testid={`card-ride-${ride.id}`}>
+    <Card className={`hover-elevate ${isNew ? "ring-2 ring-primary" : ""}`} data-testid={`card-ride-${ride.id}`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
+              {isNew && (
+                <Badge variant="default" className="animate-pulse no-default-hover-elevate">NEW</Badge>
+              )}
               <User className="w-4 h-4 text-muted-foreground" />
               <span className="font-semibold">{ride.patientName}</span>
             </div>
@@ -216,6 +220,8 @@ export default function DriverDashboard() {
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
   const [isAvailable, setIsAvailable] = useState(true);
   const [currentDriverId, setCurrentDriverId] = useState<number | null>(null);
+  const [newRideIds, setNewRideIds] = useState<Set<number>>(new Set());
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   const { data: activeRides = [], isLoading: ridesLoading, refetch: refetchRides } = useQuery<Ride[]>({
     queryKey: ["/api/rides"],
@@ -229,6 +235,15 @@ export default function DriverDashboard() {
     queryKey: ["/api/drivers"],
   });
 
+  const playNotificationSound = useCallback(() => {
+    if (!soundEnabled) return;
+    try {
+      const audio = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQRBj96MtW4SJnfH6sF5G1l2gP/AciM7WWCA/75yJEZVYnn+3W4fI2R1guzJXxcPVW6I1dJcFghNaoTRw24hFE9piNPfXxIMZW+G0MxcFAVMaoOy0n0mIlNti8zvXBQISWqNsNqCKSddbonn32IQA1JwjMrXaxgHSHCRxthvGwVPcJLM2F8UD1JvkMXUZxQGT3GPxdRiFQ5Qbo/D0G8bCkluj8jUYhQOT26NxM1vHQ1Kbo7E0WIVDk9ti8TLcR8OS22NxM5lFw5Pbo7Ey28eDkttjMPMZxsRR2+NxMpwHw9Lbo3Cy3AdEEltjMPJch8PS22NxMluHw9LbYzDyXEfD0ttjMPJcR8PS22Mw8lyHg9KbY3EyHAeDkttjcTJbx4PTW2MxMlvHg9Mbo3EyXAeD0xtjcPJcB4PTW2Nw8lwHg9NbY3DyXAeD01tjcPJcB4PTW2Nw8lwHg9NbY3DyXAeD01tjcPJcB8OTG6NxMhvHxBMbY3EyW8eEExujcPIcB4QTG2NxMlvHg9Mbo3EyHAeD0xujcTIcB4PTG6NxMhwHg9Mbo3EyHAfDkxujcTIbx8PTW2NxMhvHg9Mbo3EyXAeD0xujcTJcB4PTG6Nw8lwHg9Mbo3DyXAfDkxujcPIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDk1ujcTIcB8PTW2NxMhwHw9NbY3EyHAfD0xujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8PTG2NxMhwHg9NbY3EyHAeDkxujcTIcB4OTG6NxMhwHg5Mbo3EyHAeDkxujcTIcB4OTG6NxMhwHg5Mbo3EyHAeDkxujcTIcB4OTG6NxMhwHg5Mbo3EyHAeDkxujcTIcB4OTG6NxMhwHg5Mbo3EyHAeDkxujcTIcB4OTG6Nw8hwHg5Mbo3EyHAeDkxujcTIcB4OTG6NxMhwHg5Mbo3EyHAeDkxujcTIcB4OTG6NxMhwHg5Mbo3EyHAeDkxujcTIcB4OTG6NxMhwHg5Mbo3EyHAeDkxujcTIcB4OTG6NxMhwHg5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OTG6NxMhwHw5Mbo3EyHAfDkxujcTIcB8OQ==");
+      audio.volume = 0.5;
+      audio.play().catch(() => {});
+    } catch (e) {}
+  }, [soundEnabled]);
+
   useEffect(() => {
     if (drivers.length > 0 && !currentDriverId) {
       setCurrentDriverId(drivers[0].id);
@@ -241,6 +256,23 @@ export default function DriverDashboard() {
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       console.log("Ride update:", data);
+      
+      if (data.type === "new" && data.ride) {
+        setNewRideIds(prev => new Set(Array.from(prev).concat(data.ride.id)));
+        playNotificationSound();
+        toast({
+          title: "New Ride Request",
+          description: `Pickup: ${data.ride.pickupAddress.substring(0, 40)}...`,
+        });
+        setTimeout(() => {
+          setNewRideIds(prev => {
+            const next = new Set(prev);
+            next.delete(data.ride.id);
+            return next;
+          });
+        }, 30000);
+      }
+      
       refetchRides();
       refetchAllRides();
     };
@@ -252,7 +284,7 @@ export default function DriverDashboard() {
     return () => {
       ws.close();
     };
-  }, [refetchRides, refetchAllRides]);
+  }, [refetchRides, refetchAllRides, playNotificationSound, toast]);
 
   const requestedRides = activeRides.filter((r) => r.status === "requested");
   const myActiveRides = activeRides.filter((r) => 
@@ -268,14 +300,23 @@ export default function DriverDashboard() {
       <Header />
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
+          <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
             <div>
               <h1 className="text-3xl font-bold mb-2">Driver Dashboard</h1>
               <p className="text-muted-foreground">
-                Manage your medical transportation rides.
+                Browse available rides and manage your trips
               </p>
             </div>
             <div className="flex items-center gap-4 flex-wrap">
+              <Button
+                variant={soundEnabled ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                data-testid="button-sound-toggle"
+              >
+                {soundEnabled ? <BellRing className="w-4 h-4 mr-2" /> : <Bell className="w-4 h-4 mr-2" />}
+                {soundEnabled ? "Sound On" : "Sound Off"}
+              </Button>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Availability:</span>
                 <Switch
@@ -294,6 +335,63 @@ export default function DriverDashboard() {
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-md">
+                    <Briefcase className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{requestedRides.length}</p>
+                    <p className="text-xs text-muted-foreground">Rides in Pool</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-green-500/10 rounded-md">
+                    <Play className="w-5 h-5 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{myActiveRides.length}</p>
+                    <p className="text-xs text-muted-foreground">Active Rides</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-500/10 rounded-md">
+                    <CheckCircle2 className="w-5 h-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{completedRides.length}</p>
+                    <p className="text-xs text-muted-foreground">Completed</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-yellow-500/10 rounded-md">
+                    <TrendingUp className="w-5 h-5 text-yellow-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">
+                      ${completedRides.reduce((sum, r) => sum + (parseFloat(r.estimatedFare || "0")), 0).toFixed(0)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Total Earnings</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           <NotificationPrompt userType="driver" driverId={currentDriverId || undefined} />
@@ -376,12 +474,15 @@ export default function DriverDashboard() {
               <Tabs defaultValue="available" className="w-full">
                 <TabsList className="grid w-full grid-cols-3 mb-4">
                   <TabsTrigger value="available" data-testid="tab-available">
-                    Available ({requestedRides.length})
+                    <Briefcase className="w-4 h-4 mr-1" />
+                    Ride Pool ({requestedRides.length})
                   </TabsTrigger>
                   <TabsTrigger value="active" data-testid="tab-active">
+                    <Play className="w-4 h-4 mr-1" />
                     My Rides ({myActiveRides.length})
                   </TabsTrigger>
                   <TabsTrigger value="completed" data-testid="tab-completed">
+                    <CheckCircle2 className="w-4 h-4 mr-1" />
                     Completed ({completedRides.length})
                   </TabsTrigger>
                 </TabsList>
@@ -395,8 +496,12 @@ export default function DriverDashboard() {
                     </Card>
                   ) : requestedRides.length === 0 ? (
                     <Card>
-                      <CardContent className="p-6 text-center text-muted-foreground">
-                        No available ride requests at the moment.
+                      <CardContent className="p-8 text-center">
+                        <Briefcase className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                        <h3 className="font-semibold mb-2">No Rides Available</h3>
+                        <p className="text-muted-foreground text-sm">
+                          New ride requests will appear here. You'll get a notification when a patient posts a ride.
+                        </p>
                       </CardContent>
                     </Card>
                   ) : (
@@ -406,6 +511,7 @@ export default function DriverDashboard() {
                         ride={ride}
                         driverId={currentDriverId || 0}
                         onAction={() => setSelectedRide(ride)}
+                        isNew={newRideIds.has(ride.id)}
                       />
                     ))
                   )}

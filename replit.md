@@ -89,11 +89,14 @@ Database tables:
 - Support ticket system with file attachments
 - Email notifications via SendGrid
 
-### Medical Ride-Hailing (NEMT)
+### Medical Ride-Hailing (NEMT) - Marketplace Model
+- **Ride Pool Marketplace**: Patients post ride requests to a public pool where drivers can browse and claim jobs
 - Patient ride booking with interactive pickup/dropoff map selection
 - Mobility needs tracking (wheelchair, stretcher, walker, oxygen)
-- Driver dashboard for managing ride requests
-- Ride status workflow: Requested → Accepted → En Route → Arrived → In Progress → Completed
+- Driver dashboard with stats cards: Rides in Pool, Active Rides, Completed, Total Earnings
+- Real-time notifications: Sound alerts and toast notifications when new rides are posted
+- NEW badge highlighting for recently posted rides (30-second window)
+- Ride status workflow: Requested (in pool) → Accepted (claimed) → En Route → Arrived → In Progress → Completed
 - Real-time status updates via WebSocket
 - Ride history and event tracking
 - Distance-based fare calculation: $20 base + $2.50/mile, $22 minimum (industry-standard NEMT pricing)
