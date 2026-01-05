@@ -151,6 +151,9 @@ export type KycStatus = typeof kycStatuses[number];
 export type InsertDriverProfile = z.infer<typeof insertDriverProfileSchema>;
 export type DriverProfile = typeof driverProfiles.$inferSelect;
 
+export const paymentTypes = ["self_pay", "insurance"] as const;
+export type PaymentType = typeof paymentTypes[number];
+
 export const rides = pgTable("rides", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   patientId: integer("patient_id").references(() => patientProfiles.id),
@@ -168,6 +171,11 @@ export const rides = pgTable("rides", {
   notes: text("notes"),
   distanceMiles: numeric("distance_miles"),
   estimatedFare: numeric("estimated_fare"),
+  paymentType: text("payment_type").notNull().default("self_pay"),
+  insuranceProvider: text("insurance_provider"),
+  memberId: text("member_id"),
+  groupNumber: text("group_number"),
+  priorAuthNumber: text("prior_auth_number"),
   status: text("status").notNull().default("requested"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -189,6 +197,11 @@ export const insertRideSchema = z.object({
   notes: z.string().optional(),
   distanceMiles: z.string().optional(),
   estimatedFare: z.string().optional(),
+  paymentType: z.enum(["self_pay", "insurance"]).default("self_pay"),
+  insuranceProvider: z.string().optional(),
+  memberId: z.string().optional(),
+  groupNumber: z.string().optional(),
+  priorAuthNumber: z.string().optional(),
 });
 export type InsertRide = z.infer<typeof insertRideSchema>;
 export type Ride = typeof rides.$inferSelect;
