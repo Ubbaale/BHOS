@@ -8,6 +8,8 @@ import { sendIssueNotification, FileAttachment } from "./email";
 import { saveSubscription, removeSubscription, getVapidPublicKey, notifyDriversOfNewRide, notifyPatientOfRideUpdate } from "./push";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
+import express from "express";
 
 const FIELDHCP_API_URL = "https://admin.carehubapp.com/APIs/Employer/JobSearch";
 const FIELDHCP_AUTH_TOKEN = process.env.FIELDHCP_AUTH_TOKEN || "";
@@ -494,7 +496,7 @@ export async function registerRoutes(
     storage: multer.diskStorage({
       destination: (_req, _file, cb) => {
         const uploadDir = path.join(process.cwd(), "uploads", "kyc");
-        require("fs").mkdirSync(uploadDir, { recursive: true });
+        fs.mkdirSync(uploadDir, { recursive: true });
         cb(null, uploadDir);
       },
       filename: (_req, file, cb) => {
@@ -632,7 +634,7 @@ export async function registerRoutes(
   });
 
   // Serve uploaded KYC files
-  app.use("/uploads/kyc", require("express").static(path.join(process.cwd(), "uploads", "kyc")));
+  app.use("/uploads/kyc", express.static(path.join(process.cwd(), "uploads", "kyc")));
 
   app.get("/api/push/vapid-public-key", (_req, res) => {
     res.json({ publicKey: getVapidPublicKey() });

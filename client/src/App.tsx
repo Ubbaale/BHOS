@@ -8,6 +8,7 @@ import Home from "@/pages/home";
 import BookRide from "@/pages/book-ride";
 import DriverDashboard from "@/pages/driver-dashboard";
 import DriverApply from "@/pages/driver-apply";
+import DriverKyc from "@/pages/driver-kyc";
 import AdminDrivers from "@/pages/admin-drivers";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/book-ride" component={BookRide} />
       <Route path="/driver" component={DriverDashboard} />
       <Route path="/driver/apply" component={DriverApply} />
+      <Route path="/driver/kyc" component={DriverKyc} />
       <Route path="/admin/drivers" component={AdminDrivers} />
       <Route component={NotFound} />
     </Switch>
