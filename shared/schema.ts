@@ -177,6 +177,9 @@ export const rides = pgTable("rides", {
   groupNumber: text("group_number"),
   priorAuthNumber: text("prior_auth_number"),
   status: text("status").notNull().default("requested"),
+  verificationCode: text("verification_code"),
+  emergencyContactShared: boolean("emergency_contact_shared").default(false),
+  estimatedArrivalTime: timestamp("estimated_arrival_time"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -262,3 +265,41 @@ export const insertNativePushTokenSchema = z.object({
 });
 export type InsertNativePushToken = z.infer<typeof insertNativePushTokenSchema>;
 export type NativePushToken = typeof nativePushTokens.$inferSelect;
+
+export const rideMessages = pgTable("ride_messages", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  rideId: integer("ride_id").references(() => rides.id).notNull(),
+  senderType: text("sender_type").notNull(),
+  message: text("message").notNull(),
+  isQuickMessage: boolean("is_quick_message").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRideMessageSchema = z.object({
+  rideId: z.number(),
+  senderType: z.enum(["driver", "patient"]),
+  message: z.string().min(1),
+  isQuickMessage: z.boolean().optional(),
+});
+export type InsertRideMessage = z.infer<typeof insertRideMessageSchema>;
+export type RideMessage = typeof rideMessages.$inferSelect;
+
+export const tripShares = pgTable("trip_shares", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  rideId: integer("ride_id").references(() => rides.id).notNull(),
+  contactName: text("contact_name").notNull(),
+  contactPhone: text("contact_phone").notNull(),
+  contactEmail: text("contact_email"),
+  shareCode: text("share_code").notNull(),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTripShareSchema = z.object({
+  rideId: z.number(),
+  contactName: z.string().min(1),
+  contactPhone: z.string().min(1),
+  contactEmail: z.string().email().optional(),
+});
+export type InsertTripShare = z.infer<typeof insertTripShareSchema>;
+export type TripShare = typeof tripShares.$inferSelect;
