@@ -166,6 +166,8 @@ export const rides = pgTable("rides", {
   appointmentTime: timestamp("appointment_time").notNull(),
   mobilityNeeds: text("mobility_needs").array().default([]),
   notes: text("notes"),
+  distanceMiles: numeric("distance_miles"),
+  estimatedFare: numeric("estimated_fare"),
   status: text("status").notNull().default("requested"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -185,6 +187,8 @@ export const insertRideSchema = z.object({
   appointmentTime: z.coerce.date(),
   mobilityNeeds: z.array(z.string()).optional(),
   notes: z.string().optional(),
+  distanceMiles: z.string().optional(),
+  estimatedFare: z.string().optional(),
 });
 export type InsertRide = z.infer<typeof insertRideSchema>;
 export type Ride = typeof rides.$inferSelect;

@@ -165,6 +165,18 @@ function RideCard({ ride, driverId, onAction }: RideCardProps) {
               {ride.mobilityNeeds.join(", ")}
             </span>
           )}
+          {ride.distanceMiles && (
+            <span className="flex items-center gap-1">
+              <Navigation className="w-4 h-4" />
+              {parseFloat(ride.distanceMiles).toFixed(1)} mi
+            </span>
+          )}
+          {ride.estimatedFare && (
+            <span className="flex items-center gap-1 font-semibold text-foreground">
+              <DollarSign className="w-4 h-4" />
+              ${parseFloat(ride.estimatedFare).toFixed(2)}
+            </span>
+          )}
         </div>
 
         {ride.notes && (

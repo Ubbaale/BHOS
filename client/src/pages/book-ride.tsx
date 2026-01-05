@@ -28,8 +28,29 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2 } from "lucide-react";
+import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign } from "lucide-react";
 import type { Ride } from "@shared/schema";
+
+const BASE_FARE = 5.00;
+const PER_MILE_RATE = 2.50;
+const MINIMUM_FARE = 10.00;
+
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3959;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+function calculateFare(distanceMiles: number): number {
+  const fare = BASE_FARE + (distanceMiles * PER_MILE_RATE);
+  return Math.max(fare, MINIMUM_FARE);
+}
 
 const pickupIcon = new L.Icon({
   iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
@@ -122,6 +143,17 @@ export default function BookRide() {
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookedRide, setBookedRide] = useState<Ride | null>(null);
+  const [fareEstimate, setFareEstimate] = useState<{ distance: number; fare: number } | null>(null);
+
+  useEffect(() => {
+    if (pickupPos && dropoffPos) {
+      const distance = calculateDistance(pickupPos[0], pickupPos[1], dropoffPos[0], dropoffPos[1]);
+      const fare = calculateFare(distance);
+      setFareEstimate({ distance, fare });
+    } else {
+      setFareEstimate(null);
+    }
+  }, [pickupPos, dropoffPos]);
 
   const form = useForm<BookRideFormData>({
     resolver: zodResolver(bookRideSchema),
@@ -146,6 +178,8 @@ export default function BookRide() {
         ...data,
         appointmentTime: new Date(data.appointmentTime).toISOString(),
         mobilityNeeds: selectedNeeds,
+        distanceMiles: fareEstimate?.distance.toFixed(2),
+        estimatedFare: fareEstimate?.fare.toFixed(2),
       });
       return response.json();
     },
@@ -227,6 +261,18 @@ export default function BookRide() {
                     <span className="text-muted-foreground">Dropoff:</span>
                     <p className="font-medium">{bookedRide.dropoffAddress}</p>
                   </div>
+                  {bookedRide.distanceMiles && (
+                    <div>
+                      <span className="text-muted-foreground">Distance:</span>
+                      <p className="font-medium">{parseFloat(bookedRide.distanceMiles).toFixed(1)} miles</p>
+                    </div>
+                  )}
+                  {bookedRide.estimatedFare && (
+                    <div>
+                      <span className="text-muted-foreground">Estimated Fare:</span>
+                      <p className="font-medium text-lg">${parseFloat(bookedRide.estimatedFare).toFixed(2)}</p>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex gap-4 justify-center flex-wrap">
@@ -321,6 +367,28 @@ export default function BookRide() {
                     <span>Dropoff Location</span>
                   </div>
                 </div>
+
+                {fareEstimate && (
+                  <div className="mt-4 p-4 bg-muted rounded-md" data-testid="fare-estimate">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="w-5 h-5 text-primary" />
+                      <span className="font-semibold">Fare Estimate</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Distance:</span>
+                        <p className="font-medium" data-testid="text-distance">{fareEstimate.distance.toFixed(1)} miles</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Estimated Fare:</span>
+                        <p className="font-medium text-lg" data-testid="text-fare">${fareEstimate.fare.toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Base fare: ${BASE_FARE.toFixed(2)} + ${PER_MILE_RATE.toFixed(2)}/mile. Minimum fare: ${MINIMUM_FARE.toFixed(2)}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
