@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield } from "lucide-react";
 import type { Ride, DriverProfile } from "@shared/schema";
 
 const pickupIcon = new L.Icon({
@@ -318,7 +318,37 @@ export default function DriverDashboard() {
             </Card>
           )}
 
-          {(!currentDriver || currentDriver.applicationStatus === "approved") && (
+          {currentDriver && currentDriver.applicationStatus === "approved" && currentDriver.kycStatus !== "approved" && (
+            <Card className="mb-8 border-yellow-500/50">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <Shield className="w-10 h-10 text-yellow-500 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold mb-2">
+                      {currentDriver.kycStatus === "pending_review" ? "KYC Under Review" : 
+                       currentDriver.kycStatus === "rejected" ? "KYC Verification Rejected" : 
+                       "Complete Your Verification"}
+                    </h3>
+                    <p className="text-muted-foreground mb-4">
+                      {currentDriver.kycStatus === "pending_review" 
+                        ? "Your documents are being reviewed. You'll be able to accept rides once verified."
+                        : currentDriver.kycStatus === "rejected"
+                        ? `Your verification was rejected. ${currentDriver.kycNotes || "Please resubmit your documents."}`
+                        : "To start accepting rides, you need to complete your identity verification by uploading your driver's license, vehicle registration, and insurance documents."}
+                    </p>
+                    {currentDriver.kycStatus !== "pending_review" && (
+                      <Button onClick={() => window.location.href = "/driver/kyc"} data-testid="button-complete-kyc">
+                        <Shield className="w-4 h-4 mr-2" />
+                        {currentDriver.kycStatus === "rejected" ? "Resubmit Documents" : "Complete Verification"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {(!currentDriver || (currentDriver.applicationStatus === "approved" && currentDriver.kycStatus === "approved")) && (
           <div className="grid lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               <Tabs defaultValue="available" className="w-full">
