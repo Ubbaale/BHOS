@@ -167,3 +167,23 @@ export type RideEvent = typeof rideEvents.$inferSelect;
 
 export const rideStatuses = ["requested", "accepted", "driver_enroute", "arrived", "in_progress", "completed", "cancelled"] as const;
 export type RideStatus = typeof rideStatuses[number];
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userType: text("user_type").notNull().default("user"),
+  driverId: integer("driver_id").references(() => driverProfiles.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPushSubscriptionSchema = z.object({
+  endpoint: z.string().min(1),
+  p256dh: z.string().min(1),
+  auth: z.string().min(1),
+  userType: z.string().optional(),
+  driverId: z.number().optional(),
+});
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;

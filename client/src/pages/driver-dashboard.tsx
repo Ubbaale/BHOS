@@ -7,6 +7,7 @@ import { format } from "date-fns";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { NotificationPrompt } from "@/components/NotificationPrompt";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -273,6 +274,8 @@ export default function DriverDashboard() {
             </div>
           </div>
 
+          <NotificationPrompt userType="driver" driverId={currentDriverId || undefined} />
+
           {drivers.length === 0 && (
             <Card className="mb-8">
               <CardContent className="p-6 text-center">
@@ -386,34 +389,32 @@ export default function DriverDashboard() {
                       />
                       {activeRides
                         .filter((r) => r.status !== "completed" && r.status !== "cancelled")
-                        .map((ride) => (
-                          <>
-                            <Marker
-                              key={`pickup-${ride.id}`}
-                              position={[parseFloat(ride.pickupLat), parseFloat(ride.pickupLng)]}
-                              icon={pickupIcon}
-                            >
-                              <Popup>
-                                <div className="p-1">
-                                  <p className="font-semibold">Pickup: {ride.patientName}</p>
-                                  <p className="text-sm">{ride.pickupAddress}</p>
-                                </div>
-                              </Popup>
-                            </Marker>
-                            <Marker
-                              key={`dropoff-${ride.id}`}
-                              position={[parseFloat(ride.dropoffLat), parseFloat(ride.dropoffLng)]}
-                              icon={dropoffIcon}
-                            >
-                              <Popup>
-                                <div className="p-1">
-                                  <p className="font-semibold">Dropoff: {ride.patientName}</p>
-                                  <p className="text-sm">{ride.dropoffAddress}</p>
-                                </div>
-                              </Popup>
-                            </Marker>
-                          </>
-                        ))}
+                        .flatMap((ride) => [
+                          <Marker
+                            key={`pickup-${ride.id}`}
+                            position={[parseFloat(ride.pickupLat), parseFloat(ride.pickupLng)]}
+                            icon={pickupIcon}
+                          >
+                            <Popup>
+                              <div className="p-1">
+                                <p className="font-semibold">Pickup: {ride.patientName}</p>
+                                <p className="text-sm">{ride.pickupAddress}</p>
+                              </div>
+                            </Popup>
+                          </Marker>,
+                          <Marker
+                            key={`dropoff-${ride.id}`}
+                            position={[parseFloat(ride.dropoffLat), parseFloat(ride.dropoffLng)]}
+                            icon={dropoffIcon}
+                          >
+                            <Popup>
+                              <div className="p-1">
+                                <p className="font-semibold">Dropoff: {ride.patientName}</p>
+                                <p className="text-sm">{ride.dropoffAddress}</p>
+                              </div>
+                            </Popup>
+                          </Marker>
+                        ])}
                     </MapContainer>
                   </div>
                   <div className="mt-4 flex gap-4 text-sm flex-wrap">

@@ -2,9 +2,10 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema } from "@shared/schema";
 import { z } from "zod";
 import { sendIssueNotification, FileAttachment } from "./email";
+import { saveSubscription, removeSubscription, getVapidPublicKey, notifyDriversOfNewRide, notifyPatientOfRideUpdate } from "./push";
 import multer from "multer";
 import path from "path";
 
@@ -277,6 +278,11 @@ export async function registerRoutes(
       });
       
       broadcastRideUpdate("new", ride);
+      
+      notifyDriversOfNewRide(ride.pickupAddress, ride.appointmentTime).catch(err => {
+        console.error("Failed to send push notification:", err);
+      });
+      
       res.status(201).json(ride);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -310,6 +316,11 @@ export async function registerRoutes(
       });
       
       broadcastRideUpdate("status_change", ride);
+      
+      notifyPatientOfRideUpdate(status).catch(err => {
+        console.error("Failed to send push notification:", err);
+      });
+      
       res.json(ride);
     } catch (error) {
       console.error("Error updating ride status:", error);
@@ -343,6 +354,11 @@ export async function registerRoutes(
       });
       
       broadcastRideUpdate("status_change", ride);
+      
+      notifyPatientOfRideUpdate("accepted", driver.fullName).catch(err => {
+        console.error("Failed to send push notification:", err);
+      });
+      
       res.json(ride);
     } catch (error) {
       console.error("Error accepting ride:", error);
@@ -417,6 +433,49 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating driver availability:", error);
       res.status(500).json({ message: "Failed to update driver availability" });
+    }
+  });
+
+  app.get("/api/push/vapid-public-key", (_req, res) => {
+    res.json({ publicKey: getVapidPublicKey() });
+  });
+
+  app.post("/api/push/subscribe", async (req, res) => {
+    try {
+      const { subscription, userType, driverId } = req.body;
+      
+      if (!subscription || !subscription.endpoint || !subscription.keys) {
+        return res.status(400).json({ message: "Invalid subscription data" });
+      }
+      
+      await saveSubscription(
+        subscription.endpoint,
+        subscription.keys.p256dh,
+        subscription.keys.auth,
+        userType || "user",
+        driverId
+      );
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving push subscription:", error);
+      res.status(500).json({ message: "Failed to save subscription" });
+    }
+  });
+
+  app.post("/api/push/unsubscribe", async (req, res) => {
+    try {
+      const { endpoint } = req.body;
+      
+      if (!endpoint) {
+        return res.status(400).json({ message: "Endpoint is required" });
+      }
+      
+      await removeSubscription(endpoint);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing push subscription:", error);
+      res.status(500).json({ message: "Failed to remove subscription" });
     }
   });
 
