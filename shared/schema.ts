@@ -187,3 +187,21 @@ export const insertPushSubscriptionSchema = z.object({
 });
 export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+
+export const nativePushTokens = pgTable("native_push_tokens", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  token: text("token").notNull().unique(),
+  platform: text("platform").notNull(),
+  userType: text("user_type").notNull().default("user"),
+  driverId: integer("driver_id").references(() => driverProfiles.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNativePushTokenSchema = z.object({
+  token: z.string().min(1),
+  platform: z.enum(["ios", "android"]),
+  userType: z.string().optional(),
+  driverId: z.number().optional(),
+});
+export type InsertNativePushToken = z.infer<typeof insertNativePushTokenSchema>;
+export type NativePushToken = typeof nativePushTokens.$inferSelect;

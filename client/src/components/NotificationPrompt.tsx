@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useNotifications } from "@/hooks/use-notifications";
+import { useCapacitorNotifications } from "@/hooks/use-capacitor-notifications";
 
 interface NotificationPromptProps {
   userType: "user" | "driver";
@@ -11,16 +12,37 @@ interface NotificationPromptProps {
 
 export function NotificationPrompt({ userType, driverId }: NotificationPromptProps) {
   const [dismissed, setDismissed] = useState(false);
-  const { permission, isSubscribed, isSupported, subscribe } = useNotifications(userType, driverId);
+  const webNotifications = useNotifications(userType, driverId);
+  const nativeNotifications = useCapacitorNotifications();
+  
+  const isNative = nativeNotifications.isNative;
+  const isSupported = isNative ? nativeNotifications.isSupported : webNotifications.isSupported;
+  const permission = isNative ? nativeNotifications.permissionStatus : webNotifications.permission;
+  const isSubscribed = isNative 
+    ? nativeNotifications.permissionStatus === "granted" && !!nativeNotifications.token
+    : webNotifications.isSubscribed;
+
+  useEffect(() => {
+    if (isNative && nativeNotifications.token && nativeNotifications.permissionStatus === "granted") {
+      nativeNotifications.registerForPush(userType, driverId);
+    }
+  }, [isNative, nativeNotifications.token, nativeNotifications.permissionStatus, userType, driverId]);
 
   if (!isSupported || isSubscribed || permission === "denied" || dismissed) {
     return null;
   }
 
   const handleEnable = async () => {
-    const success = await subscribe();
-    if (success) {
-      setDismissed(true);
+    if (isNative) {
+      const success = await nativeNotifications.requestPermission();
+      if (success) {
+        setDismissed(true);
+      }
+    } else {
+      const success = await webNotifications.subscribe();
+      if (success) {
+        setDismissed(true);
+      }
     }
   };
 

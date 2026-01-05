@@ -479,5 +479,26 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/push/register-native", async (req, res) => {
+    try {
+      const { token, platform, userType, driverId } = req.body;
+      
+      if (!token || !platform) {
+        return res.status(400).json({ message: "Token and platform are required" });
+      }
+      
+      if (!["ios", "android"].includes(platform)) {
+        return res.status(400).json({ message: "Platform must be ios or android" });
+      }
+      
+      await storage.saveNativePushToken(token, platform, userType || "user", driverId);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving native push token:", error);
+      res.status(500).json({ message: "Failed to save token" });
+    }
+  });
+
   return httpServer;
 }

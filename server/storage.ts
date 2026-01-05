@@ -6,7 +6,8 @@ import {
   type RideEvent, type InsertRideEvent,
   type DriverProfile, type InsertDriverProfile,
   type PatientProfile, type InsertPatientProfile,
-  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles
+  type NativePushToken,
+  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ne, and } from "drizzle-orm";
@@ -43,6 +44,9 @@ export interface IStorage {
   
   getPatient(id: number): Promise<PatientProfile | undefined>;
   createPatient(patient: InsertPatientProfile): Promise<PatientProfile>;
+  
+  saveNativePushToken(token: string, platform: string, userType: string, driverId?: number): Promise<void>;
+  getNativePushTokens(userType?: string): Promise<NativePushToken[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -178,6 +182,23 @@ export class DatabaseStorage implements IStorage {
   async createPatient(insertPatient: InsertPatientProfile): Promise<PatientProfile> {
     const [patient] = await db.insert(patientProfiles).values(insertPatient).returning();
     return patient;
+  }
+
+  async saveNativePushToken(token: string, platform: string, userType: string, driverId?: number): Promise<void> {
+    await db
+      .insert(nativePushTokens)
+      .values({ token, platform, userType, driverId })
+      .onConflictDoUpdate({
+        target: nativePushTokens.token,
+        set: { platform, userType, driverId },
+      });
+  }
+
+  async getNativePushTokens(userType?: string): Promise<NativePushToken[]> {
+    if (userType) {
+      return db.select().from(nativePushTokens).where(eq(nativePushTokens.userType, userType));
+    }
+    return db.select().from(nativePushTokens);
   }
 }
 
