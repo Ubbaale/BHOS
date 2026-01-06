@@ -252,6 +252,9 @@ export const rides = pgTable("rides", {
   // Journey monitoring
   lastActivityAt: timestamp("last_activity_at").defaultNow(),
   isAbandonedWarning: boolean("is_abandoned_warning").default(false),
+  // Secure tracking token for patient access (expires when ride completes/cancels)
+  trackingToken: text("tracking_token"),
+  trackingTokenExpiresAt: timestamp("tracking_token_expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
