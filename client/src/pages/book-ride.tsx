@@ -29,7 +29,12 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText, Navigation } from "lucide-react";
+import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText, Navigation, AlertTriangle } from "lucide-react";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
 import type { Ride } from "@shared/schema";
 
 const BASE_FARE = 20.00;
@@ -272,6 +277,15 @@ function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId }:
   );
 }
 
+interface PatientAccountStatus {
+  accountStatus: string;
+  outstandingBalance: string;
+  canBookRide: boolean;
+  tier: string;
+  requiresAcknowledgment?: boolean;
+  message?: string;
+}
+
 export default function BookRide() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -283,6 +297,10 @@ export default function BookRide() {
   const [bookedRide, setBookedRide] = useState<Ride | null>(null);
   const [fareEstimate, setFareEstimate] = useState<{ distance: number; fare: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [accountStatus, setAccountStatus] = useState<PatientAccountStatus | null>(null);
+  const [isEmergency, setIsEmergency] = useState(false);
+  const [emergencyAcknowledged, setEmergencyAcknowledged] = useState(false);
+  const [phoneForAccountCheck, setPhoneForAccountCheck] = useState("");
 
   useEffect(() => {
     if (pickupPos && dropoffPos) {
@@ -317,6 +335,81 @@ export default function BookRide() {
   });
 
   const paymentType = form.watch("paymentType");
+  const patientPhone = form.watch("patientPhone");
+
+  // Check account status when phone number is entered
+  useEffect(() => {
+    const checkAccountStatus = async () => {
+      // Reset state if phone is too short or cleared
+      if (!patientPhone || patientPhone.length < 10) {
+        setAccountStatus(null);
+        setIsEmergency(false);
+        setEmergencyAcknowledged(false);
+        setPhoneForAccountCheck("");
+        return;
+      }
+      
+      if (patientPhone !== phoneForAccountCheck) {
+        // Reset emergency fields when phone changes
+        setIsEmergency(false);
+        setEmergencyAcknowledged(false);
+        
+        try {
+          const response = await fetch(`/api/patient-account/${encodeURIComponent(patientPhone)}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            // Validate response has expected shape before setting
+            if (data && (typeof data.tier === 'string' || typeof data.accountStatus === 'string')) {
+              setAccountStatus({
+                accountStatus: data.accountStatus || "good_standing",
+                outstandingBalance: data.outstandingBalance || "0",
+                canBookRide: data.canBookRide !== false,
+                tier: data.tier || "green",
+                requiresAcknowledgment: data.requiresAcknowledgment,
+                message: data.message
+              });
+              setPhoneForAccountCheck(patientPhone);
+            } else {
+              // Invalid response structure - show warning and allow retry
+              console.warn("Unexpected account status response:", data);
+              setAccountStatus(null);
+              setPhoneForAccountCheck(""); // Allow retry
+              toast({
+                title: "Unable to verify account",
+                description: "Could not check account status. Please try again.",
+                variant: "destructive",
+              });
+            }
+          } else if (response.status === 404) {
+            // New patient with no account - default to good standing, allow re-fetch later
+            setAccountStatus({
+              accountStatus: "good_standing",
+              outstandingBalance: "0",
+              canBookRide: true,
+              tier: "green"
+            });
+            // Don't lock phoneForAccountCheck - allow re-fetch if account is created later
+            // But set it temporarily to prevent immediate re-fetch loop
+            setPhoneForAccountCheck(patientPhone);
+          } else {
+            // Other errors - reset to allow booking attempt
+            setAccountStatus(null);
+            setPhoneForAccountCheck(""); // Allow retry
+          }
+        } catch (error) {
+          // Network error - reset to allow retry
+          console.error("Failed to check account status:", error);
+          setAccountStatus(null);
+          setPhoneForAccountCheck(""); // Allow retry on next change
+        }
+      }
+    };
+    checkAccountStatus();
+  }, [patientPhone, phoneForAccountCheck, toast]);
+
+  const isAccountBlocked = accountStatus?.tier === "red" || accountStatus?.tier === "blocked" || accountStatus?.accountStatus === "blocked";
+  const canProceedWithBooking = !isAccountBlocked || (isEmergency && emergencyAcknowledged);
 
   const createRideMutation = useMutation({
     mutationFn: async (data: BookRideFormData) => {
@@ -326,6 +419,7 @@ export default function BookRide() {
         mobilityNeeds: selectedNeeds,
         distanceMiles: fareEstimate?.distance.toFixed(2),
         estimatedFare: fareEstimate?.fare.toFixed(2),
+        isEmergency: isEmergency && emergencyAcknowledged,
       });
       return response.json();
     },
@@ -432,6 +526,17 @@ export default function BookRide() {
       });
       return;
     }
+    
+    // Block submission if account is blocked and emergency not properly acknowledged
+    if (isAccountBlocked && !(isEmergency && emergencyAcknowledged)) {
+      toast({
+        title: "Account Restricted",
+        description: "Your account has an outstanding balance. Please contact billing or use the emergency booking option for urgent medical transport.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     createRideMutation.mutate(data);
   };
 
@@ -873,14 +978,107 @@ export default function BookRide() {
                       )}
                     />
 
+                    {/* Account Status Alerts */}
+                    {accountStatus?.tier === "yellow" && (
+                      <Alert data-testid="alert-account-yellow">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Account Notice</AlertTitle>
+                        <AlertDescription>
+                          {accountStatus.message || "You have a small outstanding balance on your account."}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {accountStatus?.tier === "orange" && (
+                      <Alert variant="destructive" data-testid="alert-account-orange">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Outstanding Balance</AlertTitle>
+                        <AlertDescription>
+                          {accountStatus.message || "Please contact billing to discuss payment options."}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Emergency Booking Section - Only shown when account is blocked */}
+                    {isAccountBlocked && (
+                      <Alert variant="destructive" className="border-2" data-testid="alert-account-blocked">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Account Restricted</AlertTitle>
+                        <AlertDescription className="space-y-3">
+                          <p>
+                            Your account has a high outstanding balance and regular bookings are temporarily unavailable. 
+                            Please contact billing at 1-800-CAREHUB to set up a payment plan.
+                          </p>
+                          
+                          <div className="pt-2 border-t border-destructive/20">
+                            <p className="font-semibold text-sm mb-2">
+                              Emergency Medical Transport Only:
+                            </p>
+                            <p className="text-sm mb-3">
+                              If you have a genuine medical emergency requiring immediate transport, you may use the emergency override below. 
+                              This is strictly for urgent medical needs such as:
+                            </p>
+                            <ul className="list-disc list-inside text-sm mb-3 space-y-1">
+                              <li>Emergency room or urgent care visits</li>
+                              <li>Dialysis or chemotherapy appointments</li>
+                              <li>Post-surgical follow-ups</li>
+                              <li>Other time-sensitive medical care</li>
+                            </ul>
+                            
+                            <div className="flex items-start gap-2 mt-3">
+                              <Checkbox
+                                id="emergency-checkbox"
+                                checked={isEmergency}
+                                onCheckedChange={(checked) => {
+                                  setIsEmergency(checked === true);
+                                  if (!checked) setEmergencyAcknowledged(false);
+                                }}
+                                data-testid="checkbox-emergency"
+                              />
+                              <Label htmlFor="emergency-checkbox" className="text-sm font-medium leading-tight cursor-pointer">
+                                This is a medical emergency requiring immediate transport
+                              </Label>
+                            </div>
+
+                            {isEmergency && (
+                              <div className="mt-3 p-3 bg-background/50 rounded-md border">
+                                <p className="text-sm font-semibold text-foreground mb-2">
+                                  Important Notice:
+                                </p>
+                                <p className="text-sm text-muted-foreground mb-3">
+                                  Misuse of the emergency booking feature may result in account suspension. 
+                                  Emergency overrides are logged and reviewed. By proceeding, you confirm this is a genuine medical emergency.
+                                </p>
+                                <div className="flex items-start gap-2">
+                                  <Checkbox
+                                    id="emergency-acknowledge"
+                                    checked={emergencyAcknowledged}
+                                    onCheckedChange={(checked) => setEmergencyAcknowledged(checked === true)}
+                                    data-testid="checkbox-emergency-acknowledge"
+                                  />
+                                  <Label htmlFor="emergency-acknowledge" className="text-sm leading-tight cursor-pointer">
+                                    I understand and confirm this is a genuine medical emergency. I acknowledge that misuse may result in account suspension.
+                                  </Label>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
                     <Button
                       type="submit"
                       className="w-full"
-                      disabled={createRideMutation.isPending}
+                      disabled={createRideMutation.isPending || !canProceedWithBooking}
                       data-testid="button-submit-ride"
                     >
                       {createRideMutation.isPending ? (
                         "Booking..."
+                      ) : isAccountBlocked && canProceedWithBooking ? (
+                        <>
+                          Book Emergency Ride <ArrowRight className="w-4 h-4 ml-2" />
+                        </>
                       ) : (
                         <>
                           Book Ride <ArrowRight className="w-4 h-4 ml-2" />
