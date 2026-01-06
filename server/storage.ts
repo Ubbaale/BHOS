@@ -14,7 +14,7 @@ import {
   users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, ne, and } from "drizzle-orm";
+import { eq, desc, ne, and, lt } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -78,6 +78,12 @@ export interface IStorage {
   
   // Traffic and delays
   updateRideDelay(rideId: number, delayMinutes: number, reason: string | undefined, newEta: Date | undefined): Promise<Ride | undefined>;
+  
+  // Journey monitoring
+  getAbandonedRides(staleMinutes?: number): Promise<Ride[]>;
+  markRideAbandoned(id: number): Promise<Ride | undefined>;
+  updateRideTolls(id: number, actualTolls: string): Promise<Ride | undefined>;
+  updateRideTraffic(id: number, trafficCondition: string, delayMinutes: number, delayReason?: string): Promise<Ride | undefined>;
   
   // Complete ride with commission calculation
   completeRide(rideId: number, finalFare: string, actualTolls: string, actualDistanceMiles: string): Promise<Ride | undefined>;
@@ -175,8 +181,56 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateRideStatus(id: number, status: string): Promise<Ride | undefined> {
+    const now = new Date();
+    const updateData: Record<string, any> = { 
+      status, 
+      updatedAt: now,
+      lastActivityAt: now,
+      isAbandonedWarning: false
+    };
+    
+    if (status === "in_progress") {
+      updateData.actualPickupTime = now;
+    } else if (status === "completed") {
+      updateData.actualDropoffTime = now;
+    }
+    
     const [ride] = await db.update(rides)
-      .set({ status, updatedAt: new Date() })
+      .set(updateData)
+      .where(eq(rides.id, id))
+      .returning();
+    return ride;
+  }
+
+  async getAbandonedRides(staleMinutes: number = 30): Promise<Ride[]> {
+    const cutoff = new Date(Date.now() - staleMinutes * 60 * 1000);
+    return db.select().from(rides).where(
+      and(
+        eq(rides.status, "in_progress"),
+        lt(rides.lastActivityAt, cutoff)
+      )
+    );
+  }
+
+  async markRideAbandoned(id: number): Promise<Ride | undefined> {
+    const [ride] = await db.update(rides)
+      .set({ isAbandonedWarning: true })
+      .where(eq(rides.id, id))
+      .returning();
+    return ride;
+  }
+
+  async updateRideTolls(id: number, actualTolls: string): Promise<Ride | undefined> {
+    const [ride] = await db.update(rides)
+      .set({ actualTolls, updatedAt: new Date() })
+      .where(eq(rides.id, id))
+      .returning();
+    return ride;
+  }
+
+  async updateRideTraffic(id: number, trafficCondition: string, delayMinutes: number, delayReason?: string): Promise<Ride | undefined> {
+    const [ride] = await db.update(rides)
+      .set({ trafficCondition, delayMinutes, delayReason, updatedAt: new Date(), lastActivityAt: new Date() })
       .where(eq(rides.id, id))
       .returning();
     return ride;

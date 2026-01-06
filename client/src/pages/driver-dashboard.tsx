@@ -72,7 +72,19 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
   const [showChat, setShowChat] = useState(false);
   const isMyRide = ride.driverId === driverId;
 
-  const handleStartRideWithNavigation = async () => {
+  const handleStartTripWithNavigation = async () => {
+    await updateStatusMutation.mutateAsync("driver_enroute");
+    if (ride.pickupLat && ride.pickupLng) {
+      openNavigation({
+        destinationLat: parseFloat(ride.pickupLat),
+        destinationLng: parseFloat(ride.pickupLng),
+        destinationAddress: ride.pickupAddress,
+        preference: navigationPreference as any,
+      });
+    }
+  };
+
+  const handleConfirmPickupWithNavigation = async () => {
     await updateStatusMutation.mutateAsync("in_progress");
     if (ride.dropoffLat && ride.dropoffLng) {
       openNavigation({
@@ -119,11 +131,11 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
       case "requested":
         return { label: "Accept Ride", action: () => acceptMutation.mutate(), icon: CheckCircle2 };
       case "accepted":
-        return { label: "Start Trip", action: () => updateStatusMutation.mutate("driver_enroute"), icon: Navigation };
+        return { label: "Start Trip & Navigate to Pickup", action: handleStartTripWithNavigation, icon: Navigation };
       case "driver_enroute":
-        return { label: "Arrived", action: () => updateStatusMutation.mutate("arrived"), icon: MapPin };
+        return { label: "Arrived at Pickup", action: () => updateStatusMutation.mutate("arrived"), icon: MapPin };
       case "arrived":
-        return { label: "Confirm Pickup & Navigate", action: handleStartRideWithNavigation, icon: ExternalLink };
+        return { label: "Confirm Pickup & Navigate to Dropoff", action: handleConfirmPickupWithNavigation, icon: ExternalLink };
       case "in_progress":
         return { label: "Complete Ride", action: () => updateStatusMutation.mutate("completed"), icon: CheckCircle2 };
       default:

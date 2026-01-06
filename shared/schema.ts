@@ -227,6 +227,9 @@ export const rides = pgTable("rides", {
   actualPickupTime: timestamp("actual_pickup_time"),
   actualDropoffTime: timestamp("actual_dropoff_time"),
   actualDistanceMiles: numeric("actual_distance_miles"),
+  // Journey monitoring
+  lastActivityAt: timestamp("last_activity_at").defaultNow(),
+  isAbandonedWarning: boolean("is_abandoned_warning").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -676,6 +676,146 @@ export async function registerRoutes(
     }
   });
 
+  // Get abandoned/stale rides (rides stuck in_progress for too long)
+  app.get("/api/rides/abandoned", async (req, res) => {
+    try {
+      const staleMinutes = parseInt(req.query.staleMinutes as string) || 30;
+      const abandonedRides = await storage.getAbandonedRides(staleMinutes);
+      res.json(abandonedRides);
+    } catch (error) {
+      console.error("Error fetching abandoned rides:", error);
+      res.status(500).json({ message: "Failed to fetch abandoned rides" });
+    }
+  });
+
+  // Mark ride as potentially abandoned (for admin review)
+  app.post("/api/rides/:id/mark-abandoned", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.markRideAbandoned(rideId);
+      
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      await storage.createRideEvent({
+        rideId,
+        status: ride.status,
+        note: "Ride flagged as potentially abandoned - requires follow-up"
+      });
+
+      res.json(ride);
+    } catch (error) {
+      console.error("Error marking ride as abandoned:", error);
+      res.status(500).json({ message: "Failed to mark ride as abandoned" });
+    }
+  });
+
+  // Update actual tolls (driver confirms tolls paid)
+  app.patch("/api/rides/:id/tolls", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { actualTolls } = req.body;
+      
+      if (actualTolls === undefined || actualTolls === null) {
+        return res.status(400).json({ message: "actualTolls is required" });
+      }
+
+      const ride = await storage.updateRideTolls(rideId, actualTolls.toString());
+      
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      await storage.createRideEvent({
+        rideId,
+        status: ride.status,
+        note: `Driver confirmed actual tolls: $${actualTolls}`
+      });
+
+      res.json(ride);
+    } catch (error) {
+      console.error("Error updating tolls:", error);
+      res.status(500).json({ message: "Failed to update tolls" });
+    }
+  });
+
+  // Report traffic conditions (affects surge pricing)
+  app.post("/api/rides/:id/traffic", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { trafficCondition, delayMinutes, delayReason } = req.body;
+      
+      if (!trafficCondition || !["normal", "moderate", "heavy"].includes(trafficCondition)) {
+        return res.status(400).json({ message: "trafficCondition must be 'normal', 'moderate', or 'heavy'" });
+      }
+
+      const ride = await storage.updateRideTraffic(rideId, trafficCondition, delayMinutes || 0, delayReason);
+      
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      await storage.createRideEvent({
+        rideId,
+        status: ride.status,
+        note: `Traffic: ${trafficCondition}${delayMinutes ? `, ${delayMinutes} min delay` : ""}${delayReason ? ` (${delayReason})` : ""}`
+      });
+
+      broadcastRideUpdate("update", ride);
+
+      res.json(ride);
+    } catch (error) {
+      console.error("Error reporting traffic:", error);
+      res.status(500).json({ message: "Failed to report traffic" });
+    }
+  });
+
+  // Calculate surge based on current conditions
+  app.get("/api/surge/current", async (req, res) => {
+    try {
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const hour = now.getHours();
+      
+      // Check for scheduled surge pricing
+      const scheduledSurge = await storage.getActiveSurgePricing(dayOfWeek, hour);
+      
+      // Calculate demand-based surge (simple version: ratio of active rides to available drivers)
+      const activeRides = await storage.getActiveRides();
+      const inProgressRides = activeRides.filter(r => ["in_progress", "driver_enroute", "arrived"].includes(r.status));
+      const availableDrivers = await storage.getAvailableDrivers();
+      
+      let demandMultiplier = 1.0;
+      if (availableDrivers.length > 0) {
+        const demandRatio = inProgressRides.length / availableDrivers.length;
+        if (demandRatio > 2) demandMultiplier = 1.25; // Max 1.25x for healthcare
+        else if (demandRatio > 1.5) demandMultiplier = 1.15;
+        else if (demandRatio > 1) demandMultiplier = 1.10;
+      } else if (inProgressRides.length > 0) {
+        demandMultiplier = 1.25; // No drivers available, max surge
+      }
+      
+      // Use the higher of scheduled or demand-based surge, capped at 1.25x for healthcare
+      const scheduledMultiplier = scheduledSurge ? parseFloat(scheduledSurge.multiplier || "1.0") : 1.0;
+      const effectiveMultiplier = Math.min(1.25, Math.max(scheduledMultiplier, demandMultiplier));
+      
+      res.json({
+        surgeMultiplier: effectiveMultiplier.toFixed(2),
+        scheduledMultiplier: scheduledMultiplier.toFixed(2),
+        demandMultiplier: demandMultiplier.toFixed(2),
+        activeRidesCount: inProgressRides.length,
+        availableDriversCount: availableDrivers.length,
+        reason: scheduledSurge?.reason || (demandMultiplier > 1 ? "high_demand" : null),
+        isSurgeActive: effectiveMultiplier > 1,
+        cap: "1.25x (healthcare cap)",
+      });
+    } catch (error) {
+      console.error("Error calculating surge:", error);
+      res.status(500).json({ message: "Failed to calculate surge" });
+    }
+  });
+
   // Complete ride with final fare calculation
   app.post("/api/rides/:id/complete", async (req, res) => {
     try {
