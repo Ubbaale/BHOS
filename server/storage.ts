@@ -45,6 +45,7 @@ export interface IStorage {
   getAvailableDrivers(): Promise<DriverProfile[]>;
   getAllDrivers(): Promise<DriverProfile[]>;
   getDriver(id: number): Promise<DriverProfile | undefined>;
+  getDriverByUserId(userId: string): Promise<DriverProfile | undefined>;
   createDriver(driver: InsertDriverProfile): Promise<DriverProfile>;
   updateDriverAvailability(id: number, isAvailable: boolean): Promise<DriverProfile | undefined>;
   updateDriverApplicationStatus(id: number, status: string, rejectionReason?: string): Promise<DriverProfile | undefined>;

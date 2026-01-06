@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
@@ -10,6 +10,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import express from "express";
+import bcrypt from "bcryptjs";
 
 const FIELDHCP_API_URL = "https://admin.carehubapp.com/APIs/Employer/JobSearch";
 const FIELDHCP_AUTH_TOKEN = process.env.FIELDHCP_AUTH_TOKEN || "";
@@ -97,6 +98,148 @@ export async function registerRoutes(
     ws.on("close", () => {
       clients.delete(ws);
       console.log("WebSocket client disconnected");
+    });
+  });
+
+  // Authentication middleware
+  const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    next();
+  };
+
+  const requireDriver = async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    if (req.session.role !== "driver" && req.session.role !== "admin") {
+      return res.status(403).json({ message: "Driver access required" });
+    }
+    next();
+  };
+
+  const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    if (req.session.role !== "admin") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    next();
+  };
+
+  // Auth routes
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      // Get driver profile if user is a driver
+      let driverId: number | undefined;
+      let driverProfile = null;
+      if (user.role === "driver") {
+        const driver = await storage.getDriverByUserId(user.id);
+        if (driver) {
+          driverId = driver.id;
+          driverProfile = driver;
+          
+          // Check if driver is approved and KYC verified
+          if (driver.applicationStatus !== "approved") {
+            return res.status(403).json({ 
+              message: "Your driver application is pending approval",
+              applicationStatus: driver.applicationStatus 
+            });
+          }
+          if (driver.kycStatus !== "approved") {
+            return res.status(403).json({ 
+              message: "Please complete KYC verification",
+              kycStatus: driver.kycStatus,
+              redirectTo: "/driver/kyc"
+            });
+          }
+        }
+      }
+
+      // Set session data
+      req.session.userId = user.id;
+      req.session.username = user.username;
+      req.session.role = user.role || "user";
+      if (driverId) {
+        req.session.driverId = driverId;
+      }
+
+      res.json({ 
+        message: "Login successful",
+        user: { 
+          id: user.id, 
+          username: user.username, 
+          role: user.role 
+        },
+        driver: driverProfile ? {
+          id: driverProfile.id,
+          fullName: driverProfile.fullName,
+          applicationStatus: driverProfile.applicationStatus,
+          kycStatus: driverProfile.kycStatus
+        } : null
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Logout error:", err);
+        return res.status(500).json({ message: "Logout failed" });
+      }
+      res.clearCookie("connect.sid");
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const user = await storage.getUserByUsername(req.session.username);
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    let driverProfile = null;
+    if (req.session.driverId) {
+      driverProfile = await storage.getDriver(req.session.driverId);
+    }
+
+    res.json({
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role
+      },
+      driver: driverProfile ? {
+        id: driverProfile.id,
+        fullName: driverProfile.fullName,
+        applicationStatus: driverProfile.applicationStatus,
+        kycStatus: driverProfile.kycStatus
+      } : null
     });
   });
   
