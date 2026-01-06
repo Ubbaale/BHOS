@@ -45,7 +45,7 @@ export default function SharedTracking() {
   const { code } = useParams<{ code: string }>();
 
   const { data, isLoading, error } = useQuery<SharedRideData>({
-    queryKey: ["/api/track", code],
+    queryKey: [`/api/track/${code}`],
     refetchInterval: 10000,
     retry: false,
   });

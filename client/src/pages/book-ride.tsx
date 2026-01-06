@@ -108,6 +108,30 @@ const bookRideSchema = z.object({
   groupNumber: z.string().optional(),
   priorAuthNumber: z.string().optional(),
 }).refine((data) => {
+  if (data.bookedByOther) {
+    return data.bookerName && data.bookerName.trim().length > 0;
+  }
+  return true;
+}, {
+  message: "Your name is required when booking for someone else",
+  path: ["bookerName"],
+}).refine((data) => {
+  if (data.bookedByOther) {
+    return data.bookerPhone && data.bookerPhone.trim().length >= 10;
+  }
+  return true;
+}, {
+  message: "Your phone number is required when booking for someone else",
+  path: ["bookerPhone"],
+}).refine((data) => {
+  if (data.bookedByOther) {
+    return data.bookerRelation !== undefined;
+  }
+  return true;
+}, {
+  message: "Please select your relationship to the patient",
+  path: ["bookerRelation"],
+}).refine((data) => {
   if (data.paymentType === "insurance") {
     return data.insuranceProvider && data.insuranceProvider.trim().length > 0;
   }
