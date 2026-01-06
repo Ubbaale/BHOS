@@ -3,15 +3,19 @@ import { db } from "./db";
 import { pushSubscriptions } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
+const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || "").trim();
+const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY || "").trim();
 
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(
-    "mailto:support@carehubapp.com",
-    VAPID_PUBLIC_KEY,
-    VAPID_PRIVATE_KEY
-  );
+  try {
+    webpush.setVapidDetails(
+      "mailto:support@carehubapp.com",
+      VAPID_PUBLIC_KEY,
+      VAPID_PRIVATE_KEY
+    );
+  } catch (error) {
+    console.error("Failed to initialize VAPID:", error);
+  }
 }
 
 export function getVapidPublicKey(): string {
