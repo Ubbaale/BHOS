@@ -461,7 +461,7 @@ export default function DriverEarnings() {
 
             <div className="grid grid-cols-6 gap-2">
               <div className="col-span-3">
-                <Label htmlFor="taxCity">City <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                <Label htmlFor="taxCity">City <span className="text-destructive">*</span></Label>
                 <Input
                   id="taxCity"
                   value={contractorForm.taxCity}
@@ -470,7 +470,7 @@ export default function DriverEarnings() {
                 />
               </div>
               <div className="col-span-1">
-                <Label htmlFor="taxState">State <span className="text-muted-foreground text-xs">(opt)</span></Label>
+                <Label htmlFor="taxState">State <span className="text-destructive">*</span></Label>
                 <Input
                   id="taxState"
                   maxLength={2}
@@ -480,7 +480,7 @@ export default function DriverEarnings() {
                 />
               </div>
               <div className="col-span-2">
-                <Label htmlFor="taxZip">ZIP <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                <Label htmlFor="taxZip">ZIP <span className="text-destructive">*</span></Label>
                 <Input
                   id="taxZip"
                   maxLength={5}
@@ -509,7 +509,7 @@ export default function DriverEarnings() {
             </Button>
             <Button 
               onClick={() => contractorOnboardMutation.mutate(contractorForm)}
-              disabled={!contractorForm.ssnLast4 || contractorForm.ssnLast4.length !== 4 || !contractorForm.taxAddress || !contractorForm.agreementAccepted || contractorOnboardMutation.isPending}
+              disabled={!contractorForm.ssnLast4 || contractorForm.ssnLast4.length !== 4 || !contractorForm.taxAddress || !contractorForm.taxCity || !contractorForm.taxState || !contractorForm.taxZip || !contractorForm.agreementAccepted || contractorOnboardMutation.isPending}
               data-testid="button-submit-contractor"
             >
               {contractorOnboardMutation.isPending ? "Saving..." : "Complete Setup"}
