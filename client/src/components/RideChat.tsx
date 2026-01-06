@@ -45,27 +45,64 @@ export function RideChat({ rideId, userType, isOpen = true, onClose }: RideChatP
 
   useEffect(() => {
     if (!isOpen || !rideId) return;
+    
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let isMounted = true;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat?rideId=${rideId}`);
-    wsRef.current = ws;
-
-    ws.onmessage = (event) => {
+    const connectChatWebSocket = async () => {
+      if (!isMounted) return;
+      
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === "chat" && data.message) {
-          setWsMessages(prev => {
-            if (prev.some(m => m.id === data.message.id)) return prev;
-            return [...prev, data.message];
-          });
+        // Get authentication token for WebSocket
+        const tokenResponse = await fetch("/api/auth/ws-token", { credentials: "include" });
+        if (!tokenResponse.ok || !isMounted) {
+          if (isMounted) console.log("Not authenticated for chat WebSocket");
+          return;
         }
+        const { token } = await tokenResponse.json();
+        
+        if (!isMounted) return;
+        
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat?rideId=${rideId}&token=${token}`);
+        wsRef.current = ws;
+
+        ws.onmessage = (event) => {
+          if (!isMounted) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "chat" && data.message) {
+              setWsMessages(prev => {
+                if (prev.some(m => m.id === data.message.id)) return prev;
+                return [...prev, data.message];
+              });
+            }
+          } catch (error) {
+            console.error("Error parsing chat message:", error);
+          }
+        };
+        
+        ws.onclose = () => {
+          // Only reconnect if still mounted and open
+          if (isMounted && isOpen) {
+            reconnectTimeout = setTimeout(connectChatWebSocket, 30000);
+          }
+        };
       } catch (error) {
-        console.error("Error parsing chat message:", error);
+        console.error("Failed to connect chat WebSocket:", error);
       }
     };
+    
+    connectChatWebSocket();
 
     return () => {
-      ws.close();
+      isMounted = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null; // Prevent onclose from triggering reconnect
+        ws.close();
+      }
       setWsMessages([]);
     };
   }, [isOpen, rideId]);

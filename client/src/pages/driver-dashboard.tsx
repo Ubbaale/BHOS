@@ -497,39 +497,77 @@ export default function DriverDashboard() {
   }, [drivers, currentDriverId]);
 
   useEffect(() => {
-    const ws = new WebSocket(`${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws/rides`);
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let isMounted = true;
     
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log("Ride update:", data);
+    const connectWebSocket = async () => {
+      if (!isMounted) return;
       
-      if (data.type === "new" && data.ride) {
-        setNewRideIds(prev => new Set(Array.from(prev).concat(data.ride.id)));
-        playNotificationSound();
-        toast({
-          title: "New Ride Request",
-          description: `Pickup: ${data.ride.pickupAddress.substring(0, 40)}...`,
-        });
-        setTimeout(() => {
-          setNewRideIds(prev => {
-            const next = new Set(prev);
-            next.delete(data.ride.id);
-            return next;
-          });
-        }, 30000);
-      }
-      
-      refetchRides();
-      refetchAllRides();
-      refetchPoolRides();
-    };
+      try {
+        // Get authentication token for WebSocket
+        const tokenResponse = await fetch("/api/auth/ws-token", { credentials: "include" });
+        if (!tokenResponse.ok || !isMounted) {
+          if (isMounted) console.log("Not authenticated for ride WebSocket - skipping connection");
+          return;
+        }
+        const { token } = await tokenResponse.json();
+        
+        if (!isMounted) return;
+        
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws/rides?token=${token}`);
+        
+        ws.onmessage = (event) => {
+          if (!isMounted) return;
+          const data = JSON.parse(event.data);
+          console.log("Ride update:", data);
+          
+          if (data.type === "new" && data.ride) {
+            setNewRideIds(prev => new Set(Array.from(prev).concat(data.ride.id)));
+            playNotificationSound();
+            toast({
+              title: "New Ride Request",
+              description: `Pickup: ${data.ride.pickupAddress.substring(0, 40)}...`,
+            });
+            setTimeout(() => {
+              setNewRideIds(prev => {
+                const next = new Set(prev);
+                next.delete(data.ride.id);
+                return next;
+              });
+            }, 30000);
+          }
+          
+          refetchRides();
+          refetchAllRides();
+          refetchPoolRides();
+        };
 
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
+        ws.onerror = (error) => {
+          console.error("WebSocket error:", error);
+        };
+        
+        ws.onclose = () => {
+          // Only reconnect if component is still mounted
+          if (isMounted) {
+            reconnectTimeout = setTimeout(connectWebSocket, 30000);
+          }
+        };
+      } catch (error) {
+        console.error("Failed to connect ride WebSocket:", error);
+      }
     };
+    
+    connectWebSocket();
 
     return () => {
-      ws.close();
+      isMounted = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null; // Prevent onclose from triggering reconnect
+        ws.close();
+      }
     };
   }, [refetchRides, refetchAllRides, refetchPoolRides, playNotificationSound, toast]);
 

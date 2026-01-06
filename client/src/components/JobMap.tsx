@@ -199,32 +199,60 @@ export default function JobMap() {
     };
   }, [handleWebSocketMessage]);
 
-  // WebSocket for ride updates
+  // WebSocket for ride updates (requires authentication)
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/rides`;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let isMounted = true;
     
-    const connect = () => {
-      ridesWsRef.current = new WebSocket(wsUrl);
+    const connect = async () => {
+      if (!isMounted) return;
       
-      ridesWsRef.current.onmessage = () => {
-        // Refetch rides when there's an update
-        queryClient.invalidateQueries({ queryKey: ["/api/rides/all"] });
-      };
-      
-      ridesWsRef.current.onclose = () => {
-        setTimeout(connect, 3000);
-      };
-      
-      ridesWsRef.current.onerror = (error) => {
-        console.error("Rides WebSocket error:", error);
-      };
+      try {
+        // Get authentication token for WebSocket
+        const tokenResponse = await fetch("/api/auth/ws-token", { credentials: "include" });
+        if (!tokenResponse.ok || !isMounted) {
+          // Not authenticated - skip rides WebSocket on public pages
+          return;
+        }
+        const { token } = await tokenResponse.json();
+        
+        if (!isMounted) return;
+        
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/ws/rides?token=${token}`;
+        
+        ridesWsRef.current = new WebSocket(wsUrl);
+        
+        ridesWsRef.current.onmessage = () => {
+          if (!isMounted) return;
+          // Refetch rides when there's an update
+          queryClient.invalidateQueries({ queryKey: ["/api/rides/all"] });
+        };
+        
+        ridesWsRef.current.onclose = () => {
+          // Only reconnect if still mounted
+          if (isMounted) {
+            reconnectTimeout = setTimeout(connect, 30000);
+          }
+        };
+        
+        ridesWsRef.current.onerror = (error) => {
+          console.error("Rides WebSocket error:", error);
+        };
+      } catch (error) {
+        console.error("Failed to connect rides WebSocket:", error);
+      }
     };
     
     connect();
     
     return () => {
-      ridesWsRef.current?.close();
+      isMounted = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ridesWsRef.current) {
+        ridesWsRef.current.onclose = null; // Prevent onclose from triggering reconnect
+        ridesWsRef.current.close();
+      }
     };
   }, [queryClient]);
 
