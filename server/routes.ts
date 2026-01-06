@@ -722,32 +722,13 @@ export async function registerRoutes(
         // Expire tracking token when ride completes
         await storage.expireTrackingToken(id);
         
-        // Capture the held payment if this is a self-pay ride
+        // Update payment status to completed (payment was already captured at booking)
         if (existingRide.stripePaymentIntentId && existingRide.paymentType === 'self_pay') {
-          try {
-            const stripe = await getUncachableStripeClient();
-            const paymentIntent = await stripe.paymentIntents.retrieve(existingRide.stripePaymentIntentId);
-            
-            if (paymentIntent.status === 'requires_capture') {
-              // Capture the exact final fare amount (may differ from authorized amount)
-              const finalAmountCents = Math.round(finalFare * 100);
-              await stripe.paymentIntents.capture(existingRide.stripePaymentIntentId, {
-                amount_to_capture: finalAmountCents,
-              });
-              
-              // Update payment status
-              await storage.updateRidePayment(id, { 
-                paymentStatus: 'completed',
-                stripePaymentIntentId: existingRide.stripePaymentIntentId,
-                paidAmount: finalFare.toString()
-              });
-              
-              console.log(`Captured payment of $${finalFare.toFixed(2)} for ride ${id}`);
-            }
-          } catch (captureError: any) {
-            console.error(`Failed to capture payment for ride ${id}:`, captureError);
-            // Don't fail the completion - just log the error
-          }
+          await storage.updateRidePayment(id, { 
+            paymentStatus: 'completed',
+            stripePaymentIntentId: existingRide.stripePaymentIntentId,
+            paidAmount: existingRide.paidAmount || finalFare.toString()
+          });
         }
         
         await storage.createRideEvent({
@@ -929,31 +910,9 @@ export async function registerRoutes(
         return res.status(500).json({ message: "Failed to cancel ride" });
       }
 
-      // Cancel the payment authorization if exists (release the held funds)
-      if (ride.stripePaymentIntentId) {
-        try {
-          const stripe = await getUncachableStripeClient();
-          const paymentIntent = await stripe.paymentIntents.retrieve(ride.stripePaymentIntentId);
-          
-          if (paymentIntent.status === 'requires_capture') {
-            // Cancel the authorization - release the hold on customer's card
-            await stripe.paymentIntents.cancel(ride.stripePaymentIntentId);
-            
-            // Update payment status to reflect the cancellation
-            await storage.updateRidePayment(rideId, {
-              paymentStatus: 'cancelled',
-              stripePaymentIntentId: ride.stripePaymentIntentId,
-              paidAmount: '0'
-            });
-            
-            console.log(`Cancelled payment hold for ride ${rideId}`);
-          }
-        } catch (stripeError: any) {
-          console.error(`Failed to cancel payment for ride ${rideId}:`, stripeError);
-          // Don't fail the cancellation - just log the error
-        }
-      }
-
+      // Note: Payment was captured at booking. Refunds for cancelled rides 
+      // should be processed via the admin refund endpoint if needed.
+      
       // Expire tracking token when ride is cancelled
       await storage.expireTrackingToken(rideId);
 
@@ -2652,12 +2611,11 @@ export async function registerRoutes(
       // Convert dollars to cents for Stripe
       const amountInCents = Math.round(estimatedFare * 100);
       
-      // Use manual capture - authorize now, capture on ride completion
+      // Capture payment immediately at booking
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amountInCents,
         currency: 'usd',
         automatic_payment_methods: { enabled: true },
-        capture_method: 'manual', // Hold funds, capture later on completion
         metadata: {
           type: 'ride_booking',
           patientName: patientName || '',

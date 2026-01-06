@@ -157,16 +157,13 @@ Database tables:
 
 ### Payment System (Stripe Integration)
 - **Stripe Integration**: Fully configured via Replit connector with stripe-replit-sync
-- **Authorization/Capture Flow** (self-pay rides):
+- **Upfront Payment Flow** (self-pay rides):
   1. Patient enters ride details and sees estimated fare
   2. Clicks "Continue to Payment" to initiate Stripe checkout
   3. Stripe Elements payment form collects card details securely
-  4. Payment is **authorized (held)** - funds are reserved but not captured
-  5. Ride is marked with `paymentStatus: 'paid'` and `stripePaymentIntentId`
-  6. When driver completes ride, payment is **captured** for the final fare amount
-- **Cancellation Handling**:
-  - If ride is cancelled before completion, authorization is **cancelled** (hold released)
-  - Customer's card is never charged for cancelled rides
+  4. Payment is **captured immediately** - money goes to your Stripe account
+  5. Ride is created with `paymentStatus: 'paid'` and `stripePaymentIntentId`
+  6. Drivers receive earnings via your Stripe payout process
 - **Tip Payment Flow**:
   1. After ride completion, patient can add tip from tracking page
   2. Three preset options (15%, 20%, 25%) or custom amount
