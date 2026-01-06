@@ -155,12 +155,15 @@ Database tables:
   - "Tips Received" shows total tips as separate metric
   - Full earnings breakdown available via API
 
-### Payment System (Deferred)
-- **Current Status**: Payment integration not yet configured (user dismissed Stripe setup)
-- **Workflow**: Patients post rides for free → Drivers claim from pool → Fare calculated on completion
+### Payment System (Pending Stripe Setup)
+- **Current Status**: Payment integration not yet configured (user dismissed Stripe setup twice)
+- **Intended Workflow**: 
+  - Payment collected UPFRONT at booking time (estimated fare based on distance)
+  - Tips collected separately after ride completion
 - **Fare Structure**: $20 base + $2.50/mile, $22 minimum
-- **Future Integration**: Stripe payment processing can be added when ready
-- **Note**: To enable payments, user needs to complete Stripe integration setup
+- **Future Integration**: Stripe payment processing required
+- **To Enable Payments**: User needs to complete Stripe integration setup via Replit connector
+- **Note**: Until Stripe is configured, fares are calculated but not collected
 
 ### Healthcare-Friendly Operational Policies
 
