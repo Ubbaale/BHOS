@@ -12,7 +12,8 @@ import { RideChat } from "@/components/RideChat";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Car, Phone, MapPin, Clock, Shield, Share2, AlertTriangle, 
-  User, CheckCircle2, Navigation, MessageCircle, Accessibility, Copy, ExternalLink
+  User, CheckCircle2, Navigation, MessageCircle, Accessibility, Copy, ExternalLink,
+  DollarSign, Heart
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Ride } from "@shared/schema";
@@ -56,6 +57,9 @@ export default function TrackRide() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareContact, setShareContact] = useState({ name: "", phone: "", email: "" });
   const [createdShareCode, setCreatedShareCode] = useState<string | null>(null);
+  const [selectedTip, setSelectedTip] = useState<number | null>(null);
+  const [customTip, setCustomTip] = useState("");
+  const [tipDialogOpen, setTipDialogOpen] = useState(false);
 
   const { data: ride, isLoading: rideLoading } = useQuery<Ride>({
     queryKey: ["/api/rides", rideId],
@@ -94,6 +98,47 @@ export default function TrackRide() {
       });
     },
   });
+
+  const tipMutation = useMutation({
+    mutationFn: async (tipAmount: string) => {
+      const res = await apiRequest("POST", `/api/rides/${rideId}/tip`, { tipAmount });
+      return res.json();
+    },
+    onSuccess: () => {
+      setTipDialogOpen(false);
+      setSelectedTip(null);
+      setCustomTip("");
+      queryClient.invalidateQueries({ queryKey: ["/api/rides", rideId] });
+      toast({
+        title: "Thank You!",
+        description: "Your tip has been sent to the driver.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const tipOptions = [
+    { label: "15%", percent: 15 },
+    { label: "20%", percent: 20 },
+    { label: "25%", percent: 25 },
+  ];
+
+  const getFinalFare = () => {
+    return parseFloat(ride?.finalFare || ride?.estimatedFare || "0");
+  };
+
+  const handleTip = () => {
+    const tipAmount = customTip ? customTip : selectedTip ? (getFinalFare() * selectedTip / 100).toFixed(2) : null;
+    if (tipAmount && parseFloat(tipAmount) > 0) {
+      tipMutation.mutate(tipAmount);
+    }
+  };
 
   const getCurrentStep = () => {
     if (!ride) return 0;
@@ -430,6 +475,91 @@ export default function TrackRide() {
                   View Receipt
                 </Button>
               </Link>
+            )}
+
+            {ride.status === "completed" && !ride.tipAmount && (
+              <Dialog open={tipDialogOpen} onOpenChange={setTipDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="default" data-testid="button-add-tip">
+                    <Heart className="w-4 h-4 mr-2" />
+                    Add Tip
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <Heart className="w-5 h-5 text-red-500" />
+                      Thank Your Driver
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Show your appreciation! 100% of tips go directly to your driver.
+                    </p>
+                    
+                    <div className="flex gap-2">
+                      {tipOptions.map((option) => (
+                        <Button
+                          key={option.percent}
+                          variant={selectedTip === option.percent ? "default" : "outline"}
+                          onClick={() => {
+                            setSelectedTip(option.percent);
+                            setCustomTip("");
+                          }}
+                          className="flex-1"
+                          data-testid={`button-tip-${option.percent}`}
+                        >
+                          <div className="text-center">
+                            <div className="font-semibold">{option.label}</div>
+                            <div className="text-xs opacity-75">
+                              ${(getFinalFare() * option.percent / 100).toFixed(2)}
+                            </div>
+                          </div>
+                        </Button>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="custom-tip">Or enter a custom amount</Label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          id="custom-tip"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={customTip}
+                          onChange={(e) => {
+                            setCustomTip(e.target.value);
+                            setSelectedTip(null);
+                          }}
+                          placeholder="0.00"
+                          className="pl-8"
+                          data-testid="input-custom-tip"
+                        />
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={handleTip}
+                      disabled={(!selectedTip && !customTip) || tipMutation.isPending}
+                      className="w-full"
+                      data-testid="button-submit-tip"
+                    >
+                      {tipMutation.isPending ? "Sending..." : 
+                        `Add $${customTip || (selectedTip ? (getFinalFare() * selectedTip / 100).toFixed(2) : "0.00")} Tip`
+                      }
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {ride.status === "completed" && ride.tipAmount && parseFloat(ride.tipAmount) > 0 && (
+              <Badge variant="secondary" className="px-3 py-2" data-testid="badge-tip-added">
+                <Heart className="w-4 h-4 mr-1 text-red-500" />
+                Tip Added: ${parseFloat(ride.tipAmount).toFixed(2)}
+              </Badge>
             )}
           </div>
 

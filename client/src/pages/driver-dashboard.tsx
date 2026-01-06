@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RideChat } from "@/components/RideChat";
 import type { Ride, DriverProfile } from "@shared/schema";
@@ -360,7 +360,7 @@ export default function DriverDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -408,9 +408,24 @@ export default function DriverDashboard() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold">
-                      ${completedRides.reduce((sum, r) => sum + (parseFloat(r.estimatedFare || "0")), 0).toFixed(0)}
+                      ${completedRides.reduce((sum, r) => sum + (parseFloat(r.driverEarnings || r.estimatedFare || "0")), 0).toFixed(0)}
                     </p>
-                    <p className="text-xs text-muted-foreground">Total Earnings</p>
+                    <p className="text-xs text-muted-foreground">Your Earnings</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-red-500/10 rounded-md">
+                    <Heart className="w-5 h-5 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">
+                      ${completedRides.reduce((sum, r) => sum + (parseFloat(r.tipAmount || "0")), 0).toFixed(0)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Tips Received</p>
                   </div>
                 </div>
               </CardContent>
