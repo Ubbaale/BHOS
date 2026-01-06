@@ -511,9 +511,9 @@ export class DatabaseStorage implements IStorage {
   async incrementDriverCompletedRides(driverId: number): Promise<void> {
     const [driver] = await db.select().from(driverProfiles).where(eq(driverProfiles.id, driverId));
     if (driver) {
-      const current = driver.completedRides || 0;
+      const current = driver.totalRidesCompleted || 0;
       await db.update(driverProfiles)
-        .set({ completedRides: current + 1 })
+        .set({ totalRidesCompleted: current + 1 })
         .where(eq(driverProfiles.id, driverId));
     }
   }

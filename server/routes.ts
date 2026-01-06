@@ -350,6 +350,59 @@ export async function registerRoutes(
         });
       }
       
+      // If completing the ride, use the completeRide method with fare calculation
+      if (status === "completed") {
+        const existingRide = await storage.getRide(id);
+        if (!existingRide) {
+          return res.status(404).json({ message: "Ride not found" });
+        }
+        
+        // Calculate distance using Haversine formula
+        const R = 3959; // Earth's radius in miles
+        const lat1 = parseFloat(existingRide.pickupLat!);
+        const lon1 = parseFloat(existingRide.pickupLng!);
+        const lat2 = parseFloat(existingRide.dropoffLat!);
+        const lon2 = parseFloat(existingRide.dropoffLng!);
+        
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const distance = R * c * 1.3; // Add 30% for road routing
+        
+        // Calculate fare: $20 base + $2.50/mile, $22 minimum
+        const baseFare = 20;
+        const perMile = 2.50;
+        const surge = parseFloat(existingRide.surgeMultiplier || "1.0");
+        const tolls = parseFloat(existingRide.actualTolls || existingRide.estimatedTolls || "0");
+        const rawFare = baseFare + (distance * perMile);
+        const fareWithSurge = rawFare * surge;
+        const finalFare = Math.max(22, fareWithSurge + tolls);
+        
+        const ride = await storage.completeRide(id, finalFare.toFixed(2), tolls.toString(), distance.toFixed(2));
+        
+        await storage.createRideEvent({
+          rideId: id,
+          status: "completed",
+          note: note || `Trip completed. Final fare: $${finalFare.toFixed(2)}`
+        });
+        
+        // Update driver stats
+        if (existingRide.driverId) {
+          await storage.incrementDriverCompletedRides(existingRide.driverId);
+        }
+        
+        broadcastRideUpdate("status_change", ride);
+        
+        notifyPatientOfRideUpdate(status).catch(err => {
+          console.error("Failed to send push notification:", err);
+        });
+        
+        return res.json(ride);
+      }
+      
       const ride = await storage.updateRideStatus(id, status);
       if (!ride) {
         return res.status(404).json({ message: "Ride not found" });
