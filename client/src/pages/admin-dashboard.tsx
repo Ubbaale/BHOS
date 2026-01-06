@@ -19,7 +19,7 @@ import type { Ride, DriverProfile, PatientAccount, IncidentReport } from "@share
 import {
   Car, Users, AlertTriangle, DollarSign, Activity,
   Ban, CheckCircle, XCircle, Eye, Clock, Phone, Mail,
-  MapPin, Calendar, ChevronLeft, Shield, FileText
+  MapPin, Calendar, ChevronLeft, Shield, FileText, RotateCcw
 } from "lucide-react";
 
 interface AdminStats {
@@ -47,6 +47,7 @@ export default function AdminDashboard() {
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<string>("");
   const [actionReason, setActionReason] = useState("");
+  const [refundAmount, setRefundAmount] = useState<string>("");
   const [rideStatusFilter, setRideStatusFilter] = useState<string>("all");
 
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
@@ -111,6 +112,35 @@ export default function AdminDashboard() {
     },
   });
 
+  const refundRideMutation = useMutation({
+    mutationFn: async ({ rideId, reason, refundAmount }: { rideId: number; reason: string; refundAmount?: string }) => {
+      const body: { reason: string; refundAmount?: number } = { reason };
+      if (refundAmount && parseFloat(refundAmount) > 0) {
+        body.refundAmount = parseFloat(refundAmount);
+      }
+      const response = await apiRequest("POST", `/api/admin/rides/${rideId}/refund`, body);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/rides"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setActionDialogOpen(false);
+      setActionReason("");
+      setRefundAmount("");
+      toast({ 
+        title: "Refund processed", 
+        description: `$${data.refundAmount} refunded to customer's card`
+      });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Refund failed", 
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
   const updateIncidentMutation = useMutation({
     mutationFn: async ({ incidentId, data }: { incidentId: number; data: Partial<IncidentReport> }) => {
       const response = await apiRequest("PATCH", `/api/admin/incidents/${incidentId}`, data);
@@ -135,6 +165,8 @@ export default function AdminDashboard() {
       updatePatientStatusMutation.mutate({ phone: selectedPatient.patientPhone, status: "good_standing" });
     } else if (actionType === "cancel_ride" && selectedRide) {
       cancelRideMutation.mutate({ rideId: selectedRide.id, reason: actionReason });
+    } else if (actionType === "refund_ride" && selectedRide) {
+      refundRideMutation.mutate({ rideId: selectedRide.id, reason: actionReason, refundAmount: refundAmount || undefined });
     }
   };
 
@@ -325,6 +357,21 @@ export default function AdminDashboard() {
                               data-testid={`button-cancel-ride-${ride.id}`}
                             >
                               <XCircle className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {ride.status === "completed" && ride.stripePaymentIntentId && ride.paymentStatus !== "refunded" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedRide(ride);
+                                setActionType("refund_ride");
+                                setRefundAmount("");
+                                setActionDialogOpen(true);
+                              }}
+                              data-testid={`button-refund-ride-${ride.id}`}
+                            >
+                              <RotateCcw className="w-4 h-4" />
                             </Button>
                           )}
                         </div>
@@ -600,24 +647,47 @@ export default function AdminDashboard() {
               {actionType === "block_patient" && "Block Patient"}
               {actionType === "unblock_patient" && "Unblock Patient"}
               {actionType === "cancel_ride" && "Cancel Ride"}
+              {actionType === "refund_ride" && "Refund Customer"}
             </DialogTitle>
             <DialogDescription>
               {actionType.includes("suspend") && `Are you sure you want to ${actionType.replace("_", " ")} ${selectedDriver?.fullName}?`}
               {actionType.includes("patient") && `Are you sure you want to ${actionType.replace("_", " ")} ${selectedPatient?.patientPhone}?`}
               {actionType === "cancel_ride" && `Are you sure you want to cancel ride #${selectedRide?.id}?`}
+              {actionType === "refund_ride" && `Process refund for ride #${selectedRide?.id}. Amount paid: $${selectedRide?.paidAmount || selectedRide?.finalFare || "0"}`}
             </DialogDescription>
           </DialogHeader>
-          {(actionType === "suspend_driver" || actionType === "block_patient" || actionType === "cancel_ride") && (
-            <div className="py-4">
-              <Label htmlFor="reason">Reason</Label>
-              <Textarea
-                id="reason"
-                placeholder="Enter reason for this action..."
-                value={actionReason}
-                onChange={(e) => setActionReason(e.target.value)}
-                className="mt-2"
-                data-testid="input-action-reason"
-              />
+          {(actionType === "suspend_driver" || actionType === "block_patient" || actionType === "cancel_ride" || actionType === "refund_ride") && (
+            <div className="py-4 space-y-4">
+              <div>
+                <Label htmlFor="reason">Reason {actionType === "refund_ride" && "(required)"}</Label>
+                <Textarea
+                  id="reason"
+                  placeholder={actionType === "refund_ride" ? "Enter reason for refund (e.g., customer complaint, service issue)..." : "Enter reason for this action..."}
+                  value={actionReason}
+                  onChange={(e) => setActionReason(e.target.value)}
+                  className="mt-2"
+                  data-testid="input-action-reason"
+                />
+              </div>
+              {actionType === "refund_ride" && (
+                <div>
+                  <Label htmlFor="refundAmount">Refund Amount (leave empty for full refund)</Label>
+                  <Input
+                    id="refundAmount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder={`Max: $${selectedRide?.paidAmount || selectedRide?.finalFare || "0"}`}
+                    value={refundAmount}
+                    onChange={(e) => setRefundAmount(e.target.value)}
+                    className="mt-2"
+                    data-testid="input-refund-amount"
+                  />
+                  <p className="text-sm text-muted-foreground mt-1">
+                    The refund will be sent back to the customer's original payment method.
+                  </p>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -625,12 +695,18 @@ export default function AdminDashboard() {
               Cancel
             </Button>
             <Button
-              variant={actionType.includes("unsuspend") || actionType.includes("unblock") ? "default" : "destructive"}
+              variant={actionType.includes("unsuspend") || actionType.includes("unblock") || actionType === "refund_ride" ? "default" : "destructive"}
               onClick={handleAction}
-              disabled={updateDriverStatusMutation.isPending || updatePatientStatusMutation.isPending || cancelRideMutation.isPending}
+              disabled={
+                updateDriverStatusMutation.isPending || 
+                updatePatientStatusMutation.isPending || 
+                cancelRideMutation.isPending || 
+                refundRideMutation.isPending ||
+                (actionType === "refund_ride" && !actionReason.trim())
+              }
               data-testid="button-confirm-action"
             >
-              Confirm
+              {actionType === "refund_ride" ? "Process Refund" : "Confirm"}
             </Button>
           </DialogFooter>
         </DialogContent>
