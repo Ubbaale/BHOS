@@ -114,6 +114,14 @@ export const driverProfiles = pgTable("driver_profiles", {
   kycStatus: text("kyc_status").notNull().default("not_submitted"),
   kycNotes: text("kyc_notes"),
   kycVerifiedAt: timestamp("kyc_verified_at"),
+  // Driver reliability metrics
+  totalRidesCompleted: integer("total_rides_completed").default(0),
+  totalRidesCancelled: integer("total_rides_cancelled").default(0),
+  averageRating: numeric("average_rating").default("5.0"),
+  totalRatings: integer("total_ratings").default(0),
+  // Account status
+  accountStatus: text("account_status").default("active"), // 'active', 'suspended', 'deactivated'
+  suspensionReason: text("suspension_reason"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -180,6 +188,30 @@ export const rides = pgTable("rides", {
   verificationCode: text("verification_code"),
   emergencyContactShared: boolean("emergency_contact_shared").default(false),
   estimatedArrivalTime: timestamp("estimated_arrival_time"),
+  // Cancellation fields
+  cancelledAt: timestamp("cancelled_at"),
+  cancelledBy: text("cancelled_by"), // 'patient', 'driver', 'system'
+  cancellationReason: text("cancellation_reason"),
+  cancellationFee: numeric("cancellation_fee"),
+  // Surge/peak pricing
+  surgeMultiplier: numeric("surge_multiplier").default("1.0"),
+  baseFare: numeric("base_fare"),
+  // Tolls
+  estimatedTolls: numeric("estimated_tolls").default("0"),
+  actualTolls: numeric("actual_tolls"),
+  // Traffic and delays
+  delayMinutes: integer("delay_minutes").default(0),
+  delayReason: text("delay_reason"),
+  trafficCondition: text("traffic_condition"), // 'normal', 'moderate', 'heavy'
+  // Payment tracking
+  paymentStatus: text("payment_status").default("pending"), // 'pending', 'processing', 'completed', 'failed', 'refunded'
+  paymentAttempts: integer("payment_attempts").default(0),
+  paymentFailedAt: timestamp("payment_failed_at"),
+  finalFare: numeric("final_fare"),
+  // Actual trip data
+  actualPickupTime: timestamp("actual_pickup_time"),
+  actualDropoffTime: timestamp("actual_dropoff_time"),
+  actualDistanceMiles: numeric("actual_distance_miles"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -303,3 +335,84 @@ export const insertTripShareSchema = z.object({
 });
 export type InsertTripShare = z.infer<typeof insertTripShareSchema>;
 export type TripShare = typeof tripShares.$inferSelect;
+
+// Surge pricing configuration
+export const surgePricing = pgTable("surge_pricing", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  dayOfWeek: integer("day_of_week").notNull(), // 0-6 (Sunday-Saturday)
+  startHour: integer("start_hour").notNull(), // 0-23
+  endHour: integer("end_hour").notNull(), // 0-23
+  multiplier: numeric("multiplier").notNull().default("1.0"),
+  isActive: boolean("is_active").default(true),
+  reason: text("reason"), // 'peak_hours', 'holiday', 'high_demand'
+});
+
+export type SurgePricing = typeof surgePricing.$inferSelect;
+
+// Toll zones for route estimation
+export const tollZones = pgTable("toll_zones", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  tollAmount: numeric("toll_amount").notNull(),
+  lat: numeric("lat").notNull(),
+  lng: numeric("lng").notNull(),
+  radiusMiles: numeric("radius_miles").notNull().default("5"),
+  isActive: boolean("is_active").default(true),
+});
+
+export type TollZone = typeof tollZones.$inferSelect;
+
+// Patient account status for payment tracking
+export const patientAccounts = pgTable("patient_accounts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  patientPhone: text("patient_phone").notNull().unique(),
+  patientName: text("patient_name"),
+  accountStatus: text("account_status").default("good_standing"), // 'good_standing', 'warning', 'restricted', 'blocked'
+  outstandingBalance: numeric("outstanding_balance").default("0"),
+  cancellationCount: integer("cancellation_count").default(0),
+  totalRidesCompleted: integer("total_rides_completed").default(0),
+  totalRidesCancelled: integer("total_rides_cancelled").default(0),
+  emergencyOverrideCount: integer("emergency_override_count").default(0),
+  lastEmergencyOverride: timestamp("last_emergency_override"),
+  lastPaymentDate: timestamp("last_payment_date"),
+  suspendedAt: timestamp("suspended_at"),
+  suspensionReason: text("suspension_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type PatientAccount = typeof patientAccounts.$inferSelect;
+
+// Cancellation policies
+export const cancellationPolicies = pgTable("cancellation_policies", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  description: text("description"),
+  freeMinutesAfterBooking: integer("free_minutes_after_booking").default(5),
+  freeMinutesAfterDriverAssigned: integer("free_minutes_after_driver_assigned").default(2),
+  cancellationFeeAmount: numeric("cancellation_fee_amount").default("10"),
+  cancellationFeePercent: numeric("cancellation_fee_percent"), // Alternative: percentage of fare
+  driverNoShowMinutes: integer("driver_no_show_minutes").default(15),
+  patientNoShowMinutes: integer("patient_no_show_minutes").default(10),
+  isActive: boolean("is_active").default(true),
+});
+
+export type CancellationPolicy = typeof cancellationPolicies.$inferSelect;
+
+// Driver ratings
+export const rideRatings = pgTable("ride_ratings", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  rideId: integer("ride_id").references(() => rides.id).notNull(),
+  ratedBy: text("rated_by").notNull(), // 'patient' or 'driver'
+  rating: integer("rating").notNull(), // 1-5
+  comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRideRatingSchema = z.object({
+  rideId: z.number(),
+  ratedBy: z.enum(["patient", "driver"]),
+  rating: z.number().min(1).max(5),
+  comment: z.string().optional(),
+});
+export type InsertRideRating = z.infer<typeof insertRideRatingSchema>;
+export type RideRating = typeof rideRatings.$inferSelect;

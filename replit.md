@@ -40,12 +40,24 @@ Database tables:
 - `users` - User authentication (id, username, password)
 - `jobs` - Healthcare job listings (title, facility, location, lat/lng, pay, shift, urgency, requirements)
 - `tickets` - Issue/support tickets (category, priority, description, email, status)
-- `rides` - Medical transportation ride requests (patient info, pickup/dropoff locations, appointment time, status, mobility needs, verification codes, ETA)
+- `rides` - Medical transportation ride requests with extended fields:
+  - Patient info, pickup/dropoff locations, appointment time
+  - Status, mobility needs, verification codes, ETA
+  - Cancellation tracking (cancelledAt, cancelledBy, cancellationReason, cancellationFee)
+  - Surge pricing (surgeMultiplier, baseFare)
+  - Toll tracking (estimatedTolls, actualTolls)
+  - Traffic (delayMinutes, trafficCondition)
+  - Payment (paymentStatus, paymentAttempts, finalFare)
 - `ride_events` - Ride status change history and audit trail
 - `ride_messages` - In-app chat messages between drivers and patients
 - `trip_shares` - Trip sharing records for emergency contacts
-- `driver_profiles` - Driver information (name, phone, vehicle, accessibility capabilities)
+- `driver_profiles` - Driver information (name, phone, vehicle, accessibility capabilities, cancellationCount, completedRides, averageRating, totalRatings)
 - `patient_profiles` - Patient information (name, contact, mobility needs, emergency contact)
+- `surge_pricing` - Time-based surge pricing configuration
+- `patient_accounts` - Patient billing status and outstanding balances
+- `ride_ratings` - Driver and patient ratings for completed rides
+- `cancellation_policies` - Configurable cancellation fee policies
+- `toll_zones` - Geographic toll tracking zones
 
 ### Key Design Decisions
 
@@ -127,6 +139,40 @@ Database tables:
 - **Fare Structure**: $20 base + $2.50/mile, $22 minimum
 - **Future Integration**: Stripe payment processing can be added when ready
 - **Note**: To enable payments, user needs to complete Stripe integration setup
+
+### Healthcare-Friendly Operational Policies
+
+#### Cancellation Policy
+- **15-minute free cancellation window** for all rides
+- **$3 fee** if no driver assigned and past free window
+- **$5 maximum fee** if driver assigned (vs Uber's $10)
+- **Fee exemptions for**: Medical emergencies, insurance rides, facility cancellations, driver cancellations
+- Driver cancellations don't charge patients - drivers tracked separately
+
+#### Surge Pricing (Capped for Healthcare)
+- **Self-pay rides**: Maximum 1.25x surge (vs Uber's 3-5x)
+- **Insurance rides**: No surge pricing (flat rates required)
+- Demand-based calculations: ratio of rides to available drivers
+- Time-based scheduled surge from database configuration
+
+#### Tiered Patient Account System
+- **Green ($0-$25)**: Full access, no restrictions
+- **Yellow ($25-$75)**: Warning shown, full access
+- **Orange ($75-$150)**: Requires acknowledgment, can still book
+- **Red ($150+)**: Blocked unless emergency booking
+- Emergency override allows urgent medical transport even for blocked accounts
+- Payment plan available for balances over $50
+
+#### Traffic Delay Handling
+- Drivers can report delays with reason and updated ETA
+- Patients notified of delays via push notifications
+- Delay history tracked in ride events for accountability
+
+#### Ride Completion & Ratings
+- Final fare calculated with actual distance and tolls
+- Both drivers and patients can rate completed rides
+- Driver average rating updated after each patient rating
+- Completion stats tracked for driver reliability
 
 ### In-App Chat
 - Real-time messaging between drivers and patients during active rides

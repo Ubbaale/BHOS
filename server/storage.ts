@@ -9,7 +9,9 @@ import {
   type NativePushToken,
   type RideMessage, type InsertRideMessage,
   type TripShare, type InsertTripShare,
-  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares
+  type RideRating, type InsertRideRating,
+  type PatientAccount, type SurgePricing,
+  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ne, and } from "drizzle-orm";
@@ -64,6 +66,30 @@ export interface IStorage {
   
   setRideVerificationCode(rideId: number, code: string): Promise<Ride | undefined>;
   updateRideEta(rideId: number, eta: Date): Promise<Ride | undefined>;
+  
+  // Cancellation and policies
+  cancelRide(rideId: number, cancelledBy: string, reason: string | undefined, cancellationFee: string): Promise<Ride | undefined>;
+  updatePatientAccountBalance(patientPhone: string, amount: number): Promise<void>;
+  incrementDriverCancellations(driverId: number): Promise<void>;
+  incrementPatientCancellations(patientPhone: string): Promise<void>;
+  
+  // Surge pricing
+  getActiveSurgePricing(dayOfWeek: number, hour: number): Promise<SurgePricing | undefined>;
+  
+  // Traffic and delays
+  updateRideDelay(rideId: number, delayMinutes: number, reason: string | undefined, newEta: Date | undefined): Promise<Ride | undefined>;
+  
+  // Complete ride
+  completeRide(rideId: number, finalFare: string, actualTolls: string, actualDistanceMiles: string): Promise<Ride | undefined>;
+  incrementDriverCompletedRides(driverId: number): Promise<void>;
+  
+  // Ratings
+  createRideRating(rating: InsertRideRating): Promise<RideRating>;
+  updateDriverRating(driverId: number, newRating: number): Promise<void>;
+  
+  // Patient accounts
+  getPatientAccount(phone: string): Promise<PatientAccount | undefined>;
+  recordEmergencyOverride(patientPhone: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -304,6 +330,172 @@ export class DatabaseStorage implements IStorage {
       .where(eq(rides.id, rideId))
       .returning();
     return ride;
+  }
+
+  async cancelRide(rideId: number, cancelledBy: string, reason: string | undefined, cancellationFee: string): Promise<Ride | undefined> {
+    const [ride] = await db.update(rides)
+      .set({ 
+        status: "cancelled",
+        cancelledAt: new Date(),
+        cancelledBy,
+        cancellationReason: reason || null,
+        cancellationFee
+      })
+      .where(eq(rides.id, rideId))
+      .returning();
+    return ride;
+  }
+
+  async updatePatientAccountBalance(patientPhone: string, amount: number): Promise<void> {
+    const [existing] = await db.select().from(patientAccounts).where(eq(patientAccounts.patientPhone, patientPhone));
+    
+    // Calculate balance tier status based on thresholds:
+    // Green ($0-$25): good_standing
+    // Yellow ($25-$75): warning
+    // Orange ($75-$150): restricted
+    // Red ($150+): blocked
+    const getAccountStatus = (balance: number): string => {
+      if (balance >= 150) return "blocked";
+      if (balance >= 75) return "restricted";
+      if (balance >= 25) return "warning";
+      return "good_standing";
+    };
+    
+    if (existing) {
+      const newBalance = parseFloat(existing.outstandingBalance || "0") + amount;
+      const newStatus = getAccountStatus(newBalance);
+      await db.update(patientAccounts)
+        .set({ 
+          outstandingBalance: newBalance.toString(),
+          accountStatus: newStatus
+        })
+        .where(eq(patientAccounts.patientPhone, patientPhone));
+    } else {
+      const newStatus = getAccountStatus(amount);
+      await db.insert(patientAccounts).values({
+        patientPhone,
+        outstandingBalance: amount.toString(),
+        accountStatus: newStatus
+      });
+    }
+  }
+
+  async incrementDriverCancellations(driverId: number): Promise<void> {
+    const [driver] = await db.select().from(driverProfiles).where(eq(driverProfiles.id, driverId));
+    if (driver) {
+      const current = driver.cancellationCount || 0;
+      await db.update(driverProfiles)
+        .set({ cancellationCount: current + 1 })
+        .where(eq(driverProfiles.id, driverId));
+    }
+  }
+
+  async incrementPatientCancellations(patientPhone: string): Promise<void> {
+    const [existing] = await db.select().from(patientAccounts).where(eq(patientAccounts.patientPhone, patientPhone));
+    
+    if (existing) {
+      const current = existing.cancellationCount || 0;
+      await db.update(patientAccounts)
+        .set({ cancellationCount: current + 1 })
+        .where(eq(patientAccounts.patientPhone, patientPhone));
+    } else {
+      await db.insert(patientAccounts).values({
+        patientPhone,
+        cancellationCount: 1,
+        outstandingBalance: "0",
+        accountStatus: "good_standing"
+      });
+    }
+  }
+
+  async getActiveSurgePricing(dayOfWeek: number, hour: number): Promise<SurgePricing | undefined> {
+    const [pricing] = await db.select().from(surgePricing)
+      .where(and(
+        eq(surgePricing.dayOfWeek, dayOfWeek),
+        eq(surgePricing.startHour, hour),
+        eq(surgePricing.isActive, true)
+      ));
+    return pricing;
+  }
+
+  async updateRideDelay(rideId: number, delayMinutes: number, reason: string | undefined, newEta: Date | undefined): Promise<Ride | undefined> {
+    const updateData: Partial<Ride> = {
+      delayMinutes,
+      trafficCondition: reason || null
+    };
+    if (newEta) {
+      updateData.estimatedArrivalTime = newEta;
+    }
+    const [ride] = await db.update(rides)
+      .set(updateData)
+      .where(eq(rides.id, rideId))
+      .returning();
+    return ride;
+  }
+
+  async completeRide(rideId: number, finalFare: string, actualTolls: string, actualDistanceMiles: string): Promise<Ride | undefined> {
+    const [ride] = await db.update(rides)
+      .set({ 
+        status: "completed",
+        finalFare,
+        actualTolls,
+        distanceMiles: actualDistanceMiles,
+        paymentStatus: "pending"
+      })
+      .where(eq(rides.id, rideId))
+      .returning();
+    return ride;
+  }
+
+  async incrementDriverCompletedRides(driverId: number): Promise<void> {
+    const [driver] = await db.select().from(driverProfiles).where(eq(driverProfiles.id, driverId));
+    if (driver) {
+      const current = driver.completedRides || 0;
+      await db.update(driverProfiles)
+        .set({ completedRides: current + 1 })
+        .where(eq(driverProfiles.id, driverId));
+    }
+  }
+
+  async createRideRating(rating: InsertRideRating): Promise<RideRating> {
+    const [rideRating] = await db.insert(rideRatings).values(rating).returning();
+    return rideRating;
+  }
+
+  async updateDriverRating(driverId: number, newRating: number): Promise<void> {
+    const [driver] = await db.select().from(driverProfiles).where(eq(driverProfiles.id, driverId));
+    if (driver) {
+      const currentRating = parseFloat(driver.averageRating || "5");
+      const totalRatings = driver.totalRatings || 0;
+      const newTotalRatings = totalRatings + 1;
+      const newAverageRating = ((currentRating * totalRatings) + newRating) / newTotalRatings;
+      
+      await db.update(driverProfiles)
+        .set({ 
+          averageRating: newAverageRating.toFixed(2),
+          totalRatings: newTotalRatings
+        })
+        .where(eq(driverProfiles.id, driverId));
+    }
+  }
+
+  async getPatientAccount(phone: string): Promise<PatientAccount | undefined> {
+    const [account] = await db.select().from(patientAccounts).where(eq(patientAccounts.patientPhone, phone));
+    return account;
+  }
+
+  async recordEmergencyOverride(patientPhone: string): Promise<void> {
+    const [existing] = await db.select().from(patientAccounts).where(eq(patientAccounts.patientPhone, patientPhone));
+    
+    if (existing) {
+      const currentCount = existing.emergencyOverrideCount || 0;
+      await db.update(patientAccounts)
+        .set({ 
+          emergencyOverrideCount: currentCount + 1,
+          lastEmergencyOverride: new Date()
+        })
+        .where(eq(patientAccounts.patientPhone, patientPhone));
+    }
   }
 }
 
