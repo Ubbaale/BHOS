@@ -1629,8 +1629,38 @@ export async function registerRoutes(
 
   app.post("/api/drivers/apply", async (req, res) => {
     try {
-      const parsed = insertDriverProfileSchema.parse(req.body);
+      const { password, confirmPassword, ...driverData } = req.body;
+      
+      // Validate password
+      if (!password || password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      
+      if (password !== confirmPassword) {
+        return res.status(400).json({ message: "Passwords don't match" });
+      }
+      
+      // Check if email is already in use
+      const existingUser = await storage.getUserByUsername(driverData.email);
+      if (existingUser) {
+        return res.status(400).json({ message: "Email is already registered. Please use a different email or login." });
+      }
+      
+      // Hash password and create user account
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await storage.createUser({
+        username: driverData.email,
+        password: hashedPassword,
+        role: "driver",
+      });
+      
+      // Create driver profile linked to user
+      const parsed = insertDriverProfileSchema.parse({
+        ...driverData,
+        userId: user.id,
+      });
       const driver = await storage.createDriver(parsed);
+      
       res.status(201).json(driver);
     } catch (error) {
       if (error instanceof z.ZodError) {

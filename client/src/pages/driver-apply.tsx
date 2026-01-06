@@ -30,16 +30,21 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { User, Phone, Mail, Car, FileCheck, CheckCircle2, Clock } from "lucide-react";
+import { User, Phone, Mail, Car, FileCheck, CheckCircle2, Clock, Lock } from "lucide-react";
 
 const driverApplicationSchema = z.object({
   fullName: z.string().min(2, "Full name is required"),
   phone: z.string().min(10, "Valid phone number is required"),
   email: z.string().email("Valid email is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string().min(6, "Please confirm your password"),
   vehicleType: z.string().min(1, "Vehicle type is required"),
   vehiclePlate: z.string().min(1, "License plate is required"),
   wheelchairAccessible: z.boolean().default(false),
   stretcherCapable: z.boolean().default(false),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
 });
 
 type DriverApplicationFormData = z.infer<typeof driverApplicationSchema>;
@@ -64,6 +69,8 @@ export default function DriverApply() {
       fullName: "",
       phone: "",
       email: "",
+      password: "",
+      confirmPassword: "",
       vehicleType: "",
       vehiclePlate: "",
       wheelchairAccessible: false,
@@ -221,6 +228,52 @@ export default function DriverApply() {
                       </FormItem>
                     )}
                   />
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-2">
+                            <Lock className="w-4 h-4" />
+                            Password
+                          </FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="password"
+                              placeholder="Min. 6 characters" 
+                              {...field} 
+                              data-testid="input-driver-password"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-2">
+                            <Lock className="w-4 h-4" />
+                            Confirm Password
+                          </FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="password"
+                              placeholder="Confirm password" 
+                              {...field} 
+                              data-testid="input-driver-confirm-password"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <FormField
