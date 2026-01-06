@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { jsPDF } from "jspdf";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { DollarSign, FileText, Download, Calendar, TrendingUp, AlertCircle, CheckCircle2, Car, MapPin } from "lucide-react";
+import { DollarSign, FileText, Download, Calendar, TrendingUp, AlertCircle, CheckCircle2, Car, MapPin, Printer } from "lucide-react";
 import type { DriverProfile } from "@shared/schema";
 
 interface AnnualEarnings {
@@ -118,6 +119,67 @@ export default function DriverEarnings() {
 
   const handlePrint1099 = () => {
     window.print();
+  };
+
+  const handleDownloadPdf = () => {
+    if (!form1099Data) return;
+    
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    doc.setFontSize(18);
+    doc.text("FORM 1099-NEC", pageWidth / 2, 20, { align: "center" });
+    doc.setFontSize(12);
+    doc.text("Nonemployee Compensation", pageWidth / 2, 28, { align: "center" });
+    doc.text(`Tax Year ${form1099Data.taxYear}`, pageWidth / 2, 35, { align: "center" });
+    
+    doc.setFontSize(14);
+    doc.text("PAYER'S Information", 20, 50);
+    doc.setFontSize(11);
+    doc.text(form1099Data.payer.name, 20, 58);
+    doc.text(form1099Data.payer.address, 20, 65);
+    doc.text(`${form1099Data.payer.city}, ${form1099Data.payer.state} ${form1099Data.payer.zip}`, 20, 72);
+    doc.text(`EIN: ${form1099Data.payer.ein}`, 20, 79);
+    
+    doc.setFontSize(14);
+    doc.text("RECIPIENT'S Information", 110, 50);
+    doc.setFontSize(11);
+    doc.text(form1099Data.recipient.name, 110, 58);
+    doc.text(`SSN: XXX-XX-${form1099Data.recipient.ssnLast4}`, 110, 65);
+    if (form1099Data.recipient.address) {
+      doc.text(form1099Data.recipient.address, 110, 72);
+      doc.text(`${form1099Data.recipient.city}, ${form1099Data.recipient.state} ${form1099Data.recipient.zip}`, 110, 79);
+    }
+    
+    doc.setDrawColor(0);
+    doc.line(20, 90, pageWidth - 20, 90);
+    
+    doc.setFontSize(12);
+    doc.text("Box 1 - Nonemployee Compensation", 20, 100);
+    doc.setFontSize(24);
+    doc.setTextColor(34, 139, 34);
+    doc.text(`$${form1099Data.box1_nonemployeeCompensation}`, 20, 115);
+    doc.setTextColor(0);
+    
+    doc.setFontSize(11);
+    doc.text(`Total Rides: ${form1099Data.totalRides}`, 110, 100);
+    doc.text(`Total Miles: ${form1099Data.totalMiles}`, 110, 108);
+    doc.text(`Tips Included: $${form1099Data.tips}`, 110, 116);
+    doc.text(`Tolls (Deductible): $${form1099Data.tolls}`, 110, 124);
+    
+    doc.line(20, 135, pageWidth - 20, 135);
+    
+    doc.setFontSize(10);
+    const messageLines = doc.splitTextToSize(form1099Data.message, pageWidth - 40);
+    doc.text(messageLines, 20, 145);
+    
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text("This document is for informational purposes. Keep for your tax records.", pageWidth / 2, 280, { align: "center" });
+    
+    doc.save(`1099-NEC-${form1099Data.taxYear}.pdf`);
+    
+    toast({ title: "Downloaded", description: "1099-NEC PDF saved to your device" });
   };
 
   const totalEarnings = parseFloat(earnings?.totalGrossEarnings || "0") + parseFloat(earnings?.totalTips || "0");
@@ -387,7 +449,7 @@ export default function DriverEarnings() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="taxAddress">Mailing Address</Label>
+              <Label htmlFor="taxAddress">Street Address <span className="text-destructive">*</span></Label>
               <Input
                 id="taxAddress"
                 placeholder="123 Main St"
@@ -399,7 +461,7 @@ export default function DriverEarnings() {
 
             <div className="grid grid-cols-6 gap-2">
               <div className="col-span-3">
-                <Label htmlFor="taxCity">City</Label>
+                <Label htmlFor="taxCity">City <span className="text-muted-foreground text-xs">(optional)</span></Label>
                 <Input
                   id="taxCity"
                   value={contractorForm.taxCity}
@@ -408,7 +470,7 @@ export default function DriverEarnings() {
                 />
               </div>
               <div className="col-span-1">
-                <Label htmlFor="taxState">State</Label>
+                <Label htmlFor="taxState">State <span className="text-muted-foreground text-xs">(opt)</span></Label>
                 <Input
                   id="taxState"
                   maxLength={2}
@@ -418,7 +480,7 @@ export default function DriverEarnings() {
                 />
               </div>
               <div className="col-span-2">
-                <Label htmlFor="taxZip">ZIP</Label>
+                <Label htmlFor="taxZip">ZIP <span className="text-muted-foreground text-xs">(optional)</span></Label>
                 <Input
                   id="taxZip"
                   maxLength={5}
@@ -447,7 +509,7 @@ export default function DriverEarnings() {
             </Button>
             <Button 
               onClick={() => contractorOnboardMutation.mutate(contractorForm)}
-              disabled={!contractorForm.ssnLast4 || contractorForm.ssnLast4.length !== 4 || !contractorForm.agreementAccepted || contractorOnboardMutation.isPending}
+              disabled={!contractorForm.ssnLast4 || contractorForm.ssnLast4.length !== 4 || !contractorForm.taxAddress || !contractorForm.agreementAccepted || contractorOnboardMutation.isPending}
               data-testid="button-submit-contractor"
             >
               {contractorOnboardMutation.isPending ? "Saving..." : "Complete Setup"}
@@ -516,13 +578,17 @@ export default function DriverEarnings() {
             </div>
           )}
           
-          <DialogFooter className="print:hidden">
+          <DialogFooter className="print:hidden gap-2">
             <Button variant="outline" onClick={() => setShow1099(false)}>
               Close
             </Button>
-            <Button onClick={handlePrint1099} data-testid="button-print-1099">
+            <Button variant="outline" onClick={handlePrint1099} data-testid="button-print-1099">
+              <Printer className="w-4 h-4 mr-2" />
+              Print
+            </Button>
+            <Button onClick={handleDownloadPdf} data-testid="button-download-1099">
               <Download className="w-4 h-4 mr-2" />
-              Print / Save PDF
+              Download PDF
             </Button>
           </DialogFooter>
         </DialogContent>
