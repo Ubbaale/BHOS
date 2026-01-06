@@ -653,9 +653,43 @@ export default function AdminDashboard() {
               {actionType.includes("suspend") && `Are you sure you want to ${actionType.replace("_", " ")} ${selectedDriver?.fullName}?`}
               {actionType.includes("patient") && `Are you sure you want to ${actionType.replace("_", " ")} ${selectedPatient?.patientPhone}?`}
               {actionType === "cancel_ride" && `Are you sure you want to cancel ride #${selectedRide?.id}?`}
-              {actionType === "refund_ride" && `Process refund for ride #${selectedRide?.id}. Amount paid: $${selectedRide?.paidAmount || selectedRide?.finalFare || "0"}`}
+              {actionType === "refund_ride" && "Process refund for customer complaint or service issue."}
             </DialogDescription>
           </DialogHeader>
+          {actionType === "refund_ride" && selectedRide && (
+            <div className="bg-muted/50 rounded-md p-3 space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-muted-foreground">Ride ID:</span>
+                  <span className="ml-2 font-medium" data-testid="text-refund-ride-id">#{selectedRide.id}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Amount Paid:</span>
+                  <span className="ml-2 font-medium" data-testid="text-refund-amount-paid">${selectedRide.paidAmount || selectedRide.finalFare || "0"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Customer:</span>
+                  <span className="ml-2 font-medium" data-testid="text-refund-customer">{selectedRide.patientName || "N/A"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Phone:</span>
+                  <span className="ml-2 font-medium" data-testid="text-refund-customer-phone">{selectedRide.patientPhone || "N/A"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Driver ID:</span>
+                  <span className="ml-2 font-medium" data-testid="text-refund-driver-id">{selectedRide.driverId ? `#${selectedRide.driverId}` : "Not assigned"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Date:</span>
+                  <span className="ml-2 font-medium" data-testid="text-refund-date">{selectedRide.createdAt ? format(new Date(selectedRide.createdAt), "MMM d, yyyy") : "N/A"}</span>
+                </div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Route:</span>
+                <span className="ml-2 text-xs" data-testid="text-refund-route">{selectedRide.pickupAddress} → {selectedRide.dropoffAddress}</span>
+              </div>
+            </div>
+          )}
           {(actionType === "suspend_driver" || actionType === "block_patient" || actionType === "cancel_ride" || actionType === "refund_ride") && (
             <div className="py-4 space-y-4">
               <div>
