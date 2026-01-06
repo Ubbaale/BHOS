@@ -91,7 +91,7 @@ const bookRideSchema = z.object({
   bookedByOther: z.boolean().default(false),
   bookerName: z.string().optional(),
   bookerPhone: z.string().optional(),
-  bookerEmail: z.string().email().optional().or(z.literal("")),
+  bookerEmail: z.string().optional().transform(val => val === "" ? undefined : val).pipe(z.string().email().optional().or(z.literal("")).or(z.undefined())),
   bookerRelation: z.enum(["spouse", "child", "parent", "caregiver", "other"]).optional(),
   pickupAddress: z.string().min(1, "Pickup address is required"),
   pickupLat: z.string(),
@@ -504,7 +504,9 @@ export default function BookRide() {
     );
   };
 
-  const useMyLocation = () => {
+  const [isLocatingDropoff, setIsLocatingDropoff] = useState(false);
+
+  const useMyLocation = (locationType: "pickup" | "dropoff" = "pickup") => {
     if (!navigator.geolocation) {
       toast({
         title: "Location Not Supported",
@@ -514,11 +516,21 @@ export default function BookRide() {
       return;
     }
 
-    setIsLocating(true);
+    if (locationType === "pickup") {
+      setIsLocating(true);
+    } else {
+      setIsLocatingDropoff(true);
+    }
+    
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
-        handlePickupChange(latitude, longitude);
+        
+        if (locationType === "pickup") {
+          handlePickupChange(latitude, longitude);
+        } else {
+          handleDropoffChange(latitude, longitude);
+        }
         
         try {
           const response = await fetch(
@@ -526,24 +538,42 @@ export default function BookRide() {
           );
           const data = await response.json();
           const address = data.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-          form.setValue("pickupAddress", address);
+          
+          if (locationType === "pickup") {
+            form.setValue("pickupAddress", address);
+          } else {
+            form.setValue("dropoffAddress", address);
+          }
           
           toast({
             title: "Location Found",
-            description: "Your current location has been set as the pickup address.",
+            description: `Your current location has been set as the ${locationType} address.`,
           });
         } catch (error) {
-          form.setValue("pickupAddress", `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+          const coordsStr = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+          if (locationType === "pickup") {
+            form.setValue("pickupAddress", coordsStr);
+          } else {
+            form.setValue("dropoffAddress", coordsStr);
+          }
           toast({
             title: "Location Set",
             description: "Coordinates set. You may want to add a street address.",
           });
         }
         
-        setIsLocating(false);
+        if (locationType === "pickup") {
+          setIsLocating(false);
+        } else {
+          setIsLocatingDropoff(false);
+        }
       },
       (error) => {
-        setIsLocating(false);
+        if (locationType === "pickup") {
+          setIsLocating(false);
+        } else {
+          setIsLocatingDropoff(false);
+        }
         let message = "Unable to get your location.";
         if (error.code === error.PERMISSION_DENIED) {
           message = "Location permission denied. Please allow location access.";
@@ -932,7 +962,7 @@ export default function BookRide() {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={useMyLocation}
+                              onClick={() => useMyLocation("pickup")}
                               disabled={isLocating}
                               className="text-xs"
                               data-testid="button-use-my-location"
@@ -962,7 +992,21 @@ export default function BookRide() {
                       name="dropoffAddress"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Dropoff Address (Medical Facility)</FormLabel>
+                          <div className="flex items-center justify-between gap-2">
+                            <FormLabel>Dropoff Address (Medical Facility)</FormLabel>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => useMyLocation("dropoff")}
+                              disabled={isLocatingDropoff}
+                              className="text-xs"
+                              data-testid="button-use-my-location-dropoff"
+                            >
+                              <Navigation className="w-3 h-3 mr-1" />
+                              {isLocatingDropoff ? "Locating..." : "Use My Location"}
+                            </Button>
+                          </div>
                           <FormControl>
                             <AddressAutocomplete
                               onPlaceSelect={(address, lat, lng) => {
