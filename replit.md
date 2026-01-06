@@ -133,6 +133,22 @@ Database tables:
 - Document storage in `/uploads/kyc` directory (max 10MB, PNG/JPG/PDF)
 - Drivers must complete KYC verification before accepting rides
 
+### Platform Revenue Model
+- **Commission Structure**:
+  - 15% platform fee on self-pay rides
+  - 10% platform fee on insurance-billed rides (lower to remain competitive)
+  - Commission automatically calculated and stored on ride completion
+- **Driver Tipping**:
+  - Patients can add tip after ride completion
+  - Three preset options: 15%, 20%, 25% of fare
+  - Custom tip amount supported
+  - 100% of tips go directly to drivers
+  - Tips stored separately from fare for clear accounting
+- **Driver Earnings Dashboard**:
+  - "Your Earnings" shows net pay after commission
+  - "Tips Received" shows total tips as separate metric
+  - Full earnings breakdown available via API
+
 ### Payment System (Deferred)
 - **Current Status**: Payment integration not yet configured (user dismissed Stripe setup)
 - **Workflow**: Patients post rides for free → Drivers claim from pool → Fare calculated on completion
