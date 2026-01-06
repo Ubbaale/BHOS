@@ -275,6 +275,18 @@ export async function registerRoutes(
     }
   });
 
+  // NOTE: /api/rides/abandoned must come BEFORE /api/rides/:id to avoid "abandoned" being parsed as ID
+  app.get("/api/rides/abandoned", async (req, res) => {
+    try {
+      const staleMinutes = parseInt(req.query.staleMinutes as string) || 30;
+      const abandonedRides = await storage.getAbandonedRides(staleMinutes);
+      res.json(abandonedRides);
+    } catch (error) {
+      console.error("Error fetching abandoned rides:", error);
+      res.status(500).json({ message: "Failed to fetch abandoned rides" });
+    }
+  });
+
   app.get("/api/rides/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -673,18 +685,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error reporting delay:", error);
       res.status(500).json({ message: "Failed to report delay" });
-    }
-  });
-
-  // Get abandoned/stale rides (rides stuck in_progress for too long)
-  app.get("/api/rides/abandoned", async (req, res) => {
-    try {
-      const staleMinutes = parseInt(req.query.staleMinutes as string) || 30;
-      const abandonedRides = await storage.getAbandonedRides(staleMinutes);
-      res.json(abandonedRides);
-    } catch (error) {
-      console.error("Error fetching abandoned rides:", error);
-      res.status(500).json({ message: "Failed to fetch abandoned rides" });
     }
   });
 
