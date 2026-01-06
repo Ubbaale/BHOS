@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { RideChat } from "@/components/RideChat";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Car, Phone, MapPin, Clock, Shield, Share2, AlertTriangle, 
-  User, CheckCircle2, Navigation, MessageCircle, Accessibility
+  User, CheckCircle2, Navigation, MessageCircle, Accessibility, Copy, ExternalLink
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Ride } from "@shared/schema";
@@ -50,9 +51,11 @@ const statusSteps = [
 export default function TrackRide() {
   const { id } = useParams<{ id: string }>();
   const rideId = parseInt(id || "0");
+  const { toast } = useToast();
   const [showChat, setShowChat] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareContact, setShareContact] = useState({ name: "", phone: "", email: "" });
+  const [createdShareCode, setCreatedShareCode] = useState<string | null>(null);
 
   const { data: ride, isLoading: rideLoading } = useQuery<Ride>({
     queryKey: ["/api/rides", rideId],
@@ -74,10 +77,21 @@ export default function TrackRide() {
       });
       return res.json();
     },
-    onSuccess: () => {
-      setShareDialogOpen(false);
+    onSuccess: (data: { shareCode: string }) => {
+      setCreatedShareCode(data.shareCode);
       setShareContact({ name: "", phone: "", email: "" });
       queryClient.invalidateQueries({ queryKey: ["/api/rides", rideId, "shares"] });
+      toast({
+        title: "Trip Shared",
+        description: `Share code: ${data.shareCode}. Your contact can track your ride.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -284,7 +298,10 @@ export default function TrackRide() {
               {showChat ? "Hide Chat" : "Chat with Driver"}
             </Button>
 
-            <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+            <Dialog open={shareDialogOpen} onOpenChange={(open) => {
+              setShareDialogOpen(open);
+              if (!open) setCreatedShareCode(null);
+            }}>
               <DialogTrigger asChild>
                 <Button variant="outline" data-testid="button-share-trip">
                   <Share2 className="w-4 h-4 mr-2" />
@@ -298,52 +315,103 @@ export default function TrackRide() {
                     Share Your Trip
                   </DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Share your trip with a trusted contact so they can track your ride in real-time.
-                  </p>
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="contact-name">Contact Name</Label>
-                      <Input
-                        id="contact-name"
-                        value={shareContact.name}
-                        onChange={(e) => setShareContact(prev => ({ ...prev, name: e.target.value }))}
-                        placeholder="Emergency contact name"
-                        data-testid="input-share-name"
-                      />
+                {createdShareCode ? (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-md border border-green-200 dark:border-green-800">
+                      <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">
+                        Trip shared successfully!
+                      </p>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Your contact can track your ride using this share link:
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          readOnly
+                          value={`${window.location.origin}/share/${createdShareCode}`}
+                          className="text-sm"
+                          data-testid="input-share-link"
+                        />
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/share/${createdShareCode}`);
+                            toast({ title: "Copied", description: "Share link copied to clipboard" });
+                          }}
+                          data-testid="button-copy-link"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor="contact-phone">Phone Number</Label>
-                      <Input
-                        id="contact-phone"
-                        value={shareContact.phone}
-                        onChange={(e) => setShareContact(prev => ({ ...prev, phone: e.target.value }))}
-                        placeholder="(555) 123-4567"
-                        data-testid="input-share-phone"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="contact-email">Email (Optional)</Label>
-                      <Input
-                        id="contact-email"
-                        type="email"
-                        value={shareContact.email}
-                        onChange={(e) => setShareContact(prev => ({ ...prev, email: e.target.value }))}
-                        placeholder="contact@example.com"
-                        data-testid="input-share-email"
-                      />
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setCreatedShareCode(null);
+                        }}
+                        data-testid="button-share-another"
+                      >
+                        Share with Another Contact
+                      </Button>
+                      <Button
+                        className="flex-1"
+                        onClick={() => setShareDialogOpen(false)}
+                        data-testid="button-close-share"
+                      >
+                        Done
+                      </Button>
                     </div>
                   </div>
-                  <Button
-                    onClick={() => shareTripMutation.mutate()}
-                    disabled={!shareContact.name || !shareContact.phone || shareTripMutation.isPending}
-                    className="w-full"
-                    data-testid="button-confirm-share"
-                  >
-                    {shareTripMutation.isPending ? "Sharing..." : "Share Trip"}
-                  </Button>
-                </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Share your trip with a trusted contact so they can track your ride in real-time.
+                    </p>
+                    <div className="space-y-3">
+                      <div>
+                        <Label htmlFor="contact-name">Contact Name</Label>
+                        <Input
+                          id="contact-name"
+                          value={shareContact.name}
+                          onChange={(e) => setShareContact(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="Emergency contact name"
+                          data-testid="input-share-name"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="contact-phone">Phone Number</Label>
+                        <Input
+                          id="contact-phone"
+                          value={shareContact.phone}
+                          onChange={(e) => setShareContact(prev => ({ ...prev, phone: e.target.value }))}
+                          placeholder="(555) 123-4567"
+                          data-testid="input-share-phone"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="contact-email">Email (Optional)</Label>
+                        <Input
+                          id="contact-email"
+                          type="email"
+                          value={shareContact.email}
+                          onChange={(e) => setShareContact(prev => ({ ...prev, email: e.target.value }))}
+                          placeholder="contact@example.com"
+                          data-testid="input-share-email"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => shareTripMutation.mutate()}
+                      disabled={!shareContact.name || !shareContact.phone || shareTripMutation.isPending}
+                      className="w-full"
+                      data-testid="button-confirm-share"
+                    >
+                      {shareTripMutation.isPending ? "Sharing..." : "Share Trip"}
+                    </Button>
+                  </div>
+                )}
               </DialogContent>
             </Dialog>
 
