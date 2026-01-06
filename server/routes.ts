@@ -521,9 +521,31 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Driver not found" });
       }
       
+      // Check if ride is still available (prevents race condition)
+      const existingRide = await storage.getRide(rideId);
+      if (!existingRide) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      if (existingRide.status !== "requested") {
+        return res.status(409).json({ 
+          message: "This ride has already been taken by another driver",
+          currentStatus: existingRide.status
+        });
+      }
+      
+      if (existingRide.driverId) {
+        return res.status(409).json({ 
+          message: "This ride has already been assigned to another driver"
+        });
+      }
+      
       const ride = await storage.assignDriver(rideId, driverId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        // This happens if another driver grabbed the ride between our check and the update
+        return res.status(409).json({ 
+          message: "This ride was just taken by another driver. Please try a different ride."
+        });
       }
       
       await storage.createRideEvent({

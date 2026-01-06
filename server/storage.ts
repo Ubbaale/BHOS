@@ -14,7 +14,7 @@ import {
   users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, ne, and, lt } from "drizzle-orm";
+import { eq, desc, ne, and, lt, isNull } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -241,9 +241,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async assignDriver(rideId: number, driverId: number): Promise<Ride | undefined> {
+    // Only assign if ride is still in "requested" status (prevents race condition at DB level)
     const [ride] = await db.update(rides)
       .set({ driverId, status: "accepted", updatedAt: new Date() })
-      .where(eq(rides.id, rideId))
+      .where(and(
+        eq(rides.id, rideId),
+        eq(rides.status, "requested"),
+        isNull(rides.driverId)
+      ))
       .returning();
     return ride;
   }
