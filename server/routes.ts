@@ -30,13 +30,24 @@ function broadcastJobUpdate(type: "add" | "remove" | "update", job: any) {
   });
 }
 
-function broadcastRideUpdate(type: "new" | "update" | "status_change", ride: any) {
+function broadcastRideUpdate(type: "new" | "update" | "status_change" | "driver_location", ride: any) {
   const message = JSON.stringify({ type, ride });
   rideClients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(message);
     }
   });
+}
+
+function calculateHaversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 3959;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLng = (lng2 - lng1) * (Math.PI / 180);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
 function broadcastChatMessage(rideId: number, message: any) {
@@ -284,6 +295,49 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching abandoned rides:", error);
       res.status(500).json({ message: "Failed to fetch abandoned rides" });
+    }
+  });
+
+  // NOTE: /api/rides/pool must come BEFORE /api/rides/:id to avoid "pool" being parsed as ID
+  app.get("/api/rides/pool", async (req, res) => {
+    try {
+      const driverLat = parseFloat(req.query.driverLat as string);
+      const driverLng = parseFloat(req.query.driverLng as string);
+      
+      const rides = await storage.getActiveRides();
+      const requestedRides = rides.filter(r => r.status === "requested");
+      
+      const ridesWithDistance = requestedRides.map(ride => {
+        let distanceToPickup: number | null = null;
+        let estimatedMinutesToPickup: number | null = null;
+        
+        if (!isNaN(driverLat) && !isNaN(driverLng) && ride.pickupLat && ride.pickupLng) {
+          distanceToPickup = calculateHaversineDistance(
+            driverLat, driverLng,
+            parseFloat(ride.pickupLat), parseFloat(ride.pickupLng)
+          );
+          estimatedMinutesToPickup = Math.round(distanceToPickup * 2);
+        }
+        
+        return {
+          ...ride,
+          distanceToPickup: distanceToPickup?.toFixed(1),
+          estimatedMinutesToPickup
+        };
+      });
+      
+      if (!isNaN(driverLat) && !isNaN(driverLng)) {
+        ridesWithDistance.sort((a, b) => {
+          const distA = parseFloat(a.distanceToPickup || "999");
+          const distB = parseFloat(b.distanceToPickup || "999");
+          return distA - distB;
+        });
+      }
+      
+      res.json(ridesWithDistance);
+    } catch (error) {
+      console.error("Error fetching ride pool:", error);
+      res.status(500).json({ message: "Failed to fetch ride pool" });
     }
   });
 
@@ -1039,6 +1093,108 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating driver availability:", error);
       res.status(500).json({ message: "Failed to update driver availability" });
+    }
+  });
+
+  // Update driver location - called continuously by driver app
+  app.patch("/api/drivers/:id/location", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { lat, lng } = req.body;
+      
+      if (lat === undefined || lng === undefined) {
+        return res.status(400).json({ message: "lat and lng are required" });
+      }
+      
+      const driver = await storage.updateDriverLocation(id, lat.toString(), lng.toString());
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+      
+      // Broadcast driver location update to ride WebSocket clients
+      broadcastRideUpdate("driver_location", { driverId: id, lat, lng });
+      
+      res.json(driver);
+    } catch (error) {
+      console.error("Error updating driver location:", error);
+      res.status(500).json({ message: "Failed to update driver location" });
+    }
+  });
+
+  // Get ride with driver location and ETA for patient tracking
+  app.get("/api/rides/:id/tracking", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      let driverInfo = null;
+      let distanceToPickup: number | null = null;
+      let distanceToDropoff: number | null = null;
+      let estimatedMinutesToPickup: number | null = null;
+      let estimatedMinutesToDropoff: number | null = null;
+      
+      if (ride.driverId) {
+        const driver = await storage.getDriver(ride.driverId);
+        if (driver) {
+          driverInfo = {
+            id: driver.id,
+            fullName: driver.fullName,
+            phone: driver.phone,
+            vehicleType: driver.vehicleType,
+            vehiclePlate: driver.vehiclePlate,
+            vehicleColor: driver.vehicleColor,
+            vehicleMake: driver.vehicleMake,
+            vehicleModel: driver.vehicleModel,
+            profilePhotoPath: driver.profilePhotoPath,
+            averageRating: driver.averageRating,
+            currentLat: driver.currentLat,
+            currentLng: driver.currentLng
+          };
+          
+          // Calculate distance from driver to pickup/dropoff
+          if (driver.currentLat && driver.currentLng) {
+            const dLat = parseFloat(driver.currentLat);
+            const dLng = parseFloat(driver.currentLng);
+            
+            if (ride.pickupLat && ride.pickupLng && 
+                ["accepted", "driver_enroute"].includes(ride.status)) {
+              distanceToPickup = calculateHaversineDistance(
+                dLat, dLng,
+                parseFloat(ride.pickupLat), parseFloat(ride.pickupLng)
+              );
+              estimatedMinutesToPickup = Math.round(distanceToPickup * 2);
+            }
+            
+            if (ride.dropoffLat && ride.dropoffLng && 
+                ["arrived", "in_progress"].includes(ride.status)) {
+              distanceToDropoff = calculateHaversineDistance(
+                dLat, dLng,
+                parseFloat(ride.dropoffLat), parseFloat(ride.dropoffLng)
+              );
+              estimatedMinutesToDropoff = Math.round(distanceToDropoff * 2);
+            }
+          }
+        }
+      }
+      
+      res.json({
+        ride,
+        driver: driverInfo,
+        tracking: {
+          distanceToPickup: distanceToPickup?.toFixed(1),
+          distanceToDropoff: distanceToDropoff?.toFixed(1),
+          estimatedMinutesToPickup,
+          estimatedMinutesToDropoff,
+          lastUpdated: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching ride tracking:", error);
+      res.status(500).json({ message: "Failed to fetch ride tracking" });
     }
   });
 

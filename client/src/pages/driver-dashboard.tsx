@@ -63,7 +63,7 @@ const statusLabels: Record<string, string> = {
 };
 
 interface RideCardProps {
-  ride: Ride;
+  ride: Ride & { distanceToPickup?: string; estimatedMinutesToPickup?: number };
   driverId: number;
   onAction: () => void;
   isNew?: boolean;
@@ -191,12 +191,22 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
               <span>{ride.patientPhone}</span>
             </div>
           </div>
-          <Badge
-            variant="secondary"
-            className={`${statusColors[ride.status]} text-white no-default-hover-elevate`}
-          >
-            {statusLabels[ride.status]}
-          </Badge>
+          <div className="flex flex-col items-end gap-1">
+            <Badge
+              variant="secondary"
+              className={`${statusColors[ride.status]} text-white no-default-hover-elevate`}
+            >
+              {statusLabels[ride.status]}
+            </Badge>
+            {ride.status === "requested" && ride.distanceToPickup && (
+              <div className="text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">{ride.distanceToPickup} mi</span> away
+                {ride.estimatedMinutesToPickup && (
+                  <span className="ml-1">({ride.estimatedMinutesToPickup} min)</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2 text-sm mb-3">
@@ -365,6 +375,11 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
   );
 }
 
+interface RideWithDistance extends Ride {
+  distanceToPickup?: string;
+  estimatedMinutesToPickup?: number;
+}
+
 export default function DriverDashboard() {
   const { toast } = useToast();
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
@@ -372,9 +387,24 @@ export default function DriverDashboard() {
   const [currentDriverId, setCurrentDriverId] = useState<number | null>(null);
   const [newRideIds, setNewRideIds] = useState<Set<number>>(new Set());
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationEnabled, setLocationEnabled] = useState(false);
+  const locationWatchRef = useRef<number | null>(null);
 
   const { data: activeRides = [], isLoading: ridesLoading, refetch: refetchRides } = useQuery<Ride[]>({
     queryKey: ["/api/rides"],
+  });
+
+  const { data: poolRides = [], refetch: refetchPoolRides } = useQuery<RideWithDistance[]>({
+    queryKey: ["/api/rides/pool", driverLocation?.lat, driverLocation?.lng],
+    queryFn: async () => {
+      const params = driverLocation 
+        ? `?driverLat=${driverLocation.lat}&driverLng=${driverLocation.lng}` 
+        : "";
+      const res = await fetch(`/api/rides/pool${params}`);
+      return res.json();
+    },
+    refetchInterval: 10000,
   });
 
   const { data: allRides = [], refetch: refetchAllRides } = useQuery<Ride[]>({
@@ -384,6 +414,61 @@ export default function DriverDashboard() {
   const { data: drivers = [] } = useQuery<DriverProfile[]>({
     queryKey: ["/api/drivers"],
   });
+
+  const updateLocationMutation = useMutation({
+    mutationFn: async (location: { lat: number; lng: number }) => {
+      if (!currentDriverId) return;
+      const response = await apiRequest("PATCH", `/api/drivers/${currentDriverId}/location`, location);
+      return response.json();
+    },
+  });
+
+  useEffect(() => {
+    if (!currentDriverId || !locationEnabled) return;
+
+    const startLocationTracking = () => {
+      if (!navigator.geolocation) {
+        toast({ title: "Location Not Supported", description: "Your browser doesn't support location tracking.", variant: "destructive" });
+        return;
+      }
+
+      locationWatchRef.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const newLocation = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          };
+          setDriverLocation(newLocation);
+          updateLocationMutation.mutate(newLocation);
+        },
+        (error) => {
+          console.error("Location error:", error);
+          if (error.code === error.PERMISSION_DENIED) {
+            toast({ title: "Location Access Denied", description: "Enable location to see distances to rides.", variant: "destructive" });
+            setLocationEnabled(false);
+          }
+        },
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+      );
+    };
+
+    startLocationTracking();
+
+    return () => {
+      if (locationWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchRef.current);
+      }
+    };
+  }, [currentDriverId, locationEnabled, toast]);
+
+  const enableLocationTracking = useCallback(() => {
+    if (!navigator.geolocation) {
+      toast({ title: "Location Not Supported", description: "Your browser doesn't support location tracking.", variant: "destructive" });
+      return;
+    }
+    setLocationEnabled(true);
+    toast({ title: "Location Enabled", description: "You'll see distances to nearby rides." });
+  }, [toast]);
 
   const playNotificationSound = useCallback(() => {
     if (!soundEnabled) return;
@@ -425,6 +510,7 @@ export default function DriverDashboard() {
       
       refetchRides();
       refetchAllRides();
+      refetchPoolRides();
     };
 
     ws.onerror = (error) => {
@@ -434,9 +520,9 @@ export default function DriverDashboard() {
     return () => {
       ws.close();
     };
-  }, [refetchRides, refetchAllRides, playNotificationSound, toast]);
+  }, [refetchRides, refetchAllRides, refetchPoolRides, playNotificationSound, toast]);
 
-  const requestedRides = activeRides.filter((r) => r.status === "requested");
+  const requestedRides = poolRides.length > 0 ? poolRides : activeRides.filter((r) => r.status === "requested");
   const myActiveRides = activeRides.filter((r) => 
     ["accepted", "driver_enroute", "arrived", "in_progress"].includes(r.status) &&
     (currentDriverId ? r.driverId === currentDriverId : true)
@@ -458,6 +544,15 @@ export default function DriverDashboard() {
               </p>
             </div>
             <div className="flex items-center gap-4 flex-wrap">
+              <Button
+                variant={locationEnabled ? "default" : "outline"}
+                size="sm"
+                onClick={locationEnabled ? () => setLocationEnabled(false) : enableLocationTracking}
+                data-testid="button-location-toggle"
+              >
+                <Navigation className="w-4 h-4 mr-2" />
+                {locationEnabled ? "Location On" : "Enable Location"}
+              </Button>
               <Button
                 variant={soundEnabled ? "default" : "outline"}
                 size="sm"

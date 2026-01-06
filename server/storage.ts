@@ -102,6 +102,10 @@ export interface IStorage {
   // Patient accounts
   getPatientAccount(phone: string): Promise<PatientAccount | undefined>;
   recordEmergencyOverride(patientPhone: string): Promise<void>;
+  
+  // Driver location tracking
+  updateDriverLocation(driverId: number, lat: string, lng: string): Promise<DriverProfile | undefined>;
+  getNearbyDrivers(lat: number, lng: number, radiusMiles?: number): Promise<DriverProfile[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -611,6 +615,47 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(patientAccounts.patientPhone, patientPhone));
     }
+  }
+
+  async updateDriverLocation(driverId: number, lat: string, lng: string): Promise<DriverProfile | undefined> {
+    const [driver] = await db.update(driverProfiles)
+      .set({ currentLat: lat, currentLng: lng })
+      .where(eq(driverProfiles.id, driverId))
+      .returning();
+    return driver;
+  }
+
+  async getNearbyDrivers(lat: number, lng: number, radiusMiles: number = 25): Promise<DriverProfile[]> {
+    const allDrivers = await db.select().from(driverProfiles)
+      .where(and(
+        eq(driverProfiles.isAvailable, true),
+        eq(driverProfiles.applicationStatus, "approved"),
+        eq(driverProfiles.kycStatus, "approved")
+      ));
+    
+    return allDrivers.filter(driver => {
+      if (!driver.currentLat || !driver.currentLng) return false;
+      const distance = this.calculateDistance(
+        lat, lng,
+        parseFloat(driver.currentLat), parseFloat(driver.currentLng)
+      );
+      return distance <= radiusMiles;
+    });
+  }
+
+  private calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 3959;
+    const dLat = this.toRad(lat2 - lat1);
+    const dLng = this.toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(this.toRad(lat1)) * Math.cos(this.toRad(lat2)) *
+              Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  private toRad(deg: number): number {
+    return deg * (Math.PI / 180);
   }
 }
 
