@@ -409,7 +409,8 @@ export async function registerRoutes(
     });
   });
 
-  app.get("/api/rides", async (_req, res) => {
+  // Protected: Only admins can view all rides (drivers use /api/rides/pool)
+  app.get("/api/rides", requireAdmin, async (_req, res) => {
     try {
       const rides = await storage.getActiveRides();
       res.json(rides);
@@ -419,7 +420,8 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/rides/all", async (_req, res) => {
+  // Protected: Only admins can view all rides
+  app.get("/api/rides/all", requireAdmin, async (_req, res) => {
     try {
       const rides = await storage.getAllRides();
       res.json(rides);
@@ -430,7 +432,8 @@ export async function registerRoutes(
   });
 
   // NOTE: /api/rides/abandoned must come BEFORE /api/rides/:id to avoid "abandoned" being parsed as ID
-  app.get("/api/rides/abandoned", async (req, res) => {
+  // Protected: Only admins can view abandoned rides
+  app.get("/api/rides/abandoned", requireAdmin, async (req, res) => {
     try {
       const staleMinutes = parseInt(req.query.staleMinutes as string) || 30;
       const abandonedRides = await storage.getAbandonedRides(staleMinutes);
@@ -442,7 +445,8 @@ export async function registerRoutes(
   });
 
   // NOTE: /api/rides/pool must come BEFORE /api/rides/:id to avoid "pool" being parsed as ID
-  app.get("/api/rides/pool", async (req, res) => {
+  // Protected: Only authenticated drivers can view ride pool
+  app.get("/api/rides/pool", requireDriver, async (req, res) => {
     try {
       const driverLat = parseFloat(req.query.driverLat as string);
       const driverLng = parseFloat(req.query.driverLng as string);
@@ -562,7 +566,8 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/rides/:id/status", async (req, res) => {
+  // Protected: Only authenticated drivers can update ride status
+  app.patch("/api/rides/:id/status", requireDriver, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { status, note } = req.body;
@@ -650,7 +655,8 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/rides/:id/accept", async (req, res) => {
+  // Protected: Only authenticated drivers can accept rides
+  app.post("/api/rides/:id/accept", requireDriver, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { driverId } = req.body;
@@ -710,7 +716,8 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/rides/:id/events", async (req, res) => {
+  // Protected: Only authenticated users can view ride events
+  app.get("/api/rides/:id/events", requireAuth, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const events = await storage.getRideEvents(rideId);
@@ -889,7 +896,8 @@ export async function registerRoutes(
   });
 
   // Report traffic delay
-  app.post("/api/rides/:id/delay", async (req, res) => {
+  // Protected: Only authenticated drivers can report delays
+  app.post("/api/rides/:id/delay", requireDriver, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { delayMinutes, reason, newEta } = req.body;
@@ -945,7 +953,8 @@ export async function registerRoutes(
   });
 
   // Update actual tolls (driver confirms tolls paid)
-  app.patch("/api/rides/:id/tolls", async (req, res) => {
+  // Protected: Only authenticated drivers can update tolls
+  app.patch("/api/rides/:id/tolls", requireDriver, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { actualTolls } = req.body;
@@ -974,7 +983,8 @@ export async function registerRoutes(
   });
 
   // Report traffic conditions (affects surge pricing)
-  app.post("/api/rides/:id/traffic", async (req, res) => {
+  // Protected: Only authenticated drivers can report traffic
+  app.post("/api/rides/:id/traffic", requireDriver, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { trafficCondition, delayMinutes, delayReason } = req.body;
@@ -1050,7 +1060,8 @@ export async function registerRoutes(
   });
 
   // Complete ride with final fare calculation
-  app.post("/api/rides/:id/complete", async (req, res) => {
+  // Protected: Only authenticated drivers can complete rides
+  app.post("/api/rides/:id/complete", requireDriver, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { actualTolls, actualDistanceMiles } = req.body;
@@ -1254,7 +1265,8 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/drivers/:id/availability", async (req, res) => {
+  // Protected: Only authenticated drivers can update availability
+  app.patch("/api/drivers/:id/availability", requireDriver, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { isAvailable } = req.body;
@@ -1276,7 +1288,8 @@ export async function registerRoutes(
   });
 
   // Update driver location - called continuously by driver app
-  app.patch("/api/drivers/:id/location", async (req, res) => {
+  // Protected: Only authenticated drivers can update location
+  app.patch("/api/drivers/:id/location", requireDriver, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { lat, lng } = req.body;
@@ -1391,7 +1404,8 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/drivers/:id/approve", async (req, res) => {
+  // Protected: Only admins can approve drivers
+  app.post("/api/drivers/:id/approve", requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const driver = await storage.updateDriverApplicationStatus(id, "approved");
@@ -1405,7 +1419,8 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/drivers/:id/reject", async (req, res) => {
+  // Protected: Only admins can reject drivers
+  app.post("/api/drivers/:id/reject", requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { reason } = req.body;
@@ -1528,7 +1543,8 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/drivers/:id/kyc/approve", async (req, res) => {
+  // Protected: Only admins can approve KYC
+  app.post("/api/drivers/:id/kyc/approve", requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { notes } = req.body;
@@ -1545,7 +1561,8 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/drivers/:id/kyc/reject", async (req, res) => {
+  // Protected: Only admins can reject KYC
+  app.post("/api/drivers/:id/kyc/reject", requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { notes } = req.body;
@@ -1654,7 +1671,8 @@ export async function registerRoutes(
   });
 
   // Chat API endpoints
-  app.get("/api/rides/:id/messages", async (req, res) => {
+  // Protected: Only authenticated users can view messages
+  app.get("/api/rides/:id/messages", requireAuth, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const messages = await storage.getRideMessages(rideId);
@@ -1665,7 +1683,8 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/rides/:id/messages", async (req, res) => {
+  // Protected: Only authenticated users can send messages
+  app.post("/api/rides/:id/messages", requireAuth, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { senderType, message, isQuickMessage } = req.body;
@@ -1690,7 +1709,8 @@ export async function registerRoutes(
   });
 
   // Quick messages for drivers
-  app.post("/api/rides/:id/quick-message", async (req, res) => {
+  // Protected: Only authenticated drivers can send quick messages
+  app.post("/api/rides/:id/quick-message", requireDriver, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { messageType, senderType } = req.body;
@@ -1725,7 +1745,8 @@ export async function registerRoutes(
   });
 
   // Trip sharing for safety
-  app.get("/api/rides/:id/shares", async (req, res) => {
+  // Protected: Only authenticated users can view ride shares
+  app.get("/api/rides/:id/shares", requireAuth, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const shares = await storage.getTripShares(rideId);
@@ -1736,7 +1757,8 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/rides/:id/share", async (req, res) => {
+  // Protected: Only authenticated users can share rides
+  app.post("/api/rides/:id/share", requireAuth, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { contactName, contactPhone, contactEmail } = req.body;
@@ -1838,7 +1860,8 @@ export async function registerRoutes(
   });
 
   // Verification code for ride
-  app.post("/api/rides/:id/generate-code", async (req, res) => {
+  // Protected: Only authenticated drivers can generate verification codes
+  app.post("/api/rides/:id/generate-code", requireDriver, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const code = generateVerificationCode();
@@ -1856,7 +1879,8 @@ export async function registerRoutes(
   });
 
   // Update ETA
-  app.patch("/api/rides/:id/eta", async (req, res) => {
+  // Protected: Only authenticated drivers can update ETA
+  app.patch("/api/rides/:id/eta", requireDriver, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { eta } = req.body;
@@ -1920,7 +1944,8 @@ export async function registerRoutes(
   });
 
   // Add tip to a completed ride
-  app.post("/api/rides/:id/tip", async (req, res) => {
+  // Protected: Only authenticated users can add tips
+  app.post("/api/rides/:id/tip", requireAuth, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { tipAmount } = req.body;
@@ -1954,7 +1979,8 @@ export async function registerRoutes(
   });
   
   // Get driver earnings summary
-  app.get("/api/drivers/:id/earnings", async (req, res) => {
+  // Protected: Only authenticated drivers can view earnings
+  app.get("/api/drivers/:id/earnings", requireDriver, async (req, res) => {
     try {
       const driverId = parseInt(req.params.id);
       const earnings = await storage.getDriverEarnings(driverId);
@@ -1966,7 +1992,8 @@ export async function registerRoutes(
   });
   
   // Get fare breakdown for a ride (shows commission)
-  app.get("/api/rides/:id/fare-breakdown", async (req, res) => {
+  // Protected: Only authenticated users can view fare breakdown
+  app.get("/api/rides/:id/fare-breakdown", requireAuth, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const ride = await storage.getRide(rideId);
@@ -2005,7 +2032,8 @@ export async function registerRoutes(
   });
 
   // Contractor Onboarding API
-  app.post("/api/drivers/:id/contractor-onboard", async (req, res) => {
+  // Protected: Only authenticated drivers can complete contractor onboarding
+  app.post("/api/drivers/:id/contractor-onboard", requireDriver, async (req, res) => {
     try {
       const driverId = parseInt(req.params.id);
       const { ssnLast4, taxClassification, businessName, taxAddress, taxCity, taxState, taxZip, agreementAccepted } = req.body;
@@ -2052,7 +2080,8 @@ export async function registerRoutes(
   });
   
   // Get driver annual earnings summary
-  app.get("/api/drivers/:id/annual-earnings/:year", async (req, res) => {
+  // Protected: Only authenticated drivers can view annual earnings
+  app.get("/api/drivers/:id/annual-earnings/:year", requireDriver, async (req, res) => {
     try {
       const driverId = parseInt(req.params.id);
       const taxYear = parseInt(req.params.year);
@@ -2070,7 +2099,8 @@ export async function registerRoutes(
   });
   
   // Generate 1099-NEC form data
-  app.get("/api/drivers/:id/1099/:year", async (req, res) => {
+  // Protected: Only authenticated drivers can view 1099 forms
+  app.get("/api/drivers/:id/1099/:year", requireDriver, async (req, res) => {
     try {
       const driverId = parseInt(req.params.id);
       const taxYear = parseInt(req.params.year);
@@ -2129,7 +2159,8 @@ export async function registerRoutes(
   });
   
   // Get available tax years for a driver
-  app.get("/api/drivers/:id/tax-years", async (req, res) => {
+  // Protected: Only authenticated drivers can view tax years
+  app.get("/api/drivers/:id/tax-years", requireDriver, async (req, res) => {
     try {
       const driverId = parseInt(req.params.id);
       const years = await storage.getDriverTaxYears(driverId);
@@ -2143,7 +2174,8 @@ export async function registerRoutes(
   // ============ ADMIN ROUTES ============
   
   // Get all rides for admin (with optional filters)
-  app.get("/api/admin/rides", async (req, res) => {
+  // Protected: Only admins can view all rides
+  app.get("/api/admin/rides", requireAdmin, async (req, res) => {
     try {
       const allRides = await storage.getAllRides();
       const { status, driverId, patientPhone } = req.query;
@@ -2167,7 +2199,8 @@ export async function registerRoutes(
   });
   
   // Get admin dashboard stats
-  app.get("/api/admin/stats", async (req, res) => {
+  // Protected: Only admins can view stats
+  app.get("/api/admin/stats", requireAdmin, async (req, res) => {
     try {
       const allRides = await storage.getAllRides();
       const allDrivers = await storage.getAllDrivers();
@@ -2198,7 +2231,8 @@ export async function registerRoutes(
   });
   
   // Get all patient accounts for admin
-  app.get("/api/admin/patients", async (req, res) => {
+  // Protected: Only admins can view patients
+  app.get("/api/admin/patients", requireAdmin, async (req, res) => {
     try {
       const accounts = await storage.getAllPatientAccounts();
       res.json(accounts);
@@ -2209,7 +2243,8 @@ export async function registerRoutes(
   });
   
   // Update patient account status (suspend/unsuspend/block/unblock)
-  app.patch("/api/admin/patients/:phone/status", async (req, res) => {
+  // Protected: Only admins can update patient status
+  app.patch("/api/admin/patients/:phone/status", requireAdmin, async (req, res) => {
     try {
       const { phone } = req.params;
       const { status, reason } = req.body;
@@ -2227,7 +2262,8 @@ export async function registerRoutes(
   });
   
   // Update driver account status (suspend/unsuspend/deactivate)
-  app.patch("/api/admin/drivers/:id/status", async (req, res) => {
+  // Protected: Only admins can update driver status
+  app.patch("/api/admin/drivers/:id/status", requireAdmin, async (req, res) => {
     try {
       const driverId = parseInt(req.params.id);
       const { status, reason } = req.body;
@@ -2245,7 +2281,8 @@ export async function registerRoutes(
   });
   
   // Admin cancel a ride
-  app.post("/api/admin/rides/:id/cancel", async (req, res) => {
+  // Protected: Only admins can force cancel rides
+  app.post("/api/admin/rides/:id/cancel", requireAdmin, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { reason } = req.body;
@@ -2341,7 +2378,8 @@ export async function registerRoutes(
   });
   
   // Get all incident reports (admin)
-  app.get("/api/admin/incidents", async (req, res) => {
+  // Protected: Only admins can view incidents
+  app.get("/api/admin/incidents", requireAdmin, async (req, res) => {
     try {
       const incidents = await storage.getAllIncidentReports();
       res.json(incidents);
@@ -2352,7 +2390,8 @@ export async function registerRoutes(
   });
   
   // Get single incident report
-  app.get("/api/incidents/:id", async (req, res) => {
+  // Protected: Only authenticated users can view incidents
+  app.get("/api/incidents/:id", requireAuth, async (req, res) => {
     try {
       const incident = await storage.getIncidentReport(parseInt(req.params.id));
       if (!incident) {
@@ -2366,7 +2405,8 @@ export async function registerRoutes(
   });
   
   // Get incidents by ride
-  app.get("/api/rides/:id/incidents", async (req, res) => {
+  // Protected: Only authenticated users can view ride incidents
+  app.get("/api/rides/:id/incidents", requireAuth, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const incidents = await storage.getIncidentReportsByRide(rideId);
@@ -2378,7 +2418,8 @@ export async function registerRoutes(
   });
   
   // Update incident report (admin)
-  app.patch("/api/admin/incidents/:id", async (req, res) => {
+  // Protected: Only admins can update incidents
+  app.patch("/api/admin/incidents/:id", requireAdmin, async (req, res) => {
     try {
       const incidentId = parseInt(req.params.id);
       const { status, adminNotes, assignedTo, resolution } = req.body;
