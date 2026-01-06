@@ -125,6 +125,83 @@ export async function registerRoutes(
     next();
   };
 
+  // Rate limiting for tracking token validation (simple in-memory, per IP + ride)
+  const tokenAttempts: Map<string, { count: number; resetAt: number }> = new Map();
+  const MAX_TOKEN_ATTEMPTS = 10;
+  const TOKEN_RATE_LIMIT_WINDOW = 60000; // 1 minute
+
+  const requireTrackingToken = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const token = req.query.token as string;
+      
+      if (!rideId || isNaN(rideId)) {
+        return res.status(400).json({ message: "Invalid ride ID" });
+      }
+      
+      if (!token) {
+        return res.status(401).json({ message: "Access token required" });
+      }
+      
+      // Rate limiting check
+      const rateLimitKey = `${req.ip}-${rideId}`;
+      const now = Date.now();
+      const attempts = tokenAttempts.get(rateLimitKey);
+      
+      if (attempts) {
+        if (now < attempts.resetAt) {
+          if (attempts.count >= MAX_TOKEN_ATTEMPTS) {
+            return res.status(429).json({ message: "Too many attempts. Please try again later." });
+          }
+          attempts.count++;
+        } else {
+          tokenAttempts.set(rateLimitKey, { count: 1, resetAt: now + TOKEN_RATE_LIMIT_WINDOW });
+        }
+      } else {
+        tokenAttempts.set(rateLimitKey, { count: 1, resetAt: now + TOKEN_RATE_LIMIT_WINDOW });
+      }
+      
+      const ride = await storage.getRide(rideId);
+      
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      // Check if ride is in a terminal state (token should be expired)
+      if (ride.status === "completed" || ride.status === "cancelled") {
+        return res.status(403).json({ message: "This ride has ended. Access is no longer available." });
+      }
+      
+      // Check if token exists and hasn't expired
+      if (!ride.trackingToken) {
+        return res.status(403).json({ message: "Access link is invalid or has expired" });
+      }
+      
+      if (ride.trackingTokenExpiresAt && new Date(ride.trackingTokenExpiresAt) < new Date()) {
+        return res.status(403).json({ message: "Access link has expired" });
+      }
+      
+      // Validate token (constant-time comparison)
+      try {
+        if (!validateTrackingToken(token, ride.trackingToken)) {
+          return res.status(403).json({ message: "Invalid access token" });
+        }
+      } catch (e) {
+        return res.status(403).json({ message: "Invalid access token" });
+      }
+      
+      // Clear rate limit on success
+      tokenAttempts.delete(rateLimitKey);
+      
+      // Attach ride to request for use in handler
+      (req as any).ride = ride;
+      next();
+    } catch (error) {
+      console.error("Error validating tracking token:", error);
+      res.status(500).json({ message: "Failed to validate access" });
+    }
+  };
+
   const requireDriver = async (req: Request, res: Response, next: NextFunction) => {
     if (!req.session.userId) {
       return res.status(401).json({ message: "Authentication required" });
@@ -1344,14 +1421,10 @@ export async function registerRoutes(
   });
 
   // Get ride with driver location and ETA for patient tracking
-  app.get("/api/rides/:id/tracking", async (req, res) => {
+  // Protected: Requires valid tracking token from query param ?token=xxx
+  app.get("/api/rides/:id/tracking", requireTrackingToken, async (req, res) => {
     try {
-      const rideId = parseInt(req.params.id);
-      const ride = await storage.getRide(rideId);
-      
-      if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
-      }
+      const ride = (req as any).ride; // Already validated by middleware
       
       let driverInfo = null;
       let distanceToPickup: number | null = null;
@@ -1929,14 +2002,10 @@ export async function registerRoutes(
   });
 
   // Get driver info for patient
-  app.get("/api/rides/:id/driver-info", async (req, res) => {
+  // Protected: Requires valid tracking token from query param ?token=xxx
+  app.get("/api/rides/:id/driver-info", requireTrackingToken, async (req, res) => {
     try {
-      const rideId = parseInt(req.params.id);
-      const ride = await storage.getRide(rideId);
-      
-      if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
-      }
+      const ride = (req as any).ride; // Already validated by middleware
       
       if (!ride.driverId) {
         return res.json({ driver: null, message: "No driver assigned yet" });
