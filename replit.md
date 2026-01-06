@@ -110,8 +110,13 @@ Database tables:
 - Driver dashboard with stats cards: Rides in Pool, Active Rides, Completed, Total Earnings
 - Real-time notifications: Sound alerts and toast notifications when new rides are posted
 - NEW badge highlighting for recently posted rides (30-second window)
-- Ride status workflow: Requested (in pool) → Accepted (claimed) → En Route → Arrived → In Progress (with navigation) → Completed
-- **Navigation Integration**: When driver confirms pickup, their preferred navigation app (Google Maps, Waze, or Apple Maps) opens automatically with turn-by-turn directions to the dropoff location
+- Ride status workflow: Requested (in pool) → Accepted (claimed) → En Route (with navigation to pickup) → Arrived → In Progress (with navigation to dropoff) → Completed
+- **Navigation Integration**: 
+  - When driver starts trip, navigation opens to PICKUP location
+  - When driver confirms pickup (patient aboard), navigation opens to DROPOFF location
+  - Supports Google Maps, Waze, Apple Maps based on driver preference
+- **Journey Monitoring**: Abandoned ride detection with 30-minute timeout for rides stuck in-progress
+- **Toll Handling**: Drivers confirm actual tolls paid during ride completion, tolls added to earnings
 - Real-time status updates via WebSocket
 - Ride history and event tracking
 - Distance-based fare calculation: $20 base + $2.50/mile, $22 minimum (industry-standard NEMT pricing)
@@ -171,6 +176,8 @@ Database tables:
 - **Insurance rides**: No surge pricing (flat rates required)
 - Demand-based calculations: ratio of rides to available drivers
 - Time-based scheduled surge from database configuration
+- Traffic condition reporting by drivers (normal, moderate, heavy)
+- API endpoint `/api/surge/current` returns real-time surge multiplier
 
 #### Tiered Patient Account System
 - **Green ($0-$25)**: Full access, no restrictions

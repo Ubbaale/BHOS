@@ -11,6 +11,9 @@ import { NotificationPrompt } from "@/components/NotificationPrompt";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -70,6 +73,8 @@ interface RideCardProps {
 function RideCard({ ride, driverId, onAction, isNew = false, navigationPreference = "default" }: RideCardProps) {
   const { toast } = useToast();
   const [showChat, setShowChat] = useState(false);
+  const [showCompleteDialog, setShowCompleteDialog] = useState(false);
+  const [actualTolls, setActualTolls] = useState(ride.estimatedTolls || "0");
   const isMyRide = ride.driverId === driverId;
 
   const handleStartTripWithNavigation = async () => {
@@ -126,6 +131,29 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
     },
   });
 
+  const completeRideMutation = useMutation({
+    mutationFn: async (tolls: string) => {
+      const response = await apiRequest("POST", `/api/rides/${ride.id}/complete`, { 
+        actualTolls: parseFloat(tolls),
+        actualDistanceMiles: ride.distanceMiles ? parseFloat(ride.distanceMiles) : undefined
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      const breakdown = data.fareBreakdown;
+      toast({ 
+        title: "Ride Completed", 
+        description: `Final fare: $${breakdown.finalFare}. Your earnings: $${data.ride.driverEarnings}` 
+      });
+      setShowCompleteDialog(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/rides"] });
+      onAction();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const getNextAction = () => {
     switch (ride.status) {
       case "requested":
@@ -137,7 +165,7 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
       case "arrived":
         return { label: "Confirm Pickup & Navigate to Dropoff", action: handleConfirmPickupWithNavigation, icon: ExternalLink };
       case "in_progress":
-        return { label: "Complete Ride", action: () => updateStatusMutation.mutate("completed"), icon: CheckCircle2 };
+        return { label: "Complete Ride", action: () => setShowCompleteDialog(true), icon: CheckCircle2 };
       default:
         return null;
     }
@@ -259,6 +287,79 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
             <RideChat rideId={ride.id} userType="driver" onClose={() => setShowChat(false)} />
           </div>
         )}
+
+        <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Complete Ride</DialogTitle>
+              <DialogDescription>
+                Confirm the tolls you paid during this trip. These will be added to your earnings.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="actualTolls">Actual Tolls Paid ($)</Label>
+                <Input
+                  id="actualTolls"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={actualTolls}
+                  onChange={(e) => setActualTolls(e.target.value)}
+                  placeholder="0.00"
+                  data-testid="input-actual-tolls"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Estimated tolls: ${parseFloat(ride.estimatedTolls || "0").toFixed(2)}
+                </p>
+              </div>
+              
+              <div className="bg-muted p-3 rounded-md text-sm">
+                <p className="font-medium mb-2">Fare Breakdown Preview:</p>
+                <div className="space-y-1 text-muted-foreground">
+                  <div className="flex justify-between">
+                    <span>Base fare:</span>
+                    <span>$20.00</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Distance ({parseFloat(ride.distanceMiles || "0").toFixed(1)} mi):</span>
+                    <span>${(parseFloat(ride.distanceMiles || "0") * 2.50).toFixed(2)}</span>
+                  </div>
+                  {parseFloat(ride.surgeMultiplier || "1") > 1 && (
+                    <div className="flex justify-between">
+                      <span>Surge ({ride.surgeMultiplier}x):</span>
+                      <span>Applied</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span>Tolls:</span>
+                    <span>${parseFloat(actualTolls || "0").toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-medium text-foreground border-t pt-1 mt-1">
+                    <span>Est. Total:</span>
+                    <span>
+                      ${Math.max(22, (20 + parseFloat(ride.distanceMiles || "0") * 2.50) * parseFloat(ride.surgeMultiplier || "1") + parseFloat(actualTolls || "0")).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setShowCompleteDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => completeRideMutation.mutate(actualTolls)}
+                disabled={completeRideMutation.isPending}
+                data-testid="button-confirm-complete"
+              >
+                {completeRideMutation.isPending ? "Processing..." : "Complete & Get Paid"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
