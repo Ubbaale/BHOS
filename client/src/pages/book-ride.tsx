@@ -204,9 +204,10 @@ interface AddressAutocompleteProps {
   placeholder?: string;
   value?: string;
   testId?: string;
+  userLocation?: { lat: number; lng: number } | null;
 }
 
-function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId }: AddressAutocompleteProps) {
+function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId, userLocation }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localValue, setLocalValue] = useState(value);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -223,6 +224,18 @@ function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId }:
       inputRef.current.value = "";
     }
   }, [value]);
+
+  // Update autocomplete bounds when user location changes
+  useEffect(() => {
+    if (autocompleteRef.current && userLocation && window.google?.maps) {
+      // Create a circle around the user's location (50km radius) to bias results
+      const circle = new google.maps.Circle({
+        center: { lat: userLocation.lat, lng: userLocation.lng },
+        radius: 50000, // 50km radius for suggestions
+      });
+      autocompleteRef.current.setBounds(circle.getBounds() as google.maps.LatLngBounds);
+    }
+  }, [userLocation]);
 
   useEffect(() => {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -262,10 +275,22 @@ function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId }:
         if (!mounted || !inputRef.current) return;
         
         if (!autocompleteRef.current) {
-          const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
+          const autocompleteOptions: google.maps.places.AutocompleteOptions = {
             componentRestrictions: { country: "us" },
             fields: ["formatted_address", "geometry", "name"],
-          });
+          };
+          
+          // If user location is available, set initial bounds to bias results
+          if (userLocation && window.google?.maps) {
+            const circle = new google.maps.Circle({
+              center: { lat: userLocation.lat, lng: userLocation.lng },
+              radius: 50000, // 50km radius
+            });
+            autocompleteOptions.bounds = circle.getBounds() as google.maps.LatLngBounds;
+            autocompleteOptions.strictBounds = false; // Allow results outside bounds but prioritize nearby
+          }
+          
+          const autocomplete = new google.maps.places.Autocomplete(inputRef.current, autocompleteOptions);
           
           autocompleteRef.current = autocomplete;
           
@@ -295,7 +320,7 @@ function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId }:
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [userLocation]);
 
   const handleManualEntry = () => {
     if (localValue && !isLoaded) {
@@ -339,6 +364,26 @@ export default function BookRide() {
   const [isEmergency, setIsEmergency] = useState(false);
   const [emergencyAcknowledged, setEmergencyAcknowledged] = useState(false);
   const [phoneForAccountCheck, setPhoneForAccountCheck] = useState("");
+  const [userDeviceLocation, setUserDeviceLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Automatically detect user's device location on page load for better address suggestions
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserDeviceLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.log("Location access denied or unavailable:", error.message);
+          // Silently fail - address autocomplete will work without location bias
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+    }
+  }, []);
 
   useEffect(() => {
     if (pickupPos && dropoffPos) {
@@ -980,6 +1025,7 @@ export default function BookRide() {
                               placeholder="Start typing an address..."
                               value={field.value}
                               testId="input-pickup-address"
+                              userLocation={userDeviceLocation}
                             />
                           </FormControl>
                           <FormMessage />
@@ -1016,6 +1062,7 @@ export default function BookRide() {
                               placeholder="Start typing an address..."
                               value={field.value}
                               testId="input-dropoff-address"
+                              userLocation={userDeviceLocation}
                             />
                           </FormControl>
                           <FormMessage />
