@@ -323,6 +323,11 @@ export class DatabaseStorage implements IStorage {
     return driver;
   }
 
+  async getDriverByUserId(userId: string): Promise<DriverProfile | undefined> {
+    const [driver] = await db.select().from(driverProfiles).where(eq(driverProfiles.userId, userId));
+    return driver;
+  }
+
   async createDriver(insertDriver: InsertDriverProfile): Promise<DriverProfile> {
     const [driver] = await db.insert(driverProfiles).values(insertDriver).returning();
     return driver;
