@@ -356,35 +356,42 @@ export default function JobMap() {
               ))}
 
               {/* Ride Request Markers */}
-              {rideMarkers.map((marker) => (
-                <Marker
-                  key={`ride-${marker.type}-${marker.id}`}
-                  position={[marker.lat, marker.lng]}
-                  icon={marker.type === "pickup" ? purpleMarkerIcon : orangeMarkerIcon}
-                  eventHandlers={{
-                    click: () => {
-                      setSelectedRide(marker.ride);
-                      setSelectedJob(null);
-                      setActiveTab("rides");
-                    },
-                  }}
-                >
-                  <Popup>
-                    <div className="p-1">
-                      <p className="font-semibold flex items-center gap-1">
-                        <Car className="w-3 h-3" />
-                        {marker.type === "pickup" ? "Pickup" : "Dropoff"} - Ride #{marker.id}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {marker.type === "pickup" ? marker.ride.pickupAddress : marker.ride.dropoffAddress}
-                      </p>
-                      <p className="text-xs mt-1">
-                        Status: {getStatusLabel(marker.ride.status)}
-                      </p>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
+              {rideMarkers.map((marker) => {
+                // Extract zip code from address (last 5 digits pattern)
+                const address = marker.type === "pickup" ? marker.ride.pickupAddress : marker.ride.dropoffAddress;
+                const zipMatch = address?.match(/\b\d{5}(?:-\d{4})?\b/);
+                const zipCode = zipMatch ? zipMatch[0] : "Area";
+                
+                return (
+                  <Marker
+                    key={`ride-${marker.type}-${marker.id}`}
+                    position={[marker.lat, marker.lng]}
+                    icon={marker.type === "pickup" ? purpleMarkerIcon : orangeMarkerIcon}
+                    eventHandlers={{
+                      click: () => {
+                        setSelectedRide(marker.ride);
+                        setSelectedJob(null);
+                        setActiveTab("rides");
+                      },
+                    }}
+                  >
+                    <Popup>
+                      <div className="p-1">
+                        <p className="font-semibold flex items-center gap-1">
+                          <Car className="w-3 h-3" />
+                          Ride Requested
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {marker.type === "pickup" ? "Pickup" : "Dropoff"} - Zip: {zipCode}
+                        </p>
+                        <p className="text-xs mt-1">
+                          Status: {getStatusLabel(marker.ride.status)}
+                        </p>
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
             </MapContainer>
           </div>
 
@@ -530,84 +537,88 @@ export default function JobMap() {
                 ) : (
                   activeRides
                     .filter(r => ["requested", "accepted", "en_route", "arrived", "in_progress"].includes(r.status))
-                    .map((ride) => (
-                      <Card
-                        key={`ride-${ride.id}`}
-                        className={`cursor-pointer hover-elevate transition-all ${
-                          selectedRide?.id === ride.id ? "ring-2 ring-primary" : ""
-                        }`}
-                        onClick={() => {
-                          setSelectedRide(ride);
-                          setSelectedJob(null);
-                        }}
-                        data-testid={`card-ride-${ride.id}`}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between gap-4 mb-3">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <Car className="w-4 h-4 text-muted-foreground" />
-                                <span className="text-sm text-muted-foreground">Ride #{ride.id}</span>
-                              </div>
-                              <h3 className="font-semibold flex items-center gap-2">
-                                <User className="w-4 h-4" />
-                                {ride.patientName}
-                              </h3>
-                            </div>
-                            <Badge
-                              variant="secondary"
-                              className={`${getStatusColor(ride.status)} text-white no-default-hover-elevate`}
-                            >
-                              {getStatusLabel(ride.status)}
-                            </Badge>
-                          </div>
-
-                          <div className="space-y-2 text-sm mb-3">
-                            <div className="flex items-start gap-2">
-                              <div className="w-3 h-3 rounded-full bg-purple-500 mt-1 shrink-0" />
+                    .map((ride) => {
+                      // Extract zip codes from addresses for privacy
+                      const pickupZipMatch = ride.pickupAddress?.match(/\b\d{5}(?:-\d{4})?\b/);
+                      const dropoffZipMatch = ride.dropoffAddress?.match(/\b\d{5}(?:-\d{4})?\b/);
+                      const pickupZip = pickupZipMatch ? pickupZipMatch[0] : "N/A";
+                      const dropoffZip = dropoffZipMatch ? dropoffZipMatch[0] : "N/A";
+                      
+                      return (
+                        <Card
+                          key={`ride-${ride.id}`}
+                          className={`cursor-pointer hover-elevate transition-all ${
+                            selectedRide?.id === ride.id ? "ring-2 ring-primary" : ""
+                          }`}
+                          onClick={() => {
+                            setSelectedRide(ride);
+                            setSelectedJob(null);
+                          }}
+                          data-testid={`card-ride-${ride.id}`}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between gap-4 mb-3">
                               <div>
-                                <span className="text-muted-foreground text-xs">Pickup</span>
-                                <p className="text-xs">{ride.pickupAddress}</p>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Car className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-sm font-semibold">Ride Requested</span>
+                                </div>
                               </div>
+                              <Badge
+                                variant="secondary"
+                                className={`${getStatusColor(ride.status)} text-white no-default-hover-elevate`}
+                              >
+                                {getStatusLabel(ride.status)}
+                              </Badge>
                             </div>
-                            <div className="flex items-start gap-2">
-                              <div className="w-3 h-3 rounded-full bg-orange-500 mt-1 shrink-0" />
-                              <div>
-                                <span className="text-muted-foreground text-xs">Dropoff</span>
-                                <p className="text-xs">{ride.dropoffAddress}</p>
-                              </div>
-                            </div>
-                          </div>
 
-                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-3">
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-4 h-4" />
-                              {ride.appointmentTime 
-                                ? format(new Date(ride.appointmentTime), "MMM d, h:mm a")
-                                : "ASAP"
-                              }
-                            </span>
-                            {ride.estimatedFare && (
-                              <span className="flex items-center gap-1 font-semibold text-foreground">
-                                <DollarSign className="w-4 h-4" />
-                                ${parseFloat(ride.estimatedFare).toFixed(2)}
+                            <div className="space-y-2 text-sm mb-3">
+                              <div className="flex items-start gap-2">
+                                <div className="w-3 h-3 rounded-full bg-purple-500 mt-1 shrink-0" />
+                                <div>
+                                  <span className="text-muted-foreground text-xs">Pickup Area</span>
+                                  <p className="text-xs font-medium">Zip: {pickupZip}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <div className="w-3 h-3 rounded-full bg-orange-500 mt-1 shrink-0" />
+                                <div>
+                                  <span className="text-muted-foreground text-xs">Dropoff Area</span>
+                                  <p className="text-xs font-medium">Zip: {dropoffZip}</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-3">
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                {ride.appointmentTime 
+                                  ? format(new Date(ride.appointmentTime), "MMM d, h:mm a")
+                                  : "ASAP"
+                                }
                               </span>
-                            )}
-                          </div>
-
-                          {ride.mobilityNeeds && ride.mobilityNeeds.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mb-3">
-                              {ride.mobilityNeeds.map((need, i) => (
-                                <Badge key={i} variant="outline" className="text-xs flex items-center gap-1">
-                                  <Accessibility className="w-3 h-3" />
-                                  {need}
-                                </Badge>
-                              ))}
+                              {ride.estimatedFare && (
+                                <span className="flex items-center gap-1 font-semibold text-foreground">
+                                  <DollarSign className="w-4 h-4" />
+                                  ${parseFloat(ride.estimatedFare).toFixed(2)}
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))
+
+                            {ride.mobilityNeeds && ride.mobilityNeeds.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mb-3">
+                                {ride.mobilityNeeds.map((need, i) => (
+                                  <Badge key={i} variant="outline" className="text-xs flex items-center gap-1">
+                                    <Accessibility className="w-3 h-3" />
+                                    {need}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })
                 )}
               </TabsContent>
             </Tabs>
