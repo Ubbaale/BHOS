@@ -718,6 +718,9 @@ export async function registerRoutes(
         
         const ride = await storage.completeRide(id, finalFare.toFixed(2), tolls.toString(), distance.toFixed(2));
         
+        // Expire tracking token when ride completes
+        await storage.expireTrackingToken(id);
+        
         await storage.createRideEvent({
           rideId: id,
           status: "completed",
@@ -896,6 +899,9 @@ export async function registerRoutes(
       if (!cancelledRide) {
         return res.status(500).json({ message: "Failed to cancel ride" });
       }
+
+      // Expire tracking token when ride is cancelled
+      await storage.expireTrackingToken(rideId);
 
       let eventNote = `Cancelled by ${cancelledBy}`;
       if (reason) eventNote += `: ${reason}`;
