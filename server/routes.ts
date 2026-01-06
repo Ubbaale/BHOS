@@ -1631,9 +1631,21 @@ export async function registerRoutes(
     try {
       const { password, confirmPassword, ...driverData } = req.body;
       
-      // Validate password
+      // Validate strong password
       if (!password || password.length < 6) {
         return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      if (!/[A-Z]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain at least one uppercase letter" });
+      }
+      if (!/[a-z]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain at least one lowercase letter" });
+      }
+      if (!/[0-9]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain at least one number" });
+      }
+      if (!/[^A-Za-z0-9]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain at least one special character" });
       }
       
       if (password !== confirmPassword) {

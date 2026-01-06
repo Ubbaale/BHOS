@@ -32,11 +32,18 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { User, Phone, Mail, Car, FileCheck, CheckCircle2, Clock, Lock } from "lucide-react";
 
+const passwordSchema = z.string()
+  .min(6, "Password must be at least 6 characters")
+  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+  .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+  .regex(/[0-9]/, "Password must contain at least one number")
+  .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character");
+
 const driverApplicationSchema = z.object({
   fullName: z.string().min(2, "Full name is required"),
   phone: z.string().min(10, "Valid phone number is required"),
   email: z.string().email("Valid email is required"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: passwordSchema,
   confirmPassword: z.string().min(6, "Please confirm your password"),
   vehicleType: z.string().min(1, "Vehicle type is required"),
   vehiclePlate: z.string().min(1, "License plate is required"),
@@ -242,11 +249,14 @@ export default function DriverApply() {
                           <FormControl>
                             <Input 
                               type="password"
-                              placeholder="Min. 6 characters" 
+                              placeholder="Strong password" 
                               {...field} 
                               data-testid="input-driver-password"
                             />
                           </FormControl>
+                          <FormDescription className="text-xs">
+                            Min. 6 chars with uppercase, lowercase, number, and special character
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
