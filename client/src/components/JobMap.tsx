@@ -362,6 +362,23 @@ export default function JobMap() {
                 const zipMatch = address?.match(/\b\d{5}(?:-\d{4})?\b/);
                 const zipCode = zipMatch ? zipMatch[0] : "Area";
                 
+                // Extract city and state from pickup address
+                const addressParts = marker.ride.pickupAddress?.split(',') || [];
+                let city = "";
+                let state = "";
+                if (addressParts.length >= 2) {
+                  city = addressParts[addressParts.length - 2]?.trim() || "";
+                  const lastPart = addressParts[addressParts.length - 1]?.trim() || "";
+                  const stateMatch = lastPart.match(/^([A-Z]{2})/);
+                  state = stateMatch ? stateMatch[1] : "";
+                }
+                
+                // Get distance in miles (cast to any for optional field)
+                const rideAny = marker.ride as any;
+                const distance = rideAny.estimatedDistance 
+                  ? parseFloat(rideAny.estimatedDistance).toFixed(1) 
+                  : null;
+                
                 return (
                   <Marker
                     key={`ride-${marker.type}-${marker.id}`}
@@ -380,6 +397,9 @@ export default function JobMap() {
                         <p className="font-semibold flex items-center gap-1">
                           <Car className="w-3 h-3" />
                           Ride Requested
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {city}{state ? `, ${state}` : ""} {distance ? `• ${distance} mi` : ""}
                         </p>
                         <p className="text-sm text-muted-foreground">
                           {marker.type === "pickup" ? "Pickup" : "Dropoff"} - Zip: {zipCode}
@@ -544,6 +564,24 @@ export default function JobMap() {
                       const pickupZip = pickupZipMatch ? pickupZipMatch[0] : "N/A";
                       const dropoffZip = dropoffZipMatch ? dropoffZipMatch[0] : "N/A";
                       
+                      // Extract city and state from pickup address (format: "Street, City, State ZIP")
+                      const addressParts = ride.pickupAddress?.split(',') || [];
+                      let city = "N/A";
+                      let state = "";
+                      if (addressParts.length >= 2) {
+                        city = addressParts[addressParts.length - 2]?.trim() || "N/A";
+                        // State is usually before the zip in the last part
+                        const lastPart = addressParts[addressParts.length - 1]?.trim() || "";
+                        const stateMatch = lastPart.match(/^([A-Z]{2})/);
+                        state = stateMatch ? stateMatch[1] : "";
+                      }
+                      
+                      // Get distance in miles (cast to any for optional field)
+                      const rideAny = ride as any;
+                      const distance = rideAny.estimatedDistance 
+                        ? parseFloat(rideAny.estimatedDistance).toFixed(1) 
+                        : null;
+                      
                       return (
                         <Card
                           key={`ride-${ride.id}`}
@@ -563,6 +601,9 @@ export default function JobMap() {
                                   <Car className="w-4 h-4 text-muted-foreground" />
                                   <span className="text-sm font-semibold">Ride Requested</span>
                                 </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {city}{state ? `, ${state}` : ""} {distance ? `• ${distance} mi` : ""}
+                                </p>
                               </div>
                               <Badge
                                 variant="secondary"
