@@ -122,6 +122,8 @@ export const driverProfiles = pgTable("driver_profiles", {
   // Account status
   accountStatus: text("account_status").default("active"), // 'active', 'suspended', 'deactivated'
   suspensionReason: text("suspension_reason"),
+  // Navigation preference
+  navigationPreference: text("navigation_preference").default("default"), // 'default', 'google_maps', 'waze', 'apple_maps'
   createdAt: timestamp("created_at").defaultNow(),
 });
 

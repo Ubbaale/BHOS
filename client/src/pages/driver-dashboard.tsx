@@ -15,7 +15,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink } from "lucide-react";
+import { openNavigation } from "@/lib/navigation";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RideChat } from "@/components/RideChat";
 import type { Ride, DriverProfile } from "@shared/schema";
@@ -63,12 +64,25 @@ interface RideCardProps {
   driverId: number;
   onAction: () => void;
   isNew?: boolean;
+  navigationPreference?: string;
 }
 
-function RideCard({ ride, driverId, onAction, isNew = false }: RideCardProps) {
+function RideCard({ ride, driverId, onAction, isNew = false, navigationPreference = "default" }: RideCardProps) {
   const { toast } = useToast();
   const [showChat, setShowChat] = useState(false);
   const isMyRide = ride.driverId === driverId;
+
+  const handleStartRideWithNavigation = async () => {
+    await updateStatusMutation.mutateAsync("in_progress");
+    if (ride.dropoffLat && ride.dropoffLng) {
+      openNavigation({
+        destinationLat: parseFloat(ride.dropoffLat),
+        destinationLng: parseFloat(ride.dropoffLng),
+        destinationAddress: ride.dropoffAddress,
+        preference: navigationPreference as any,
+      });
+    }
+  };
 
   const acceptMutation = useMutation({
     mutationFn: async () => {
@@ -109,7 +123,7 @@ function RideCard({ ride, driverId, onAction, isNew = false }: RideCardProps) {
       case "driver_enroute":
         return { label: "Arrived", action: () => updateStatusMutation.mutate("arrived"), icon: MapPin };
       case "arrived":
-        return { label: "Start Ride", action: () => updateStatusMutation.mutate("in_progress"), icon: Play };
+        return { label: "Confirm Pickup & Navigate", action: handleStartRideWithNavigation, icon: ExternalLink };
       case "in_progress":
         return { label: "Complete Ride", action: () => updateStatusMutation.mutate("completed"), icon: CheckCircle2 };
       default:
@@ -550,6 +564,7 @@ export default function DriverDashboard() {
                         driverId={currentDriverId || 0}
                         onAction={() => setSelectedRide(ride)}
                         isNew={newRideIds.has(ride.id)}
+                        navigationPreference={currentDriver?.navigationPreference || "default"}
                       />
                     ))
                   )}
@@ -569,6 +584,7 @@ export default function DriverDashboard() {
                         ride={ride}
                         driverId={currentDriverId || 0}
                         onAction={() => setSelectedRide(ride)}
+                        navigationPreference={currentDriver?.navigationPreference || "default"}
                       />
                     ))
                   )}
@@ -588,6 +604,7 @@ export default function DriverDashboard() {
                         ride={ride}
                         driverId={currentDriverId || 0}
                         onAction={() => {}}
+                        navigationPreference={currentDriver?.navigationPreference || "default"}
                       />
                     ))
                   )}
