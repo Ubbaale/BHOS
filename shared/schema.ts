@@ -234,7 +234,9 @@ export const rides = pgTable("rides", {
   delayReason: text("delay_reason"),
   trafficCondition: text("traffic_condition"), // 'normal', 'moderate', 'heavy'
   // Payment tracking
-  paymentStatus: text("payment_status").default("pending"), // 'pending', 'processing', 'completed', 'failed', 'refunded'
+  paymentStatus: text("payment_status").default("pending"), // 'pending', 'paid', 'processing', 'completed', 'failed', 'refunded'
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  paidAmount: numeric("paid_amount"),
   paymentAttempts: integer("payment_attempts").default(0),
   paymentFailedAt: timestamp("payment_failed_at"),
   finalFare: numeric("final_fare"),

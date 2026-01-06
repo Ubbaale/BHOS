@@ -604,6 +604,43 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return ride;
   }
+
+  async updateRidePayment(rideId: number, paymentData: { paymentStatus: string; stripePaymentIntentId: string; paidAmount: string }): Promise<Ride | undefined> {
+    const [ride] = await db.update(rides)
+      .set({
+        paymentStatus: paymentData.paymentStatus,
+        stripePaymentIntentId: paymentData.stripePaymentIntentId,
+        paidAmount: paymentData.paidAmount,
+        updatedAt: new Date()
+      })
+      .where(eq(rides.id, rideId))
+      .returning();
+    return ride;
+  }
+
+  async updateRideTip(rideId: number, tipAmount: string): Promise<Ride | undefined> {
+    const [existingRide] = await db.select().from(rides).where(eq(rides.id, rideId));
+    if (!existingRide) return undefined;
+    
+    const currentEarnings = parseFloat(existingRide.driverEarnings || "0");
+    const newEarnings = (currentEarnings + parseFloat(tipAmount)).toFixed(2);
+    
+    const [ride] = await db.update(rides)
+      .set({ 
+        tipAmount,
+        tipPaidAt: new Date(),
+        driverEarnings: newEarnings
+      })
+      .where(eq(rides.id, rideId))
+      .returning();
+    return ride;
+  }
+
+  async addDriverTipEarnings(driverId: number, tipAmount: number): Promise<void> {
+    // Tips are tracked via rides table, no additional update needed
+    // This method is kept for API compatibility
+    console.log(`Tip of $${tipAmount} recorded for driver ${driverId}`);
+  }
   
   async getDriverEarnings(driverId: number): Promise<{ totalEarnings: string; totalTips: string; totalRides: number }> {
     const driverRides = await db.select().from(rides)

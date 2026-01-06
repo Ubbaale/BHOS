@@ -12,6 +12,7 @@ import fs from "fs";
 import express from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 const FIELDHCP_API_URL = "https://admin.carehubapp.com/APIs/Employer/JobSearch";
 const FIELDHCP_AUTH_TOKEN = process.env.FIELDHCP_AUTH_TOKEN || "";
@@ -2544,6 +2545,204 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating incident:", error);
       res.status(500).json({ message: "Failed to update incident" });
+    }
+  });
+
+  // ==========================================
+  // STRIPE PAYMENT ROUTES
+  // ==========================================
+
+  // Get Stripe publishable key for frontend
+  app.get("/api/stripe/publishable-key", async (_req, res) => {
+    try {
+      const publishableKey = await getStripePublishableKey();
+      res.json({ publishableKey });
+    } catch (error) {
+      console.error("Error getting Stripe publishable key:", error);
+      res.status(500).json({ message: "Payment service unavailable" });
+    }
+  });
+
+  // Create payment intent for ride booking (upfront payment)
+  app.post("/api/rides/create-payment-intent", async (req, res) => {
+    try {
+      const { estimatedFare, patientEmail, patientName, rideDetails } = req.body;
+      
+      if (!estimatedFare || estimatedFare <= 0) {
+        return res.status(400).json({ message: "Invalid fare amount" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      
+      // Convert dollars to cents for Stripe
+      const amountInCents = Math.round(estimatedFare * 100);
+      
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountInCents,
+        currency: 'usd',
+        automatic_payment_methods: { enabled: true },
+        metadata: {
+          type: 'ride_booking',
+          patientName: patientName || '',
+          patientEmail: patientEmail || '',
+          pickupAddress: rideDetails?.pickupAddress || '',
+          dropoffAddress: rideDetails?.dropoffAddress || '',
+        },
+        receipt_email: patientEmail || undefined,
+        description: `Carehub Medical Transport - ${rideDetails?.pickupAddress || 'Ride'} to ${rideDetails?.dropoffAddress || 'Destination'}`,
+      });
+
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        amount: estimatedFare,
+      });
+    } catch (error: any) {
+      console.error("Error creating payment intent:", error);
+      res.status(500).json({ message: "Failed to initialize payment" });
+    }
+  });
+
+  // Confirm payment and update ride with payment info
+  app.post("/api/rides/:id/confirm-payment", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { paymentIntentId } = req.body;
+
+      if (!paymentIntentId) {
+        return res.status(400).json({ message: "Payment intent ID required" });
+      }
+
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+      if (paymentIntent.status !== 'succeeded') {
+        return res.status(400).json({ 
+          message: "Payment not completed",
+          paymentStatus: paymentIntent.status 
+        });
+      }
+
+      // Update ride with payment info
+      const updatedRide = await storage.updateRidePayment(rideId, {
+        paymentStatus: 'paid',
+        stripePaymentIntentId: paymentIntentId,
+        paidAmount: (paymentIntent.amount / 100).toFixed(2),
+      });
+
+      await storage.createRideEvent({
+        rideId,
+        status: ride.status,
+        note: `Payment of $${(paymentIntent.amount / 100).toFixed(2)} confirmed`
+      });
+
+      res.json(updatedRide);
+    } catch (error: any) {
+      console.error("Error confirming payment:", error);
+      res.status(500).json({ message: "Failed to confirm payment" });
+    }
+  });
+
+  // Add tip after ride completion
+  app.post("/api/rides/:id/tip-payment", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { tipAmount, patientEmail } = req.body;
+
+      if (!tipAmount || tipAmount <= 0) {
+        return res.status(400).json({ message: "Invalid tip amount" });
+      }
+
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      if (ride.status !== 'completed') {
+        return res.status(400).json({ message: "Can only tip completed rides" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const amountInCents = Math.round(tipAmount * 100);
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountInCents,
+        currency: 'usd',
+        automatic_payment_methods: { enabled: true },
+        metadata: {
+          type: 'tip',
+          rideId: rideId.toString(),
+          driverId: ride.driverId?.toString() || '',
+        },
+        receipt_email: patientEmail || undefined,
+        description: `Tip for Carehub ride #${rideId}`,
+      });
+
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        amount: tipAmount,
+      });
+    } catch (error: any) {
+      console.error("Error creating tip payment:", error);
+      res.status(500).json({ message: "Failed to initialize tip payment" });
+    }
+  });
+
+  // Confirm tip payment
+  app.post("/api/rides/:id/confirm-tip", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { paymentIntentId } = req.body;
+
+      if (!paymentIntentId) {
+        return res.status(400).json({ message: "Payment intent ID required" });
+      }
+
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+      if (paymentIntent.status !== 'succeeded') {
+        return res.status(400).json({ 
+          message: "Tip payment not completed",
+          paymentStatus: paymentIntent.status 
+        });
+      }
+
+      const tipAmount = (paymentIntent.amount / 100).toFixed(2);
+      
+      // Update ride with tip
+      const updatedRide = await storage.updateRideTip(rideId, tipAmount);
+
+      // Update driver earnings with tip (100% goes to driver)
+      if (ride.driverId) {
+        await storage.addDriverTipEarnings(ride.driverId, parseFloat(tipAmount));
+      }
+
+      await storage.createRideEvent({
+        rideId,
+        status: 'completed',
+        note: `Tip of $${tipAmount} received from patient`
+      });
+
+      res.json({ 
+        success: true, 
+        tipAmount,
+        ride: updatedRide 
+      });
+    } catch (error: any) {
+      console.error("Error confirming tip:", error);
+      res.status(500).json({ message: "Failed to confirm tip" });
     }
   });
 
