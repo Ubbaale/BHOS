@@ -79,9 +79,15 @@ export interface IStorage {
   // Traffic and delays
   updateRideDelay(rideId: number, delayMinutes: number, reason: string | undefined, newEta: Date | undefined): Promise<Ride | undefined>;
   
-  // Complete ride
+  // Complete ride with commission calculation
   completeRide(rideId: number, finalFare: string, actualTolls: string, actualDistanceMiles: string): Promise<Ride | undefined>;
   incrementDriverCompletedRides(driverId: number): Promise<void>;
+  
+  // Tips
+  addTip(rideId: number, tipAmount: string): Promise<Ride | undefined>;
+  
+  // Driver earnings
+  getDriverEarnings(driverId: number): Promise<{ totalEarnings: string; totalTips: string; totalRides: number }>;
   
   // Ratings
   createRideRating(rating: InsertRideRating): Promise<RideRating>;
@@ -434,17 +440,72 @@ export class DatabaseStorage implements IStorage {
   }
 
   async completeRide(rideId: number, finalFare: string, actualTolls: string, actualDistanceMiles: string): Promise<Ride | undefined> {
+    // Get ride to check payment type for commission rate
+    const [existingRide] = await db.select().from(rides).where(eq(rides.id, rideId));
+    if (!existingRide) return undefined;
+    
+    // Calculate platform fee: 15% for self-pay, 10% for insurance
+    const fareAmount = parseFloat(finalFare);
+    const feePercent = existingRide.paymentType === "insurance" ? 10 : 15;
+    const platformFee = (fareAmount * feePercent / 100).toFixed(2);
+    const driverEarnings = (fareAmount - parseFloat(platformFee)).toFixed(2);
+    
     const [ride] = await db.update(rides)
       .set({ 
         status: "completed",
         finalFare,
         actualTolls,
-        distanceMiles: actualDistanceMiles,
-        paymentStatus: "pending"
+        actualDistanceMiles,
+        paymentStatus: "pending",
+        platformFeePercent: feePercent.toString(),
+        platformFee,
+        driverEarnings,
+        actualDropoffTime: new Date()
       })
       .where(eq(rides.id, rideId))
       .returning();
     return ride;
+  }
+  
+  async addTip(rideId: number, tipAmount: string): Promise<Ride | undefined> {
+    const [existingRide] = await db.select().from(rides).where(eq(rides.id, rideId));
+    if (!existingRide) return undefined;
+    
+    // Tips go 100% to driver
+    const currentEarnings = parseFloat(existingRide.driverEarnings || "0");
+    const newEarnings = (currentEarnings + parseFloat(tipAmount)).toFixed(2);
+    
+    const [ride] = await db.update(rides)
+      .set({ 
+        tipAmount,
+        tipPaidAt: new Date(),
+        driverEarnings: newEarnings
+      })
+      .where(eq(rides.id, rideId))
+      .returning();
+    return ride;
+  }
+  
+  async getDriverEarnings(driverId: number): Promise<{ totalEarnings: string; totalTips: string; totalRides: number }> {
+    const driverRides = await db.select().from(rides)
+      .where(and(
+        eq(rides.driverId, driverId),
+        eq(rides.status, "completed")
+      ));
+    
+    let totalEarnings = 0;
+    let totalTips = 0;
+    
+    for (const ride of driverRides) {
+      totalEarnings += parseFloat(ride.driverEarnings || "0");
+      totalTips += parseFloat(ride.tipAmount || "0");
+    }
+    
+    return {
+      totalEarnings: totalEarnings.toFixed(2),
+      totalTips: totalTips.toFixed(2),
+      totalRides: driverRides.length
+    };
   }
 
   async incrementDriverCompletedRides(driverId: number): Promise<void> {

@@ -214,6 +214,13 @@ export const rides = pgTable("rides", {
   paymentAttempts: integer("payment_attempts").default(0),
   paymentFailedAt: timestamp("payment_failed_at"),
   finalFare: numeric("final_fare"),
+  // Platform commission (15% self-pay, 10% insurance)
+  platformFeePercent: numeric("platform_fee_percent").default("15"),
+  platformFee: numeric("platform_fee").default("0"),
+  driverEarnings: numeric("driver_earnings").default("0"),
+  // Tips
+  tipAmount: numeric("tip_amount").default("0"),
+  tipPaidAt: timestamp("tip_paid_at"),
   // Actual trip data
   actualPickupTime: timestamp("actual_pickup_time"),
   actualDropoffTime: timestamp("actual_dropoff_time"),

@@ -1390,5 +1390,90 @@ export async function registerRoutes(
     }
   });
 
+  // Add tip to a completed ride
+  app.post("/api/rides/:id/tip", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { tipAmount } = req.body;
+      
+      if (!tipAmount || parseFloat(tipAmount) <= 0) {
+        return res.status(400).json({ message: "Valid tip amount is required" });
+      }
+      
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      if (ride.status !== "completed") {
+        return res.status(400).json({ message: "Can only tip on completed rides" });
+      }
+      
+      if (ride.tipAmount && parseFloat(ride.tipAmount) > 0) {
+        return res.status(400).json({ message: "Tip already added to this ride" });
+      }
+      
+      const updatedRide = await storage.addTip(rideId, tipAmount);
+      res.json({ 
+        message: "Tip added successfully",
+        ride: updatedRide
+      });
+    } catch (error) {
+      console.error("Error adding tip:", error);
+      res.status(500).json({ message: "Failed to add tip" });
+    }
+  });
+  
+  // Get driver earnings summary
+  app.get("/api/drivers/:id/earnings", async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      const earnings = await storage.getDriverEarnings(driverId);
+      res.json(earnings);
+    } catch (error) {
+      console.error("Error fetching driver earnings:", error);
+      res.status(500).json({ message: "Failed to fetch earnings" });
+    }
+  });
+  
+  // Get fare breakdown for a ride (shows commission)
+  app.get("/api/rides/:id/fare-breakdown", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      const finalFare = parseFloat(ride.finalFare || ride.estimatedFare || "0");
+      const platformFeePercent = parseFloat(ride.platformFeePercent || (ride.paymentType === "insurance" ? "10" : "15"));
+      const platformFee = parseFloat(ride.platformFee || "0") || (finalFare * platformFeePercent / 100);
+      const driverEarnings = parseFloat(ride.driverEarnings || "0") || (finalFare - platformFee);
+      const tipAmount = parseFloat(ride.tipAmount || "0");
+      const totalDriverPayout = driverEarnings + tipAmount;
+      
+      res.json({
+        rideId,
+        baseFare: ride.baseFare || "20.00",
+        distanceMiles: ride.distanceMiles || ride.actualDistanceMiles,
+        estimatedFare: ride.estimatedFare,
+        finalFare: ride.finalFare,
+        tolls: ride.actualTolls || ride.estimatedTolls,
+        surgeMultiplier: ride.surgeMultiplier,
+        platformFeePercent: platformFeePercent.toFixed(0) + "%",
+        platformFee: platformFee.toFixed(2),
+        driverEarnings: driverEarnings.toFixed(2),
+        tipAmount: tipAmount.toFixed(2),
+        totalDriverPayout: totalDriverPayout.toFixed(2),
+        paymentType: ride.paymentType,
+        paymentStatus: ride.paymentStatus
+      });
+    } catch (error) {
+      console.error("Error fetching fare breakdown:", error);
+      res.status(500).json({ message: "Failed to fetch fare breakdown" });
+    }
+  });
+
   return httpServer;
 }
