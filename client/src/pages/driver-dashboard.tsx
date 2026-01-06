@@ -63,7 +63,7 @@ const statusLabels: Record<string, string> = {
 };
 
 interface RideCardProps {
-  ride: Ride & { distanceToPickup?: string; estimatedMinutesToPickup?: number };
+  ride: Ride & { distanceToPickup?: string | null; estimatedMinutesToPickup?: number | null };
   driverId: number;
   onAction: () => void;
   isNew?: boolean;
@@ -198,11 +198,20 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
             >
               {statusLabels[ride.status]}
             </Badge>
-            {ride.status === "requested" && ride.distanceToPickup && (
-              <div className="text-xs text-muted-foreground">
-                <span className="font-semibold text-foreground">{ride.distanceToPickup} mi</span> away
-                {ride.estimatedMinutesToPickup && (
-                  <span className="ml-1">({ride.estimatedMinutesToPickup} min)</span>
+            {ride.status === "requested" && (ride.distanceToPickup || ride.estimatedFare) && (
+              <div className="flex flex-col items-end gap-1">
+                {ride.estimatedFare && (
+                  <div className="text-sm font-bold text-green-600 dark:text-green-400" data-testid="text-fare">
+                    ${ride.estimatedFare}
+                  </div>
+                )}
+                {ride.distanceToPickup && (
+                  <div className="text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">{ride.distanceToPickup} mi</span> away
+                    {ride.estimatedMinutesToPickup && (
+                      <span className="ml-1">({ride.estimatedMinutesToPickup} min)</span>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -376,8 +385,8 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
 }
 
 interface RideWithDistance extends Ride {
-  distanceToPickup?: string;
-  estimatedMinutesToPickup?: number;
+  distanceToPickup?: string | null;
+  estimatedMinutesToPickup?: number | null;
 }
 
 export default function DriverDashboard() {

@@ -310,6 +310,7 @@ export async function registerRoutes(
       const ridesWithDistance = requestedRides.map(ride => {
         let distanceToPickup: number | null = null;
         let estimatedMinutesToPickup: number | null = null;
+        let estimatedFare: string | null = null;
         
         if (!isNaN(driverLat) && !isNaN(driverLng) && ride.pickupLat && ride.pickupLng) {
           distanceToPickup = calculateHaversineDistance(
@@ -319,10 +320,23 @@ export async function registerRoutes(
           estimatedMinutesToPickup = Math.round(distanceToPickup * 2);
         }
         
+        // Calculate estimated trip fare based on pickup to dropoff distance
+        if (ride.pickupLat && ride.pickupLng && ride.dropoffLat && ride.dropoffLng) {
+          const tripDistance = calculateHaversineDistance(
+            parseFloat(ride.pickupLat), parseFloat(ride.pickupLng),
+            parseFloat(ride.dropoffLat), parseFloat(ride.dropoffLng)
+          );
+          // Fare formula: $20 base + $2.50/mile, $22 minimum
+          const rawFare = 20 + (tripDistance * 2.50);
+          const fare = Math.max(22, rawFare);
+          estimatedFare = fare.toFixed(2);
+        }
+        
         return {
           ...ride,
           distanceToPickup: distanceToPickup?.toFixed(1),
-          estimatedMinutesToPickup
+          estimatedMinutesToPickup,
+          estimatedFare
         };
       });
       
@@ -1149,7 +1163,7 @@ export async function registerRoutes(
             vehicleColor: driver.vehicleColor,
             vehicleMake: driver.vehicleMake,
             vehicleModel: driver.vehicleModel,
-            profilePhotoPath: driver.profilePhotoPath,
+            profilePhotoDoc: driver.profilePhotoDoc,
             averageRating: driver.averageRating,
             currentLat: driver.currentLat,
             currentLng: driver.currentLng
