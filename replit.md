@@ -226,6 +226,25 @@ Database tables:
 - Chat available only during active ride statuses (accepted → in_progress)
 - Message history stored in database for audit purposes
 
+### Security & Data Protection
+- **Session Security**:
+  - PostgreSQL-backed session store in production (connect-pg-simple)
+  - Required SESSION_SECRET in production (exits if missing)
+  - HttpOnly cookies with SameSite=strict in production
+  - Secure cookies when running on HTTPS
+- **Authentication Rate Limiting**:
+  - Login attempts limited to 5 per 15 minutes per IP
+  - 30-minute block after exceeding max attempts
+  - Rate limit cleared on successful login
+- **WebSocket Authentication**:
+  - Token-based auth via `/api/auth/ws-token` endpoint
+  - Short-lived tokens (1 minute expiry) for WebSocket connections
+  - Rides WebSocket requires driver/admin role
+  - Chat WebSocket verifies user is authorized participant in ride
+  - Invalid/missing tokens result in immediate connection close (4401)
+- **Password Security**: bcrypt hashing with salt rounds
+- **Input Validation**: Zod schemas validate all API inputs
+
 ### Safety Features (Uber-Inspired)
 - **Trip Sharing**: Patients can share live trip status with emergency contacts via unique share codes
 - **SOS Button**: One-tap emergency 911 calling for immediate assistance

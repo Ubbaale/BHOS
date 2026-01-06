@@ -6,6 +6,8 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
+import connectPgSimple from "connect-pg-simple";
+import pg from "pg";
 
 const app = express();
 const httpServer = createServer(app);
@@ -42,10 +44,14 @@ async function initStripe() {
 
     console.log('Setting up managed webhook...');
     const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-    const { webhook } = await stripeSync.findOrCreateManagedWebhook(
+    const webhookResult = await stripeSync.findOrCreateManagedWebhook(
       `${webhookBaseUrl}/api/stripe/webhook`
     );
-    console.log(`Webhook configured: ${webhook.url}`);
+    if (webhookResult?.webhook?.url) {
+      console.log(`Webhook configured: ${webhookResult.webhook.url}`);
+    } else {
+      console.warn('Stripe webhook setup incomplete - webhook URL not available');
+    }
 
     console.log('Syncing Stripe data...');
     stripeSync.syncBackfill()
@@ -102,17 +108,43 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-// Session middleware for authentication
+// Session middleware for authentication with production-grade security
+const isProduction = process.env.NODE_ENV === "production";
+
+// Enforce strong session secret in production
+const sessionSecret = process.env.SESSION_SECRET;
+if (isProduction && !sessionSecret) {
+  console.error("SECURITY ERROR: SESSION_SECRET environment variable is required in production!");
+  process.exit(1);
+}
+
+// Configure session store - use PostgreSQL in production for security and scalability
+let sessionStore: session.Store | undefined;
+if (isProduction && process.env.DATABASE_URL) {
+  const PgSession = connectPgSimple(session);
+  const pool = new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
+  });
+  sessionStore = new PgSession({
+    pool,
+    tableName: 'user_sessions',
+    createTableIfMissing: true,
+  });
+  console.log("Using PostgreSQL session store for production security");
+}
+
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "carehub-session-secret-dev",
+    store: sessionStore,
+    secret: sessionSecret || "carehub-session-secret-dev",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: isProduction,
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: "lax",
+      sameSite: isProduction ? "strict" : "lax", // Strict in production for CSRF protection
     },
   })
 );

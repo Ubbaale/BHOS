@@ -101,11 +101,44 @@ const upload = multer({
   }
 });
 
+// WebSocket session tokens for secure connections (short-lived, tied to session)
+const wsTokens: Map<string, { userId: string; role: string; expiresAt: number }> = new Map();
+const WS_TOKEN_EXPIRY = 60 * 1000; // 1 minute - tokens are short-lived
+
+function generateWsToken(userId: string, role: string): string {
+  const token = crypto.randomBytes(32).toString('hex');
+  wsTokens.set(token, { userId, role, expiresAt: Date.now() + WS_TOKEN_EXPIRY });
+  return token;
+}
+
+function validateWsToken(token: string): { userId: string; role: string } | null {
+  const data = wsTokens.get(token);
+  if (!data) return null;
+  if (Date.now() > data.expiresAt) {
+    wsTokens.delete(token);
+    return null;
+  }
+  // Token is single-use for security
+  wsTokens.delete(token);
+  return { userId: data.userId, role: data.role };
+}
+
+// Clean up expired tokens periodically
+setInterval(() => {
+  const now = Date.now();
+  wsTokens.forEach((data, token) => {
+    if (now > data.expiresAt) {
+      wsTokens.delete(token);
+    }
+  });
+}, 60000); // Every minute
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   
+  // Jobs WebSocket - public feed for job listings (no auth required)
   const wss = new WebSocketServer({ server: httpServer, path: "/ws/jobs" });
   
   wss.on("connection", (ws) => {
@@ -124,6 +157,51 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Authentication required" });
     }
     next();
+  };
+
+  // Rate limiting for login attempts (per IP) - prevent brute force attacks
+  const loginAttempts: Map<string, { count: number; resetAt: number; blockedUntil?: number }> = new Map();
+  const MAX_LOGIN_ATTEMPTS = 5;
+  const LOGIN_RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
+  const LOGIN_BLOCK_DURATION = 30 * 60 * 1000; // 30 minutes block after max attempts
+
+  const loginRateLimiter = (req: Request, res: Response, next: NextFunction) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const attempts = loginAttempts.get(ip);
+
+    if (attempts) {
+      // Check if IP is blocked
+      if (attempts.blockedUntil && now < attempts.blockedUntil) {
+        const remainingMinutes = Math.ceil((attempts.blockedUntil - now) / 60000);
+        return res.status(429).json({ 
+          message: `Too many login attempts. Please try again in ${remainingMinutes} minutes.` 
+        });
+      }
+
+      // Reset if window has passed
+      if (now >= attempts.resetAt) {
+        loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_RATE_LIMIT_WINDOW });
+      } else if (attempts.count >= MAX_LOGIN_ATTEMPTS) {
+        // Block the IP
+        attempts.blockedUntil = now + LOGIN_BLOCK_DURATION;
+        return res.status(429).json({ 
+          message: "Too many login attempts. Your IP has been temporarily blocked." 
+        });
+      } else {
+        attempts.count++;
+      }
+    } else {
+      loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_RATE_LIMIT_WINDOW });
+    }
+
+    // Store reference to clear on successful login
+    (req as any).loginRateLimitKey = ip;
+    next();
+  };
+
+  const clearLoginAttempts = (ip: string) => {
+    loginAttempts.delete(ip);
   };
 
   // Rate limiting for tracking token validation (simple in-memory, per IP + ride)
@@ -223,8 +301,8 @@ export async function registerRoutes(
     next();
   };
 
-  // Auth routes
-  app.post("/api/auth/login", async (req, res) => {
+  // Auth routes with rate limiting protection
+  app.post("/api/auth/login", loginRateLimiter, async (req, res) => {
     try {
       const { username, password } = req.body;
       
@@ -274,6 +352,11 @@ export async function registerRoutes(
       req.session.role = user.role || "user";
       if (driverId) {
         req.session.driverId = driverId;
+      }
+
+      // Clear rate limiting on successful login
+      if ((req as any).loginRateLimitKey) {
+        clearLoginAttempts((req as any).loginRateLimitKey);
       }
 
       res.json({ 
@@ -335,6 +418,12 @@ export async function registerRoutes(
         kycStatus: driverProfile.kycStatus
       } : null
     });
+  });
+
+  // Get a short-lived token for WebSocket authentication
+  app.get("/api/auth/ws-token", requireAuth, (req, res) => {
+    const token = generateWsToken(req.session.userId!, req.session.role!);
+    res.json({ token });
   });
   
   app.get("/api/jobs", async (_req, res) => {
@@ -491,11 +580,37 @@ export async function registerRoutes(
     }
   });
 
+  // Rides WebSocket - requires authentication for driver/admin access
   const rideWss = new WebSocketServer({ server: httpServer, path: "/ws/rides" });
   
-  rideWss.on("connection", (ws) => {
+  rideWss.on("connection", (ws, req) => {
+    // Parse token from query string for authentication
+    const url = new URL(req.url || "", `http://${req.headers.host}`);
+    const token = url.searchParams.get("token");
+    
+    // Validate authentication token - required for ride updates
+    if (!token) {
+      console.warn("Security: Rejected ride WebSocket connection - no token provided");
+      ws.close(4401, "Authentication required");
+      return;
+    }
+    
+    const userInfo = validateWsToken(token);
+    if (!userInfo) {
+      console.warn("Security: Rejected ride WebSocket connection - invalid/expired token");
+      ws.close(4401, "Invalid or expired token");
+      return;
+    }
+    
+    // Only drivers and admins can receive ride updates
+    if (userInfo.role !== "driver" && userInfo.role !== "admin") {
+      console.warn(`Security: Rejected ride WebSocket connection - unauthorized role: ${userInfo.role}`);
+      ws.close(4403, "Unauthorized role");
+      return;
+    }
+    
+    console.log(`Authenticated ride WebSocket connection for user ${userInfo.userId} (${userInfo.role})`);
     rideClients.add(ws);
-    console.log("Ride WebSocket client connected");
     
     ws.on("close", () => {
       rideClients.delete(ws);
@@ -1768,28 +1883,82 @@ export async function registerRoutes(
     }
   });
 
-  // Chat WebSocket
+  // Chat WebSocket - requires authentication for private ride chats
   const chatWss = new WebSocketServer({ server: httpServer, path: "/ws/chat" });
   
-  chatWss.on("connection", (ws, req) => {
+  chatWss.on("connection", async (ws, req) => {
     const url = new URL(req.url || "", `http://${req.headers.host}`);
     const rideId = parseInt(url.searchParams.get("rideId") || "0");
+    const token = url.searchParams.get("token");
     
-    if (rideId > 0) {
-      if (!chatClients.has(rideId)) {
-        chatClients.set(rideId, new Set());
-      }
-      chatClients.get(rideId)!.add(ws);
-      console.log(`Chat client connected for ride ${rideId}`);
-      
-      ws.on("close", () => {
-        chatClients.get(rideId)?.delete(ws);
-        if (chatClients.get(rideId)?.size === 0) {
-          chatClients.delete(rideId);
-        }
-        console.log(`Chat client disconnected for ride ${rideId}`);
-      });
+    // Validate authentication token - required for chat
+    if (!token) {
+      console.warn(`Security: Rejected chat WebSocket for ride ${rideId} - no token`);
+      ws.close(4401, "Authentication required");
+      return;
     }
+    
+    const userInfo = validateWsToken(token);
+    if (!userInfo) {
+      console.warn(`Security: Rejected chat WebSocket for ride ${rideId} - invalid/expired token`);
+      ws.close(4401, "Invalid or expired token");
+      return;
+    }
+    
+    if (rideId <= 0) {
+      console.warn(`Security: Rejected chat WebSocket - invalid ride ID: ${rideId}`);
+      ws.close(4400, "Invalid ride ID");
+      return;
+    }
+    
+    // Verify user is authorized for this ride (driver, dispatcher, or admin)
+    try {
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        console.warn(`Security: Rejected chat WebSocket - ride ${rideId} not found`);
+        ws.close(4404, "Ride not found");
+        return;
+      }
+      
+      const userId = parseInt(userInfo.userId);
+      const isAdmin = userInfo.role === "admin";
+      const isDispatcher = userInfo.role === "dispatcher";
+      
+      // Check if user is the assigned driver
+      let isDriver = false;
+      if (ride.driverId) {
+        const driverProfile = await storage.getDriverProfile(ride.driverId);
+        if (driverProfile && driverProfile.userId === userId) {
+          isDriver = true;
+        }
+      }
+      
+      if (!isAdmin && !isDispatcher && !isDriver) {
+        console.warn(`Security: Rejected chat WebSocket - user ${userId} not authorized for ride ${rideId}`);
+        ws.close(4403, "Not authorized for this ride");
+        return;
+      }
+      
+      console.log(`Authorized chat WebSocket for ride ${rideId} by user ${userInfo.userId} (${userInfo.role})`);
+    } catch (error) {
+      console.error(`Error verifying ride access for chat WebSocket:`, error);
+      ws.close(4500, "Authorization check failed");
+      return;
+    }
+    
+    if (!chatClients.has(rideId)) {
+      chatClients.set(rideId, new Set());
+    }
+    chatClients.get(rideId)!.add(ws);
+    console.log(`Chat client connected for ride ${rideId}`);
+    
+    ws.on("close", () => {
+      chatClients.get(rideId)?.delete(ws);
+      if (chatClients.get(rideId)?.size === 0) {
+        chatClients.delete(rideId);
+      }
+      console.log(`Chat client disconnected for ride ${rideId}`);
+    });
   });
 
   // Chat API endpoints
