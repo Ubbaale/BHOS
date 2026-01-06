@@ -982,6 +982,17 @@ export async function registerRoutes(
     }
   });
 
+  // NOTE: /api/drivers/all must come BEFORE /api/drivers/:id to avoid "all" being parsed as an ID
+  app.get("/api/drivers/all", async (_req, res) => {
+    try {
+      const drivers = await storage.getAllDrivers();
+      res.json(drivers);
+    } catch (error) {
+      console.error("Error fetching all drivers:", error);
+      res.status(500).json({ message: "Failed to fetch drivers" });
+    }
+  });
+
   app.get("/api/drivers/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -1028,16 +1039,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating driver availability:", error);
       res.status(500).json({ message: "Failed to update driver availability" });
-    }
-  });
-
-  app.get("/api/drivers/all", async (_req, res) => {
-    try {
-      const drivers = await storage.getAllDrivers();
-      res.json(drivers);
-    } catch (error) {
-      console.error("Error fetching all drivers:", error);
-      res.status(500).json({ message: "Failed to fetch drivers" });
     }
   });
 
