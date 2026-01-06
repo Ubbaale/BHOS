@@ -35,9 +35,10 @@ export interface IStorage {
   getAllRides(): Promise<Ride[]>;
   getActiveRides(): Promise<Ride[]>;
   getRide(id: number): Promise<Ride | undefined>;
-  createRide(ride: InsertRide): Promise<Ride>;
+  createRide(ride: InsertRide & { trackingToken?: string; trackingTokenExpiresAt?: Date }): Promise<Ride>;
   updateRideStatus(id: number, status: string): Promise<Ride | undefined>;
   assignDriver(rideId: number, driverId: number): Promise<Ride | undefined>;
+  expireTrackingToken(rideId: number): Promise<void>;
   
   getRideEvents(rideId: number): Promise<RideEvent[]>;
   createRideEvent(event: InsertRideEvent): Promise<RideEvent>;
@@ -220,9 +221,18 @@ export class DatabaseStorage implements IStorage {
     return ride;
   }
 
-  async createRide(insertRide: InsertRide): Promise<Ride> {
-    const [ride] = await db.insert(rides).values(insertRide).returning();
+  async createRide(insertRide: InsertRide & { trackingToken?: string; trackingTokenExpiresAt?: Date }): Promise<Ride> {
+    const [ride] = await db.insert(rides).values(insertRide as any).returning();
     return ride;
+  }
+  
+  async expireTrackingToken(rideId: number): Promise<void> {
+    await db.update(rides)
+      .set({ 
+        trackingToken: null, 
+        trackingTokenExpiresAt: null 
+      })
+      .where(eq(rides.id, rideId));
   }
 
   async updateRideStatus(id: number, status: string): Promise<Ride | undefined> {

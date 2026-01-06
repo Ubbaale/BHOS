@@ -11,6 +11,7 @@ import path from "path";
 import fs from "fs";
 import express from "express";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 const FIELDHCP_API_URL = "https://admin.carehubapp.com/APIs/Employer/JobSearch";
 const FIELDHCP_AUTH_TOKEN = process.env.FIELDHCP_AUTH_TOKEN || "";
@@ -69,6 +70,21 @@ function generateVerificationCode(): string {
 
 function generateShareCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+function generateTrackingToken(): { token: string; hash: string } {
+  const token = crypto.randomBytes(32).toString('hex');
+  const hash = crypto.createHash('sha256').update(token).digest('hex');
+  return { token, hash };
+}
+
+function hashTrackingToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function validateTrackingToken(providedToken: string, storedHash: string): boolean {
+  const providedHash = hashTrackingToken(providedToken);
+  return crypto.timingSafeEqual(Buffer.from(providedHash), Buffer.from(storedHash));
 }
 
 const upload = multer({
@@ -542,7 +558,16 @@ export async function registerRoutes(
         }
       }
       
-      const ride = await storage.createRide(parsed);
+      // Generate secure tracking token for patient access
+      const { token: trackingToken, hash: trackingTokenHash } = generateTrackingToken();
+      const appointmentTime = new Date(parsed.appointmentTime);
+      const tokenExpiresAt = new Date(appointmentTime.getTime() + 24 * 60 * 60 * 1000); // 24 hours after appointment
+      
+      const ride = await storage.createRide({
+        ...parsed,
+        trackingToken: trackingTokenHash,
+        trackingTokenExpiresAt: tokenExpiresAt,
+      });
       
       await storage.createRideEvent({
         rideId: ride.id,
@@ -556,7 +581,12 @@ export async function registerRoutes(
         console.error("Failed to send push notification:", err);
       });
       
-      res.status(201).json({ ...ride, emergencyOverrideUsed: isEmergency && patientAccount?.accountStatus === "blocked" });
+      // Return the unhashed token to patient (only time they can get it)
+      res.status(201).json({ 
+        ...ride, 
+        trackingToken, // Send unhashed token to patient
+        emergencyOverrideUsed: isEmergency && patientAccount?.accountStatus === "blocked" 
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid ride data", errors: error.errors });
