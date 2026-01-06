@@ -491,3 +491,43 @@ export const contractorAgreements = pgTable("contractor_agreements", {
 });
 
 export type ContractorAgreement = typeof contractorAgreements.$inferSelect;
+
+// Incident reports for ride-related issues (accidents, safety concerns, etc.)
+export const incidentReports = pgTable("incident_reports", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  rideId: integer("ride_id").references(() => rides.id),
+  reporterId: integer("reporter_id"), // Can be patientId or driverId depending on reporterType
+  reporterType: text("reporter_type").notNull(), // 'patient' or 'driver'
+  reporterName: text("reporter_name").notNull(),
+  reporterPhone: text("reporter_phone").notNull(),
+  reporterEmail: text("reporter_email"),
+  category: text("category").notNull(), // 'accident', 'driver_behavior', 'vehicle_issue', 'safety_concern', 'billing', 'other'
+  severity: text("severity").notNull().default("medium"), // 'low', 'medium', 'high', 'critical'
+  description: text("description").notNull(),
+  location: text("location"),
+  incidentDate: timestamp("incident_date"),
+  evidenceUrls: text("evidence_urls").array().default([]), // Photo/document uploads
+  status: text("status").notNull().default("open"), // 'open', 'investigating', 'resolved', 'closed'
+  adminNotes: text("admin_notes"),
+  assignedTo: text("assigned_to"),
+  resolvedAt: timestamp("resolved_at"),
+  resolution: text("resolution"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertIncidentReportSchema = z.object({
+  rideId: z.number().optional(),
+  reporterId: z.number().optional(),
+  reporterType: z.enum(["patient", "driver"]),
+  reporterName: z.string().min(1),
+  reporterPhone: z.string().min(1),
+  reporterEmail: z.string().email().optional(),
+  category: z.enum(["accident", "driver_behavior", "vehicle_issue", "safety_concern", "billing", "other"]),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional(),
+  description: z.string().min(10),
+  location: z.string().optional(),
+  incidentDate: z.coerce.date().optional(),
+});
+export type InsertIncidentReport = z.infer<typeof insertIncidentReportSchema>;
+export type IncidentReport = typeof incidentReports.$inferSelect;

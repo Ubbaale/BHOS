@@ -532,6 +532,13 @@ export default function TrackRide() {
               </Link>
             )}
 
+            <Link href={`/report/${ride.id}`}>
+              <Button variant="outline" data-testid="button-report-issue">
+                <AlertTriangle className="w-4 h-4 mr-2" />
+                Report Issue
+              </Button>
+            </Link>
+
             {ride.status === "completed" && !ride.tipAmount && (
               <Dialog open={tipDialogOpen} onOpenChange={setTipDialogOpen}>
                 <DialogTrigger asChild>

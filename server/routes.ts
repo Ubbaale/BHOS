@@ -1997,5 +1997,266 @@ export async function registerRoutes(
     }
   });
 
+  // ============ ADMIN ROUTES ============
+  
+  // Get all rides for admin (with optional filters)
+  app.get("/api/admin/rides", async (req, res) => {
+    try {
+      const allRides = await storage.getAllRides();
+      const { status, driverId, patientPhone } = req.query;
+      
+      let filteredRides = allRides;
+      if (status) {
+        filteredRides = filteredRides.filter(r => r.status === status);
+      }
+      if (driverId) {
+        filteredRides = filteredRides.filter(r => r.driverId === parseInt(driverId as string));
+      }
+      if (patientPhone) {
+        filteredRides = filteredRides.filter(r => r.patientPhone === patientPhone);
+      }
+      
+      res.json(filteredRides);
+    } catch (error) {
+      console.error("Error fetching admin rides:", error);
+      res.status(500).json({ message: "Failed to fetch rides" });
+    }
+  });
+  
+  // Get admin dashboard stats
+  app.get("/api/admin/stats", async (req, res) => {
+    try {
+      const allRides = await storage.getAllRides();
+      const allDrivers = await storage.getAllDrivers();
+      const patientAccounts = await storage.getAllPatientAccounts();
+      const incidents = await storage.getAllIncidentReports();
+      
+      const stats = {
+        totalRides: allRides.length,
+        completedRides: allRides.filter(r => r.status === "completed").length,
+        activeRides: allRides.filter(r => ["accepted", "arrived", "in_progress"].includes(r.status)).length,
+        cancelledRides: allRides.filter(r => r.status === "cancelled").length,
+        totalDrivers: allDrivers.length,
+        activeDrivers: allDrivers.filter(d => d.applicationStatus === "approved" && d.kycStatus === "approved").length,
+        pendingDrivers: allDrivers.filter(d => d.applicationStatus === "pending").length,
+        suspendedDrivers: allDrivers.filter(d => d.accountStatus === "suspended").length,
+        totalPatients: patientAccounts.length,
+        blockedPatients: patientAccounts.filter(p => p.accountStatus === "blocked").length,
+        totalRevenue: allRides.filter(r => r.status === "completed").reduce((sum, r) => sum + parseFloat(r.platformFee || "0"), 0).toFixed(2),
+        openIncidents: incidents.filter(i => i.status === "open" || i.status === "investigating").length,
+        totalIncidents: incidents.length
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching admin stats:", error);
+      res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+  
+  // Get all patient accounts for admin
+  app.get("/api/admin/patients", async (req, res) => {
+    try {
+      const accounts = await storage.getAllPatientAccounts();
+      res.json(accounts);
+    } catch (error) {
+      console.error("Error fetching patient accounts:", error);
+      res.status(500).json({ message: "Failed to fetch patient accounts" });
+    }
+  });
+  
+  // Update patient account status (suspend/unsuspend/block/unblock)
+  app.patch("/api/admin/patients/:phone/status", async (req, res) => {
+    try {
+      const { phone } = req.params;
+      const { status, reason } = req.body;
+      
+      if (!["good_standing", "warning", "restricted", "blocked"].includes(status)) {
+        return res.status(400).json({ message: "Invalid account status" });
+      }
+      
+      const updated = await storage.updatePatientAccountStatus(decodeURIComponent(phone), status, reason);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating patient status:", error);
+      res.status(500).json({ message: "Failed to update patient status" });
+    }
+  });
+  
+  // Update driver account status (suspend/unsuspend/deactivate)
+  app.patch("/api/admin/drivers/:id/status", async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      const { status, reason } = req.body;
+      
+      if (!["active", "suspended", "deactivated"].includes(status)) {
+        return res.status(400).json({ message: "Invalid account status" });
+      }
+      
+      const updated = await storage.updateDriverAccountStatus(driverId, status, reason);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating driver status:", error);
+      res.status(500).json({ message: "Failed to update driver status" });
+    }
+  });
+  
+  // Admin cancel a ride
+  app.post("/api/admin/rides/:id/cancel", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { reason } = req.body;
+      
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      const cancelled = await storage.cancelRide(rideId, "admin", reason || "Cancelled by admin", "0");
+      await storage.createRideEvent({
+        rideId,
+        status: "cancelled",
+        note: `Cancelled by admin: ${reason || "No reason provided"}`
+      });
+      
+      broadcastRideUpdate("status_change", cancelled);
+      res.json(cancelled);
+    } catch (error) {
+      console.error("Error cancelling ride:", error);
+      res.status(500).json({ message: "Failed to cancel ride" });
+    }
+  });
+  
+  // ============ INCIDENT REPORTS ============
+  
+  // Configure multer for incident evidence uploads
+  const incidentUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => {
+        const dir = './uploads/incidents';
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        cb(null, dir);
+      },
+      filename: (_req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+      }
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only PNG, JPG, and PDF files are allowed.'));
+      }
+    }
+  });
+  
+  // Serve incident evidence files
+  app.use('/uploads/incidents', express.static('uploads/incidents'));
+  
+  // Create incident report (with evidence upload)
+  app.post("/api/incidents", incidentUpload.array('evidence', 5), async (req, res) => {
+    try {
+      const { rideId, reporterType, reporterName, reporterPhone, reporterEmail, category, severity, description, location, incidentDate } = req.body;
+      
+      // Validate required fields
+      if (!reporterType || !reporterName || !reporterPhone || !category || !description) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      // Process uploaded files
+      const evidenceUrls: string[] = [];
+      if (req.files && Array.isArray(req.files)) {
+        for (const file of req.files) {
+          evidenceUrls.push(`/uploads/incidents/${file.filename}`);
+        }
+      }
+      
+      const report = await storage.createIncidentReport({
+        rideId: rideId ? parseInt(rideId) : undefined,
+        reporterType,
+        reporterName,
+        reporterPhone,
+        reporterEmail,
+        category,
+        severity: severity || "medium",
+        description,
+        location,
+        incidentDate: incidentDate ? new Date(incidentDate) : undefined,
+        evidenceUrls
+      });
+      
+      res.status(201).json(report);
+    } catch (error) {
+      console.error("Error creating incident report:", error);
+      res.status(500).json({ message: "Failed to create incident report" });
+    }
+  });
+  
+  // Get all incident reports (admin)
+  app.get("/api/admin/incidents", async (req, res) => {
+    try {
+      const incidents = await storage.getAllIncidentReports();
+      res.json(incidents);
+    } catch (error) {
+      console.error("Error fetching incidents:", error);
+      res.status(500).json({ message: "Failed to fetch incidents" });
+    }
+  });
+  
+  // Get single incident report
+  app.get("/api/incidents/:id", async (req, res) => {
+    try {
+      const incident = await storage.getIncidentReport(parseInt(req.params.id));
+      if (!incident) {
+        return res.status(404).json({ message: "Incident not found" });
+      }
+      res.json(incident);
+    } catch (error) {
+      console.error("Error fetching incident:", error);
+      res.status(500).json({ message: "Failed to fetch incident" });
+    }
+  });
+  
+  // Get incidents by ride
+  app.get("/api/rides/:id/incidents", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const incidents = await storage.getIncidentReportsByRide(rideId);
+      res.json(incidents);
+    } catch (error) {
+      console.error("Error fetching ride incidents:", error);
+      res.status(500).json({ message: "Failed to fetch incidents" });
+    }
+  });
+  
+  // Update incident report (admin)
+  app.patch("/api/admin/incidents/:id", async (req, res) => {
+    try {
+      const incidentId = parseInt(req.params.id);
+      const { status, adminNotes, assignedTo, resolution } = req.body;
+      
+      const updated = await storage.updateIncidentReport(incidentId, {
+        status,
+        adminNotes,
+        assignedTo,
+        resolution
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Incident not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating incident:", error);
+      res.status(500).json({ message: "Failed to update incident" });
+    }
+  });
+
   return httpServer;
 }

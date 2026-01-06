@@ -11,7 +11,8 @@ import {
   type TripShare, type InsertTripShare,
   type RideRating, type InsertRideRating,
   type PatientAccount, type SurgePricing, type AnnualEarnings,
-  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing, annualEarnings, contractorAgreements
+  type IncidentReport, type InsertIncidentReport,
+  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing, annualEarnings, contractorAgreements, incidentReports
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ne, and, lt, isNull } from "drizzle-orm";
@@ -131,6 +132,20 @@ export interface IStorage {
   }>;
   mark1099Generated(driverId: number, taxYear: number): Promise<void>;
   getDriverTaxYears(driverId: number): Promise<number[]>;
+  
+  // Admin: Incident Reports
+  getAllIncidentReports(): Promise<IncidentReport[]>;
+  getIncidentReport(id: number): Promise<IncidentReport | undefined>;
+  createIncidentReport(report: InsertIncidentReport & { evidenceUrls?: string[] }): Promise<IncidentReport>;
+  updateIncidentReport(id: number, data: Partial<IncidentReport>): Promise<IncidentReport | undefined>;
+  getIncidentReportsByRide(rideId: number): Promise<IncidentReport[]>;
+  
+  // Admin: Patient Account Management
+  getAllPatientAccounts(): Promise<PatientAccount[]>;
+  updatePatientAccountStatus(phone: string, status: string, reason?: string): Promise<PatientAccount | undefined>;
+  
+  // Admin: Driver Account Management
+  updateDriverAccountStatus(driverId: number, status: string, reason?: string): Promise<DriverProfile | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -824,6 +839,94 @@ export class DatabaseStorage implements IStorage {
     });
     
     return Array.from(years).sort((a, b) => b - a);
+  }
+
+  // Admin: Incident Reports
+  async getAllIncidentReports(): Promise<IncidentReport[]> {
+    return db.select().from(incidentReports).orderBy(desc(incidentReports.createdAt));
+  }
+
+  async getIncidentReport(id: number): Promise<IncidentReport | undefined> {
+    const [report] = await db.select().from(incidentReports).where(eq(incidentReports.id, id));
+    return report;
+  }
+
+  async createIncidentReport(report: InsertIncidentReport & { evidenceUrls?: string[] }): Promise<IncidentReport> {
+    const [created] = await db.insert(incidentReports).values({
+      rideId: report.rideId,
+      reporterId: report.reporterId,
+      reporterType: report.reporterType,
+      reporterName: report.reporterName,
+      reporterPhone: report.reporterPhone,
+      reporterEmail: report.reporterEmail,
+      category: report.category,
+      severity: report.severity || "medium",
+      description: report.description,
+      location: report.location,
+      incidentDate: report.incidentDate,
+      evidenceUrls: report.evidenceUrls || [],
+    }).returning();
+    return created;
+  }
+
+  async updateIncidentReport(id: number, data: Partial<IncidentReport>): Promise<IncidentReport | undefined> {
+    const updateData: Partial<IncidentReport> = { ...data, updatedAt: new Date() };
+    if (data.status === "resolved" || data.status === "closed") {
+      updateData.resolvedAt = new Date();
+    }
+    const [updated] = await db.update(incidentReports)
+      .set(updateData)
+      .where(eq(incidentReports.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getIncidentReportsByRide(rideId: number): Promise<IncidentReport[]> {
+    return db.select().from(incidentReports)
+      .where(eq(incidentReports.rideId, rideId))
+      .orderBy(desc(incidentReports.createdAt));
+  }
+
+  // Admin: Patient Account Management
+  async getAllPatientAccounts(): Promise<PatientAccount[]> {
+    return db.select().from(patientAccounts).orderBy(desc(patientAccounts.createdAt));
+  }
+
+  async updatePatientAccountStatus(phone: string, status: string, reason?: string): Promise<PatientAccount | undefined> {
+    const [existing] = await db.select().from(patientAccounts).where(eq(patientAccounts.patientPhone, phone));
+    
+    if (!existing) {
+      // Create new patient account with the status
+      const [created] = await db.insert(patientAccounts).values({
+        patientPhone: phone,
+        accountStatus: status,
+        suspensionReason: reason,
+        suspendedAt: status === "blocked" || status === "restricted" ? new Date() : null
+      }).returning();
+      return created;
+    }
+    
+    const [updated] = await db.update(patientAccounts)
+      .set({
+        accountStatus: status,
+        suspensionReason: reason,
+        suspendedAt: status === "blocked" || status === "restricted" ? new Date() : null
+      })
+      .where(eq(patientAccounts.patientPhone, phone))
+      .returning();
+    return updated;
+  }
+
+  // Admin: Driver Account Management
+  async updateDriverAccountStatus(driverId: number, status: string, reason?: string): Promise<DriverProfile | undefined> {
+    const [updated] = await db.update(driverProfiles)
+      .set({
+        accountStatus: status,
+        suspensionReason: reason
+      })
+      .where(eq(driverProfiles.id, driverId))
+      .returning();
+    return updated;
   }
 }
 
