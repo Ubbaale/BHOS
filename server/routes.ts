@@ -12,7 +12,70 @@ import fs from "fs";
 import express from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+
+// JWT configuration for mobile apps
+const JWT_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(64).toString('hex');
+const JWT_ACCESS_EXPIRY = '15m';
+const JWT_REFRESH_EXPIRY = '7d';
+
+// Store refresh tokens (in production, use Redis or database)
+const refreshTokens: Map<string, { userId: number; deviceId: string; expiresAt: number }> = new Map();
+
+interface JwtPayload {
+  userId: number;
+  username: string;
+  role: string;
+  driverId?: number;
+  deviceId?: string;
+  type: 'access' | 'refresh';
+}
+
+function generateAccessToken(payload: Omit<JwtPayload, 'type'>): string {
+  return jwt.sign({ ...payload, type: 'access' }, JWT_SECRET, { expiresIn: JWT_ACCESS_EXPIRY });
+}
+
+function generateRefreshToken(payload: Omit<JwtPayload, 'type'>): string {
+  const refreshToken = jwt.sign({ ...payload, type: 'refresh' }, JWT_SECRET, { expiresIn: JWT_REFRESH_EXPIRY });
+  const decoded = jwt.decode(refreshToken) as jwt.JwtPayload;
+  refreshTokens.set(refreshToken, {
+    userId: payload.userId,
+    deviceId: payload.deviceId || 'unknown',
+    expiresAt: (decoded.exp || 0) * 1000
+  });
+  return refreshToken;
+}
+
+function verifyToken(token: string, type: 'access' | 'refresh'): JwtPayload | null {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    if (decoded.type !== type) return null;
+    if (type === 'refresh' && !refreshTokens.has(token)) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+// Mobile auth middleware
+function mobileAuthMiddleware(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Authorization token required' });
+  }
+  
+  const token = authHeader.substring(7);
+  const payload = verifyToken(token, 'access');
+  
+  if (!payload) {
+    return res.status(401).json({ message: 'Invalid or expired token' });
+  }
+  
+  // Attach user info to request
+  (req as any).mobileUser = payload;
+  next();
+}
 
 const FIELDHCP_API_URL = "https://admin.carehubapp.com/APIs/Employer/JobSearch";
 const FIELDHCP_AUTH_TOKEN = process.env.FIELDHCP_AUTH_TOKEN || "";
@@ -418,6 +481,156 @@ export async function registerRoutes(
         kycStatus: driverProfile.kycStatus
       } : null
     });
+  });
+
+  // ============================================
+  // MOBILE API ENDPOINTS (Token-based auth)
+  // ============================================
+  
+  // Mobile login - returns JWT access and refresh tokens
+  app.post("/api/mobile/auth/login", loginRateLimiter, async (req, res) => {
+    try {
+      const { username, password, deviceId } = req.body;
+      
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      // Get driver profile if user is a driver
+      let driverId: number | undefined;
+      let driverProfile = null;
+      if (user.role === "driver") {
+        const driver = await storage.getDriverByUserId(user.id);
+        if (driver) {
+          driverId = driver.id;
+          driverProfile = driver;
+        }
+      }
+
+      const tokenPayload = {
+        userId: user.id,
+        username: user.username,
+        role: user.role || "user",
+        driverId,
+        deviceId: deviceId || 'unknown'
+      };
+
+      const accessToken = generateAccessToken(tokenPayload);
+      const refreshToken = generateRefreshToken(tokenPayload);
+
+      res.json({
+        accessToken,
+        refreshToken,
+        expiresIn: 900, // 15 minutes in seconds
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role
+        },
+        driver: driverProfile ? {
+          id: driverProfile.id,
+          fullName: driverProfile.fullName,
+          applicationStatus: driverProfile.applicationStatus,
+          kycStatus: driverProfile.kycStatus
+        } : null
+      });
+    } catch (error) {
+      console.error("Mobile login error:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Mobile token refresh
+  app.post("/api/mobile/auth/refresh", async (req, res) => {
+    try {
+      const { refreshToken } = req.body;
+      
+      if (!refreshToken) {
+        return res.status(400).json({ message: "Refresh token required" });
+      }
+
+      const payload = verifyToken(refreshToken, 'refresh');
+      if (!payload) {
+        return res.status(401).json({ message: "Invalid or expired refresh token" });
+      }
+
+      // Invalidate old refresh token
+      refreshTokens.delete(refreshToken);
+
+      // Generate new tokens
+      const tokenPayload = {
+        userId: payload.userId,
+        username: payload.username,
+        role: payload.role,
+        driverId: payload.driverId,
+        deviceId: payload.deviceId
+      };
+
+      const newAccessToken = generateAccessToken(tokenPayload);
+      const newRefreshToken = generateRefreshToken(tokenPayload);
+
+      res.json({
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        expiresIn: 900
+      });
+    } catch (error) {
+      console.error("Token refresh error:", error);
+      res.status(500).json({ message: "Token refresh failed" });
+    }
+  });
+
+  // Mobile logout - invalidate refresh token
+  app.post("/api/mobile/auth/logout", async (req, res) => {
+    const { refreshToken } = req.body;
+    if (refreshToken) {
+      refreshTokens.delete(refreshToken);
+    }
+    res.json({ message: "Logged out successfully" });
+  });
+
+  // Mobile - get current user (using JWT)
+  app.get("/api/mobile/auth/me", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      
+      const user = await storage.getUserByUsername(mobileUser.username);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      let driverProfile = null;
+      if (mobileUser.driverId) {
+        driverProfile = await storage.getDriver(mobileUser.driverId);
+      }
+
+      res.json({
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role
+        },
+        driver: driverProfile ? {
+          id: driverProfile.id,
+          fullName: driverProfile.fullName,
+          applicationStatus: driverProfile.applicationStatus,
+          kycStatus: driverProfile.kycStatus
+        } : null
+      });
+    } catch (error) {
+      console.error("Mobile auth me error:", error);
+      res.status(500).json({ message: "Failed to get user info" });
+    }
   });
 
   // Get a short-lived token for WebSocket authentication
