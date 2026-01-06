@@ -14,6 +14,7 @@ import AdminDrivers from "@/pages/admin-drivers";
 import TripReceipt from "@/pages/trip-receipt";
 import TrackRide from "@/pages/track-ride";
 import SharedTracking from "@/pages/shared-tracking";
+import DriverEarnings from "@/pages/driver-earnings";
 
 function Router() {
   return (
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/driver" component={DriverDashboard} />
       <Route path="/driver/apply" component={DriverApply} />
       <Route path="/driver/kyc" component={DriverKyc} />
+      <Route path="/driver/earnings" component={DriverEarnings} />
       <Route path="/admin/drivers" component={AdminDrivers} />
       <Route path="/receipt/:id" component={TripReceipt} />
       <Route component={NotFound} />

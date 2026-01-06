@@ -124,6 +124,17 @@ export const driverProfiles = pgTable("driver_profiles", {
   suspensionReason: text("suspension_reason"),
   // Navigation preference
   navigationPreference: text("navigation_preference").default("default"), // 'default', 'google_maps', 'waze', 'apple_maps'
+  // Contractor onboarding fields
+  isContractorOnboarded: boolean("is_contractor_onboarded").default(false),
+  contractorAgreementSignedAt: timestamp("contractor_agreement_signed_at"),
+  ssnLast4: text("ssn_last_4"), // Last 4 digits of SSN for 1099
+  taxClassification: text("tax_classification").default("individual"), // 'individual', 'sole_proprietor', 'llc', 'corporation'
+  businessName: text("business_name"), // If operating under a business name
+  taxAddress: text("tax_address"),
+  taxCity: text("tax_city"),
+  taxState: text("tax_state"),
+  taxZip: text("tax_zip"),
+  w9ReceivedAt: timestamp("w9_received_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -154,6 +165,15 @@ export const insertDriverProfileSchema = z.object({
   vehicleRegistrationDoc: z.string().optional(),
   insuranceDoc: z.string().optional(),
   profilePhotoDoc: z.string().optional(),
+  // Contractor fields
+  isContractorOnboarded: z.boolean().optional(),
+  ssnLast4: z.string().length(4).optional(),
+  taxClassification: z.enum(["individual", "sole_proprietor", "llc", "corporation"]).optional(),
+  businessName: z.string().optional(),
+  taxAddress: z.string().optional(),
+  taxCity: z.string().optional(),
+  taxState: z.string().optional(),
+  taxZip: z.string().optional(),
 });
 
 export const kycStatuses = ["not_submitted", "pending_review", "approved", "rejected"] as const;
@@ -440,3 +460,34 @@ export const insertRideRatingSchema = z.object({
 });
 export type InsertRideRating = z.infer<typeof insertRideRatingSchema>;
 export type RideRating = typeof rideRatings.$inferSelect;
+
+// Annual earnings summary for 1099 generation
+export const annualEarnings = pgTable("annual_earnings", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  driverId: integer("driver_id").references(() => driverProfiles.id).notNull(),
+  taxYear: integer("tax_year").notNull(),
+  totalGrossEarnings: numeric("total_gross_earnings").default("0"),
+  totalTips: numeric("total_tips").default("0"),
+  totalTolls: numeric("total_tolls").default("0"),
+  totalRides: integer("total_rides").default(0),
+  totalMiles: numeric("total_miles").default("0"),
+  form1099Generated: boolean("form_1099_generated").default(false),
+  form1099GeneratedAt: timestamp("form_1099_generated_at"),
+  form1099DownloadCount: integer("form_1099_download_count").default(0),
+  lastCalculatedAt: timestamp("last_calculated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AnnualEarnings = typeof annualEarnings.$inferSelect;
+
+// Contractor agreement acceptance log
+export const contractorAgreements = pgTable("contractor_agreements", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  driverId: integer("driver_id").references(() => driverProfiles.id).notNull(),
+  agreementVersion: text("agreement_version").notNull().default("1.0"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  signedAt: timestamp("signed_at").defaultNow(),
+});
+
+export type ContractorAgreement = typeof contractorAgreements.$inferSelect;

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -18,7 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText } from "lucide-react";
 import { openNavigation } from "@/lib/navigation";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RideChat } from "@/components/RideChat";
@@ -631,21 +632,26 @@ export default function DriverDashboard() {
                 </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-yellow-500/10 rounded-md">
-                    <TrendingUp className="w-5 h-5 text-yellow-500" />
+            <Link href="/driver/earnings">
+              <Card className="hover-elevate cursor-pointer">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-yellow-500/10 rounded-md">
+                      <TrendingUp className="w-5 h-5 text-yellow-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">
+                        ${completedRides.reduce((sum, r) => sum + (parseFloat(r.driverEarnings || r.estimatedFare || "0")), 0).toFixed(0)}
+                      </p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        Your Earnings
+                        <FileText className="w-3 h-3" />
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold">
-                      ${completedRides.reduce((sum, r) => sum + (parseFloat(r.driverEarnings || r.estimatedFare || "0")), 0).toFixed(0)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Your Earnings</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </Link>
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">

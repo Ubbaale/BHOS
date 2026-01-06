@@ -1861,5 +1861,141 @@ export async function registerRoutes(
     }
   });
 
+  // Contractor Onboarding API
+  app.post("/api/drivers/:id/contractor-onboard", async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      const { ssnLast4, taxClassification, businessName, taxAddress, taxCity, taxState, taxZip, agreementAccepted } = req.body;
+      
+      if (!ssnLast4 || ssnLast4.length !== 4) {
+        return res.status(400).json({ message: "Last 4 digits of SSN required" });
+      }
+      
+      if (!agreementAccepted) {
+        return res.status(400).json({ message: "You must accept the contractor agreement" });
+      }
+      
+      const driver = await storage.getDriver(driverId);
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+      
+      // Update driver with contractor info
+      const updatedDriver = await storage.updateDriverContractorInfo(driverId, {
+        ssnLast4,
+        taxClassification: taxClassification || "individual",
+        businessName,
+        taxAddress,
+        taxCity,
+        taxState,
+        taxZip,
+        isContractorOnboarded: true,
+        contractorAgreementSignedAt: new Date()
+      });
+      
+      // Log the agreement acceptance
+      await storage.createContractorAgreement({
+        driverId,
+        agreementVersion: "1.0",
+        ipAddress: req.ip || req.socket.remoteAddress || "",
+        userAgent: req.headers["user-agent"] || ""
+      });
+      
+      res.json({ message: "Contractor onboarding complete", driver: updatedDriver });
+    } catch (error) {
+      console.error("Error onboarding contractor:", error);
+      res.status(500).json({ message: "Failed to complete contractor onboarding" });
+    }
+  });
+  
+  // Get driver annual earnings summary
+  app.get("/api/drivers/:id/annual-earnings/:year", async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      const taxYear = parseInt(req.params.year);
+      
+      if (isNaN(taxYear) || taxYear < 2020 || taxYear > new Date().getFullYear()) {
+        return res.status(400).json({ message: "Invalid tax year" });
+      }
+      
+      const earnings = await storage.getOrCalculateAnnualEarnings(driverId, taxYear);
+      res.json(earnings);
+    } catch (error) {
+      console.error("Error fetching annual earnings:", error);
+      res.status(500).json({ message: "Failed to fetch annual earnings" });
+    }
+  });
+  
+  // Generate 1099-NEC form data
+  app.get("/api/drivers/:id/1099/:year", async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      const taxYear = parseInt(req.params.year);
+      
+      const driver = await storage.getDriver(driverId);
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+      
+      if (!driver.isContractorOnboarded || !driver.ssnLast4) {
+        return res.status(400).json({ message: "Driver must complete contractor onboarding first" });
+      }
+      
+      const earnings = await storage.getOrCalculateAnnualEarnings(driverId, taxYear);
+      
+      // Only generate 1099 if earnings exceed $600
+      const totalEarnings = parseFloat(earnings.totalGrossEarnings || "0") + parseFloat(earnings.totalTips || "0");
+      const requiresForm = totalEarnings >= 600;
+      
+      // Mark as generated
+      await storage.mark1099Generated(driverId, taxYear);
+      
+      res.json({
+        taxYear,
+        requiresForm,
+        payer: {
+          name: "Carehub Medical Transportation LLC",
+          address: "123 Healthcare Way",
+          city: "Phoenix",
+          state: "AZ",
+          zip: "85001",
+          ein: "XX-XXXXXXX"
+        },
+        recipient: {
+          name: driver.businessName || driver.fullName,
+          ssnLast4: driver.ssnLast4,
+          address: driver.taxAddress || "",
+          city: driver.taxCity || "",
+          state: driver.taxState || "",
+          zip: driver.taxZip || ""
+        },
+        box1_nonemployeeCompensation: totalEarnings.toFixed(2),
+        totalRides: earnings.totalRides,
+        totalMiles: earnings.totalMiles,
+        grossEarnings: earnings.totalGrossEarnings,
+        tips: earnings.totalTips,
+        tolls: earnings.totalTolls,
+        message: requiresForm 
+          ? "This is your 1099-NEC data for tax filing purposes."
+          : "Your earnings were below $600. A 1099-NEC is not required, but you must still report this income."
+      });
+    } catch (error) {
+      console.error("Error generating 1099:", error);
+      res.status(500).json({ message: "Failed to generate 1099" });
+    }
+  });
+  
+  // Get available tax years for a driver
+  app.get("/api/drivers/:id/tax-years", async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      const years = await storage.getDriverTaxYears(driverId);
+      res.json(years);
+    } catch (error) {
+      console.error("Error fetching tax years:", error);
+      res.status(500).json({ message: "Failed to fetch tax years" });
+    }
+  });
+
   return httpServer;
 }

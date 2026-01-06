@@ -213,6 +213,14 @@ Database tables:
 - **ETA Tracking**: Real-time estimated arrival times updated by drivers
 - **Trip Tracking Page**: Dedicated `/track/:id` page for patients to monitor ride progress
 
+### Contractor Onboarding & 1099 Tax Forms
+- **Independent Contractor Agreement**: Drivers must accept contractor agreement to drive
+- **Tax Information Collection**: Drivers provide last 4 SSN digits, tax classification, and mailing address
+- **Annual Earnings Summary**: Automatic calculation of yearly earnings, tips, tolls, and miles
+- **1099-NEC Generation**: Tax form generated for drivers earning $600+ annually
+- **Tax Deduction Reminders**: Mileage (IRS $0.67/mile), tolls, phone, supplies
+- **Contractor Agreement Logging**: Agreement acceptance tracked with IP, timestamp, and version
+
 ### Routes
 - `/` - Landing page with job map, services, and issue reporting
 - `/book-ride` - Patient ride booking form with map
@@ -221,4 +229,5 @@ Database tables:
 - `/driver` - Driver dashboard for ride management (KYC-verified drivers only)
 - `/driver/apply` - Driver application form for new drivers
 - `/driver/kyc` - KYC verification page for document upload
+- `/driver/earnings` - Driver earnings summary and 1099 tax form generation
 - `/admin/drivers` - Admin dashboard for managing driver applications and KYC verification

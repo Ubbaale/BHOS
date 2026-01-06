@@ -10,8 +10,8 @@ import {
   type RideMessage, type InsertRideMessage,
   type TripShare, type InsertTripShare,
   type RideRating, type InsertRideRating,
-  type PatientAccount, type SurgePricing,
-  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing
+  type PatientAccount, type SurgePricing, type AnnualEarnings,
+  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing, annualEarnings, contractorAgreements
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ne, and, lt, isNull } from "drizzle-orm";
@@ -106,6 +106,31 @@ export interface IStorage {
   // Driver location tracking
   updateDriverLocation(driverId: number, lat: string, lng: string): Promise<DriverProfile | undefined>;
   getNearbyDrivers(lat: number, lng: number, radiusMiles?: number): Promise<DriverProfile[]>;
+  
+  // Contractor onboarding
+  updateDriverContractorInfo(driverId: number, info: {
+    ssnLast4: string;
+    taxClassification: string;
+    businessName?: string;
+    taxAddress?: string;
+    taxCity?: string;
+    taxState?: string;
+    taxZip?: string;
+    isContractorOnboarded: boolean;
+    contractorAgreementSignedAt: Date;
+  }): Promise<DriverProfile | undefined>;
+  createContractorAgreement(data: { driverId: number; agreementVersion: string; ipAddress: string; userAgent: string }): Promise<void>;
+  
+  // Annual earnings and 1099
+  getOrCalculateAnnualEarnings(driverId: number, taxYear: number): Promise<{
+    totalGrossEarnings: string;
+    totalTips: string;
+    totalTolls: string;
+    totalRides: number;
+    totalMiles: string;
+  }>;
+  mark1099Generated(driverId: number, taxYear: number): Promise<void>;
+  getDriverTaxYears(driverId: number): Promise<number[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -661,6 +686,144 @@ export class DatabaseStorage implements IStorage {
 
   private toRad(deg: number): number {
     return deg * (Math.PI / 180);
+  }
+
+  async updateDriverContractorInfo(driverId: number, info: {
+    ssnLast4: string;
+    taxClassification: string;
+    businessName?: string;
+    taxAddress?: string;
+    taxCity?: string;
+    taxState?: string;
+    taxZip?: string;
+    isContractorOnboarded: boolean;
+    contractorAgreementSignedAt: Date;
+  }): Promise<DriverProfile | undefined> {
+    const [driver] = await db.update(driverProfiles)
+      .set({
+        ssnLast4: info.ssnLast4,
+        taxClassification: info.taxClassification,
+        businessName: info.businessName,
+        taxAddress: info.taxAddress,
+        taxCity: info.taxCity,
+        taxState: info.taxState,
+        taxZip: info.taxZip,
+        isContractorOnboarded: info.isContractorOnboarded,
+        contractorAgreementSignedAt: info.contractorAgreementSignedAt
+      })
+      .where(eq(driverProfiles.id, driverId))
+      .returning();
+    return driver;
+  }
+
+  async createContractorAgreement(data: { driverId: number; agreementVersion: string; ipAddress: string; userAgent: string }): Promise<void> {
+    await db.insert(contractorAgreements).values({
+      driverId: data.driverId,
+      agreementVersion: data.agreementVersion,
+      ipAddress: data.ipAddress,
+      userAgent: data.userAgent
+    });
+  }
+
+  async getOrCalculateAnnualEarnings(driverId: number, taxYear: number): Promise<{
+    totalGrossEarnings: string;
+    totalTips: string;
+    totalTolls: string;
+    totalRides: number;
+    totalMiles: string;
+  }> {
+    // Check if we have cached earnings
+    const [existing] = await db.select().from(annualEarnings)
+      .where(and(eq(annualEarnings.driverId, driverId), eq(annualEarnings.taxYear, taxYear)));
+    
+    // Calculate from rides data
+    const startDate = new Date(taxYear, 0, 1);
+    const endDate = new Date(taxYear + 1, 0, 1);
+    
+    const driverRides = await db.select().from(rides)
+      .where(and(
+        eq(rides.driverId, driverId),
+        eq(rides.status, "completed")
+      ));
+    
+    // Filter by year (since we don't have date comparison in drizzle easily)
+    const yearRides = driverRides.filter(r => {
+      const rideDate = r.actualDropoffTime || r.createdAt;
+      return rideDate && rideDate >= startDate && rideDate < endDate;
+    });
+    
+    const totalGross = yearRides.reduce((sum, r) => sum + parseFloat(r.driverEarnings || "0"), 0);
+    const totalTips = yearRides.reduce((sum, r) => sum + parseFloat(r.tipAmount || "0"), 0);
+    const totalTolls = yearRides.reduce((sum, r) => sum + parseFloat(r.actualTolls || "0"), 0);
+    const totalMiles = yearRides.reduce((sum, r) => sum + parseFloat(r.actualDistanceMiles || r.distanceMiles || "0"), 0);
+    
+    const result = {
+      totalGrossEarnings: totalGross.toFixed(2),
+      totalTips: totalTips.toFixed(2),
+      totalTolls: totalTolls.toFixed(2),
+      totalRides: yearRides.length,
+      totalMiles: totalMiles.toFixed(1)
+    };
+    
+    // Update or create cached record
+    if (existing) {
+      await db.update(annualEarnings)
+        .set({
+          totalGrossEarnings: result.totalGrossEarnings,
+          totalTips: result.totalTips,
+          totalTolls: result.totalTolls,
+          totalRides: result.totalRides,
+          totalMiles: result.totalMiles,
+          lastCalculatedAt: new Date()
+        })
+        .where(eq(annualEarnings.id, existing.id));
+    } else {
+      await db.insert(annualEarnings).values({
+        driverId,
+        taxYear,
+        totalGrossEarnings: result.totalGrossEarnings,
+        totalTips: result.totalTips,
+        totalTolls: result.totalTolls,
+        totalRides: result.totalRides,
+        totalMiles: result.totalMiles
+      });
+    }
+    
+    return result;
+  }
+
+  async mark1099Generated(driverId: number, taxYear: number): Promise<void> {
+    const [existing] = await db.select().from(annualEarnings)
+      .where(and(eq(annualEarnings.driverId, driverId), eq(annualEarnings.taxYear, taxYear)));
+    
+    if (existing) {
+      await db.update(annualEarnings)
+        .set({
+          form1099Generated: true,
+          form1099GeneratedAt: new Date(),
+          form1099DownloadCount: (existing.form1099DownloadCount || 0) + 1
+        })
+        .where(eq(annualEarnings.id, existing.id));
+    }
+  }
+
+  async getDriverTaxYears(driverId: number): Promise<number[]> {
+    // Get all years where the driver has completed rides
+    const driverRides = await db.select().from(rides)
+      .where(and(
+        eq(rides.driverId, driverId),
+        eq(rides.status, "completed")
+      ));
+    
+    const years = new Set<number>();
+    driverRides.forEach(r => {
+      const rideDate = r.actualDropoffTime || r.createdAt;
+      if (rideDate) {
+        years.add(rideDate.getFullYear());
+      }
+    });
+    
+    return Array.from(years).sort((a, b) => b - a);
   }
 }
 
