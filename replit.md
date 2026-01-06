@@ -110,7 +110,8 @@ Database tables:
 - Driver dashboard with stats cards: Rides in Pool, Active Rides, Completed, Total Earnings
 - Real-time notifications: Sound alerts and toast notifications when new rides are posted
 - NEW badge highlighting for recently posted rides (30-second window)
-- Ride status workflow: Requested (in pool) → Accepted (claimed) → En Route → Arrived → In Progress → Completed
+- Ride status workflow: Requested (in pool) → Accepted (claimed) → En Route → Arrived → In Progress (with navigation) → Completed
+- **Navigation Integration**: When driver confirms pickup, their preferred navigation app (Google Maps, Waze, or Apple Maps) opens automatically with turn-by-turn directions to the dropoff location
 - Real-time status updates via WebSocket
 - Ride history and event tracking
 - Distance-based fare calculation: $20 base + $2.50/mile, $22 minimum (industry-standard NEMT pricing)
