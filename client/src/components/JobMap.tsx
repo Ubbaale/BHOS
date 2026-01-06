@@ -119,10 +119,10 @@ export default function JobMap() {
         if (data.Code === "200" && data.Body?.ItemList) {
           const mapped: CombinedJob[] = data.Body.ItemList.map((ext) => ({
             id: ext.GigId,
-            // Show individual's name and their credential/title
-            title: `${ext.FreelancerName} - ${ext.Title.toUpperCase()}`,
-            // Show the category/specialty as facility
-            facility: ext.CategoryName,
+            // Show the title of the service provider needed (e.g., "LPN", "CNA")
+            title: `${ext.Title.toUpperCase()} - ${ext.CategoryName}`,
+            // Show as external listing
+            facility: "External Listing",
             location: ext.City && ext.State ? `${ext.City}, ${ext.State}` : ext.Country || "United States",
             zipCode: null,
             state: ext.State,
