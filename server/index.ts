@@ -60,7 +60,10 @@ async function initStripe() {
   }
 }
 
-await initStripe();
+// Initialize Stripe (wrapped in IIFE for CommonJS compatibility)
+(async () => {
+  await initStripe();
+})();
 
 app.post(
   '/api/stripe/webhook',
