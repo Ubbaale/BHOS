@@ -7,6 +7,8 @@ import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-lea
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useLocation, Link } from "wouter";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -30,7 +32,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText, Navigation, AlertTriangle, Heart, Users } from "lucide-react";
+import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText, Navigation, AlertTriangle, Heart, Users, Loader2, ArrowLeft } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -350,6 +352,95 @@ interface PatientAccountStatus {
   message?: string;
 }
 
+interface PaymentFormProps {
+  clientSecret: string;
+  onSuccess: () => void;
+  onCancel: () => void;
+  amount: number;
+}
+
+function PaymentFormContent({ onSuccess, onCancel, amount }: Omit<PaymentFormProps, 'clientSecret'>) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setIsProcessing(true);
+    setErrorMessage(null);
+
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: window.location.origin + '/book-ride',
+      },
+      redirect: 'if_required',
+    });
+
+    if (error) {
+      setErrorMessage(error.message || 'Payment failed. Please try again.');
+      setIsProcessing(false);
+    } else {
+      onSuccess();
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="text-center mb-6">
+        <h3 className="text-xl font-semibold mb-2">Complete Payment</h3>
+        <p className="text-muted-foreground">
+          Total: <span className="text-2xl font-bold text-foreground">${amount.toFixed(2)}</span>
+        </p>
+      </div>
+      
+      <PaymentElement />
+      
+      {errorMessage && (
+        <Alert variant="destructive">
+          <AlertTriangle className="w-4 h-4" />
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
+      )}
+      
+      <div className="flex gap-3">
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={onCancel}
+          disabled={isProcessing}
+          className="flex-1"
+          data-testid="button-cancel-payment"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back
+        </Button>
+        <Button 
+          type="submit" 
+          disabled={!stripe || isProcessing}
+          className="flex-1"
+          data-testid="button-confirm-payment"
+        >
+          {isProcessing ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            <>
+              <CreditCard className="w-4 h-4 mr-2" />
+              Pay ${amount.toFixed(2)}
+            </>
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export default function BookRide() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -366,6 +457,29 @@ export default function BookRide() {
   const [emergencyAcknowledged, setEmergencyAcknowledged] = useState(false);
   const [phoneForAccountCheck, setPhoneForAccountCheck] = useState("");
   const [userDeviceLocation, setUserDeviceLocation] = useState<{ lat: number; lng: number } | null>(null);
+  
+  const [showPaymentStep, setShowPaymentStep] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [stripePromise, setStripePromise] = useState<Promise<any> | null>(null);
+  const [pendingFormData, setPendingFormData] = useState<BookRideFormData | null>(null);
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const fetchStripeKey = async () => {
+      try {
+        const response = await fetch('/api/stripe/publishable-key');
+        if (response.ok) {
+          const { publishableKey } = await response.json();
+          if (publishableKey) {
+            setStripePromise(loadStripe(publishableKey));
+          }
+        }
+      } catch (error) {
+        console.log('Stripe not configured:', error);
+      }
+    };
+    fetchStripeKey();
+  }, []);
 
   // Automatically detect user's device location on page load for better address suggestions
   useEffect(() => {
@@ -638,7 +752,26 @@ export default function BookRide() {
     );
   };
 
-  const onSubmit = (data: BookRideFormData) => {
+  const createPaymentIntentMutation = useMutation({
+    mutationFn: async (data: { estimatedFare: number; patientName: string; patientEmail?: string }) => {
+      const response = await apiRequest("POST", "/api/rides/create-payment-intent", data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setClientSecret(data.clientSecret);
+      setPaymentIntentId(data.paymentIntentId);
+      setShowPaymentStep(true);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Payment Setup Failed",
+        description: error.message || "Could not initialize payment. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = async (data: BookRideFormData) => {
     if (!pickupPos || !dropoffPos) {
       toast({
         title: "Location Required",
@@ -648,7 +781,6 @@ export default function BookRide() {
       return;
     }
     
-    // Block submission if account is blocked and emergency not properly acknowledged
     if (isAccountBlocked && !(isEmergency && emergencyAcknowledged)) {
       toast({
         title: "Account Restricted",
@@ -658,8 +790,106 @@ export default function BookRide() {
       return;
     }
     
-    createRideMutation.mutate(data);
+    if (data.paymentType === "self_pay" && stripePromise && fareEstimate) {
+      setPendingFormData(data);
+      createPaymentIntentMutation.mutate({
+        estimatedFare: fareEstimate.fare,
+        patientName: data.patientName,
+        patientEmail: data.bookedByOther ? data.bookerEmail : undefined,
+      });
+    } else {
+      createRideMutation.mutate(data);
+    }
   };
+
+  const handlePaymentSuccess = async () => {
+    if (!pendingFormData || !paymentIntentId) return;
+    
+    try {
+      const response = await apiRequest("POST", "/api/rides", {
+        ...pendingFormData,
+        appointmentTime: new Date(pendingFormData.appointmentTime).toISOString(),
+        mobilityNeeds: selectedNeeds,
+        distanceMiles: fareEstimate?.distance.toFixed(2),
+        estimatedFare: fareEstimate?.fare.toFixed(2),
+        isEmergency: isEmergency && emergencyAcknowledged,
+        stripePaymentIntentId: paymentIntentId,
+        paidAmount: fareEstimate?.fare.toFixed(2),
+        paymentStatus: "paid",
+      });
+      
+      const ride = await response.json();
+      toast({
+        title: "Ride Booked & Paid",
+        description: "Your payment was successful. A driver will be assigned shortly.",
+      });
+      setBookedRide(ride);
+      setBookingSuccess(true);
+      setShowPaymentStep(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/rides"] });
+    } catch (error: any) {
+      toast({
+        title: "Booking Failed",
+        description: error.message || "Payment was successful but booking failed. Please contact support.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handlePaymentCancel = () => {
+    setShowPaymentStep(false);
+    setClientSecret(null);
+    setPaymentIntentId(null);
+    setPendingFormData(null);
+  };
+
+  if (showPaymentStep && clientSecret && stripePromise && fareEstimate) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 py-16">
+          <Card className="max-w-md mx-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                Secure Payment
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-6 p-4 bg-muted rounded-md">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="text-muted-foreground">Patient:</div>
+                  <div className="font-medium">{pendingFormData?.patientName}</div>
+                  <div className="text-muted-foreground">Distance:</div>
+                  <div className="font-medium">{fareEstimate.distance.toFixed(1)} miles</div>
+                  <div className="text-muted-foreground">Fare:</div>
+                  <div className="font-bold text-lg">${fareEstimate.fare.toFixed(2)}</div>
+                </div>
+              </div>
+              <Elements 
+                stripe={stripePromise} 
+                options={{ 
+                  clientSecret,
+                  appearance: { theme: 'stripe' },
+                }}
+              >
+                <PaymentFormContent 
+                  onSuccess={handlePaymentSuccess} 
+                  onCancel={handlePaymentCancel}
+                  amount={fareEstimate.fare}
+                />
+              </Elements>
+              <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Shield className="w-4 h-4" />
+                <span>Secure payment powered by Stripe</span>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (bookingSuccess && bookedRide) {
     return (
@@ -1318,14 +1548,22 @@ export default function BookRide() {
                     <Button
                       type="submit"
                       className="w-full"
-                      disabled={createRideMutation.isPending || !canProceedWithBooking}
+                      disabled={createRideMutation.isPending || createPaymentIntentMutation.isPending || !canProceedWithBooking}
                       data-testid="button-submit-ride"
                     >
-                      {createRideMutation.isPending ? (
-                        "Booking..."
+                      {createRideMutation.isPending || createPaymentIntentMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {createPaymentIntentMutation.isPending ? "Setting up payment..." : "Booking..."}
+                        </>
                       ) : isAccountBlocked && canProceedWithBooking ? (
                         <>
                           Book Emergency Ride <ArrowRight className="w-4 h-4 ml-2" />
+                        </>
+                      ) : form.watch("paymentType") === "self_pay" && stripePromise ? (
+                        <>
+                          <CreditCard className="w-4 h-4 mr-2" />
+                          Continue to Payment
                         </>
                       ) : (
                         <>
