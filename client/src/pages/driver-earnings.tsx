@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { jsPDF } from "jspdf";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import BackToHome from "@/components/BackToHome";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -206,6 +207,9 @@ export default function DriverEarnings() {
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
       <main className="flex-1 container mx-auto px-4 py-8">
+        <div className="mb-4">
+          <BackToHome />
+        </div>
         <div className="max-w-4xl mx-auto space-y-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>

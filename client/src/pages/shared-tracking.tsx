@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import Header from "@/components/Header";
+import BackToHome from "@/components/BackToHome";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +97,9 @@ export default function SharedTracking() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-8">
+        <div className="mb-4">
+          <BackToHome />
+        </div>
         <div className="max-w-4xl mx-auto">
           <div className="bg-primary/10 dark:bg-primary/20 rounded-md p-4 mb-6 flex items-center gap-3">
             <Heart className="w-5 h-5 text-primary" />

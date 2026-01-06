@@ -8,6 +8,7 @@ import { format, formatDistanceToNow } from "date-fns";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import BackToHome from "@/components/BackToHome";
 import { NotificationPrompt } from "@/components/NotificationPrompt";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -545,6 +546,9 @@ export default function DriverDashboard() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-8">
+        <div className="mb-4">
+          <BackToHome />
+        </div>
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
             <div>

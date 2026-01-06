@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "wouter";
+import BackToHome from "@/components/BackToHome";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,12 +55,7 @@ export default function TripReceipt() {
   return (
     <div className="min-h-screen bg-background">
       <div className="print:hidden p-4 bg-muted/50 border-b flex items-center justify-between gap-4 flex-wrap">
-        <Link href="/book-ride">
-          <Button variant="ghost" size="sm" data-testid="button-back">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-        </Link>
+        <BackToHome />
         <div className="flex gap-2">
           <Button onClick={handlePrint} data-testid="button-print">
             <Printer className="w-4 h-4 mr-2" />

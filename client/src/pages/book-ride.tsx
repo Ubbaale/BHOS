@@ -10,6 +10,7 @@ import { useLocation, Link } from "wouter";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import BackToHome from "@/components/BackToHome";
 import { NotificationPrompt } from "@/components/NotificationPrompt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -229,11 +230,11 @@ function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId, u
   useEffect(() => {
     if (autocompleteRef.current && userLocation && window.google?.maps) {
       // Create a circle around the user's location (50km radius) to bias results
-      const circle = new google.maps.Circle({
+      const circle = new (google.maps as any).Circle({
         center: { lat: userLocation.lat, lng: userLocation.lng },
         radius: 50000, // 50km radius for suggestions
       });
-      autocompleteRef.current.setBounds(circle.getBounds() as google.maps.LatLngBounds);
+      (autocompleteRef.current as any).setBounds(circle.getBounds());
     }
   }, [userLocation]);
 
@@ -282,12 +283,12 @@ function AddressAutocomplete({ onPlaceSelect, placeholder, value = "", testId, u
           
           // If user location is available, set initial bounds to bias results
           if (userLocation && window.google?.maps) {
-            const circle = new google.maps.Circle({
+            const circle = new (google.maps as any).Circle({
               center: { lat: userLocation.lat, lng: userLocation.lng },
               radius: 50000, // 50km radius
             });
-            autocompleteOptions.bounds = circle.getBounds() as google.maps.LatLngBounds;
-            autocompleteOptions.strictBounds = false; // Allow results outside bounds but prioritize nearby
+            (autocompleteOptions as any).bounds = circle.getBounds();
+            (autocompleteOptions as any).strictBounds = false; // Allow results outside bounds but prioritize nearby
           }
           
           const autocomplete = new google.maps.places.Autocomplete(inputRef.current, autocompleteOptions);
@@ -748,6 +749,9 @@ export default function BookRide() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-8">
+        <div className="mb-4">
+          <BackToHome />
+        </div>
         <div className="max-w-6xl mx-auto">
           <NotificationPrompt userType="user" />
           <div className="mb-8">

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import Header from "@/components/Header";
+import BackToHome from "@/components/BackToHome";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -204,6 +205,9 @@ export default function TrackRide() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-8">
+        <div className="mb-4">
+          <BackToHome />
+        </div>
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
             <h1 className="text-2xl font-bold" data-testid="text-ride-title">Track Your Ride</h1>

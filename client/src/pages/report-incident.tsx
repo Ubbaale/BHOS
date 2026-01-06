@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, Link, useLocation } from "wouter";
+import BackToHome from "@/components/BackToHome";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -182,12 +183,7 @@ export default function ReportIncident() {
   return (
     <div className="container mx-auto p-6 max-w-2xl">
       <div className="mb-6">
-        <Link href={rideId ? `/track/${rideId}` : "/"}>
-          <Button variant="ghost" size="sm" data-testid="button-back">
-            <ChevronLeft className="w-4 h-4 mr-1" />
-            Back
-          </Button>
-        </Link>
+        <BackToHome />
       </div>
 
       <Card>
