@@ -722,6 +722,34 @@ export async function registerRoutes(
         // Expire tracking token when ride completes
         await storage.expireTrackingToken(id);
         
+        // Capture the held payment if this is a self-pay ride
+        if (existingRide.stripePaymentIntentId && existingRide.paymentType === 'self_pay') {
+          try {
+            const stripe = await getUncachableStripeClient();
+            const paymentIntent = await stripe.paymentIntents.retrieve(existingRide.stripePaymentIntentId);
+            
+            if (paymentIntent.status === 'requires_capture') {
+              // Capture the exact final fare amount (may differ from authorized amount)
+              const finalAmountCents = Math.round(finalFare * 100);
+              await stripe.paymentIntents.capture(existingRide.stripePaymentIntentId, {
+                amount_to_capture: finalAmountCents,
+              });
+              
+              // Update payment status
+              await storage.updateRidePayment(id, { 
+                paymentStatus: 'completed',
+                stripePaymentIntentId: existingRide.stripePaymentIntentId,
+                paidAmount: finalFare.toString()
+              });
+              
+              console.log(`Captured payment of $${finalFare.toFixed(2)} for ride ${id}`);
+            }
+          } catch (captureError: any) {
+            console.error(`Failed to capture payment for ride ${id}:`, captureError);
+            // Don't fail the completion - just log the error
+          }
+        }
+        
         await storage.createRideEvent({
           rideId: id,
           status: "completed",
@@ -899,6 +927,31 @@ export async function registerRoutes(
       const cancelledRide = await storage.cancelRide(rideId, cancelledBy, reason, cancellationFee.toString());
       if (!cancelledRide) {
         return res.status(500).json({ message: "Failed to cancel ride" });
+      }
+
+      // Cancel the payment authorization if exists (release the held funds)
+      if (ride.stripePaymentIntentId) {
+        try {
+          const stripe = await getUncachableStripeClient();
+          const paymentIntent = await stripe.paymentIntents.retrieve(ride.stripePaymentIntentId);
+          
+          if (paymentIntent.status === 'requires_capture') {
+            // Cancel the authorization - release the hold on customer's card
+            await stripe.paymentIntents.cancel(ride.stripePaymentIntentId);
+            
+            // Update payment status to reflect the cancellation
+            await storage.updateRidePayment(rideId, {
+              paymentStatus: 'cancelled',
+              stripePaymentIntentId: ride.stripePaymentIntentId,
+              paidAmount: '0'
+            });
+            
+            console.log(`Cancelled payment hold for ride ${rideId}`);
+          }
+        } catch (stripeError: any) {
+          console.error(`Failed to cancel payment for ride ${rideId}:`, stripeError);
+          // Don't fail the cancellation - just log the error
+        }
       }
 
       // Expire tracking token when ride is cancelled
@@ -2599,10 +2652,12 @@ export async function registerRoutes(
       // Convert dollars to cents for Stripe
       const amountInCents = Math.round(estimatedFare * 100);
       
+      // Use manual capture - authorize now, capture on ride completion
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amountInCents,
         currency: 'usd',
         automatic_payment_methods: { enabled: true },
+        capture_method: 'manual', // Hold funds, capture later on completion
         metadata: {
           type: 'ride_booking',
           patientName: patientName || '',
@@ -2765,6 +2820,89 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Error confirming tip:", error);
       res.status(500).json({ message: "Failed to confirm tip" });
+    }
+  });
+
+  // Admin endpoint to refund a completed ride (for disputes)
+  app.post("/api/admin/rides/:id/refund", requireAdmin, async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const { reason, refundAmount } = req.body;
+      
+      if (!reason) {
+        return res.status(400).json({ message: "Refund reason is required" });
+      }
+      
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      if (!ride.stripePaymentIntentId) {
+        return res.status(400).json({ message: "No payment found for this ride" });
+      }
+      
+      const stripe = await getUncachableStripeClient();
+      const paymentIntent = await stripe.paymentIntents.retrieve(ride.stripePaymentIntentId);
+      
+      // Can only refund if payment was captured
+      if (paymentIntent.status !== 'succeeded') {
+        return res.status(400).json({ 
+          message: "Payment was not captured. Cannot refund.",
+          paymentStatus: paymentIntent.status
+        });
+      }
+      
+      // Calculate refund amount (full or partial)
+      const maxRefundCents = paymentIntent.amount_received;
+      const requestedRefundCents = refundAmount 
+        ? Math.round(parseFloat(refundAmount) * 100) 
+        : maxRefundCents;
+      
+      if (requestedRefundCents > maxRefundCents) {
+        return res.status(400).json({ 
+          message: `Refund amount cannot exceed ${(maxRefundCents / 100).toFixed(2)}`
+        });
+      }
+      
+      // Process the refund
+      const refund = await stripe.refunds.create({
+        payment_intent: ride.stripePaymentIntentId,
+        amount: requestedRefundCents,
+        reason: 'requested_by_customer',
+        metadata: {
+          rideId: rideId.toString(),
+          adminReason: reason,
+          refundedBy: 'admin'
+        }
+      });
+      
+      // Update ride payment status
+      await storage.updateRidePayment(rideId, {
+        paymentStatus: requestedRefundCents === maxRefundCents ? 'refunded' : 'partially_refunded',
+        stripePaymentIntentId: ride.stripePaymentIntentId,
+        paidAmount: ((maxRefundCents - requestedRefundCents) / 100).toFixed(2)
+      });
+      
+      // Log the event
+      await storage.createRideEvent({
+        rideId,
+        status: 'completed',
+        note: `Refund of $${(requestedRefundCents / 100).toFixed(2)} processed. Reason: ${reason}`
+      });
+      
+      res.json({ 
+        success: true,
+        refundId: refund.id,
+        refundAmount: (requestedRefundCents / 100).toFixed(2),
+        status: refund.status
+      });
+    } catch (error: any) {
+      console.error("Error processing refund:", error);
+      res.status(500).json({ 
+        message: "Failed to process refund",
+        error: error.message 
+      });
     }
   });
 

@@ -157,24 +157,33 @@ Database tables:
 
 ### Payment System (Stripe Integration)
 - **Stripe Integration**: Fully configured via Replit connector with stripe-replit-sync
-- **Upfront Payment Flow** (self-pay rides):
+- **Authorization/Capture Flow** (self-pay rides):
   1. Patient enters ride details and sees estimated fare
   2. Clicks "Continue to Payment" to initiate Stripe checkout
   3. Stripe Elements payment form collects card details securely
-  4. Payment confirmed before ride is created in the system
+  4. Payment is **authorized (held)** - funds are reserved but not captured
   5. Ride is marked with `paymentStatus: 'paid'` and `stripePaymentIntentId`
+  6. When driver completes ride, payment is **captured** for the final fare amount
+- **Cancellation Handling**:
+  - If ride is cancelled before completion, authorization is **cancelled** (hold released)
+  - Customer's card is never charged for cancelled rides
 - **Tip Payment Flow**:
   1. After ride completion, patient can add tip from tracking page
   2. Three preset options (15%, 20%, 25%) or custom amount
   3. Stripe payment form for tip collection
   4. Backend verifies payment intent before recording tip
   5. 100% of tips go directly to drivers
+- **Refund System** (for disputes):
+  - Admin endpoint: `POST /api/admin/rides/:id/refund`
+  - Supports full or partial refunds
+  - Requires reason for audit trail
+  - Logs refund event in ride history
 - **Insurance Rides**: No upfront payment required (billed to insurance)
 - **Fare Structure**: $20 base + $2.50/mile, $22 minimum
 - **Database Fields**:
   - `stripePaymentIntentId` - Tracks Stripe payment intent
   - `paidAmount` - Amount collected at booking
-  - `paymentStatus` - pending/paid/completed/failed/refunded
+  - `paymentStatus` - pending/paid/completed/failed/refunded/partially_refunded
   - `tipAmount`, `tipPaidAt` - Tip tracking
 
 ### Healthcare-Friendly Operational Policies
