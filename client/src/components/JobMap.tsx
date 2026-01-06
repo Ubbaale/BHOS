@@ -119,17 +119,19 @@ export default function JobMap() {
         if (data.Code === "200" && data.Body?.ItemList) {
           const mapped: CombinedJob[] = data.Body.ItemList.map((ext) => ({
             id: ext.GigId,
-            title: ext.Title,
-            facility: ext.FreelancerName,
-            location: `${ext.City}, ${ext.State}`,
+            // Show individual's name and their credential/title
+            title: `${ext.FreelancerName} - ${ext.Title.toUpperCase()}`,
+            // Show the category/specialty as facility
+            facility: ext.CategoryName,
+            location: ext.City && ext.State ? `${ext.City}, ${ext.State}` : ext.Country || "United States",
             zipCode: null,
             state: ext.State,
             lat: String(ext.Lat),
             lng: String(ext.Long),
             pay: `$${ext.HourlyRate}/hr`,
-            shift: ext.CategoryName,
+            shift: "Available Now",
             urgency: "external" as const,
-            requirements: ext.Skills || [],
+            requirements: ext.Skills?.slice(0, 5) || [],
             status: "available" as const,
             isExternal: true,
           }));
@@ -303,10 +305,10 @@ export default function JobMap() {
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-semibold mb-4">
-            Live Activity Map
+            Available Healthcare Shifts
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            View healthcare jobs and active ride requests in real-time across the nation.
+            View healthcare shifts and active ride requests in real-time across the nation.
           </p>
         </div>
 
@@ -392,11 +394,11 @@ export default function JobMap() {
               <span className="text-sm font-medium">Map Legend:</span>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 rounded-full bg-green-500" />
-                <span className="text-xs">Local Jobs</span>
+                <span className="text-xs">Local Shifts</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 rounded-full bg-blue-500" />
-                <span className="text-xs">External Jobs</span>
+                <span className="text-xs">External Shifts</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 rounded-full bg-purple-500" />
@@ -410,9 +412,9 @@ export default function JobMap() {
 
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "jobs" | "rides")} className="w-full">
               <TabsList className="w-full grid grid-cols-2 mb-4">
-                <TabsTrigger value="jobs" className="flex items-center gap-2" data-testid="tab-jobs">
+                <TabsTrigger value="jobs" className="flex items-center gap-2" data-testid="tab-shifts">
                   <Building2 className="w-4 h-4" />
-                  Jobs ({jobs.length})
+                  Shifts ({jobs.length})
                 </TabsTrigger>
                 <TabsTrigger value="rides" className="flex items-center gap-2" data-testid="tab-rides">
                   <Car className="w-4 h-4" />
@@ -440,7 +442,7 @@ export default function JobMap() {
                 {jobs.length === 0 ? (
                   <Card>
                     <CardContent className="p-6 text-center text-muted-foreground">
-                      No jobs available at the moment. Check back soon!
+                      No shifts available at the moment. Check back soon!
                     </CardContent>
                   </Card>
                 ) : (
