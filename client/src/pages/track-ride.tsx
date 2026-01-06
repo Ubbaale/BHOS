@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import Header from "@/components/Header";
 import BackToHome from "@/components/BackToHome";
 import { Button } from "@/components/ui/button";
@@ -11,10 +13,11 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { RideChat } from "@/components/RideChat";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   Car, Phone, MapPin, Clock, Shield, Share2, AlertTriangle, 
   User, CheckCircle2, Navigation, MessageCircle, Accessibility, Copy, ExternalLink,
-  DollarSign, Heart
+  DollarSign, Heart, CreditCard, Loader2
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Ride } from "@shared/schema";
@@ -68,6 +71,92 @@ const statusSteps = [
   { status: "completed", label: "Completed", icon: CheckCircle2 },
 ];
 
+interface TipPaymentFormProps {
+  onSuccess: () => void;
+  onCancel: () => void;
+  amount: number;
+}
+
+function TipPaymentFormContent({ onSuccess, onCancel, amount }: TipPaymentFormProps) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setIsProcessing(true);
+    setErrorMessage(null);
+
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: window.location.href,
+      },
+      redirect: 'if_required',
+    });
+
+    if (error) {
+      setErrorMessage(error.message || 'Payment failed. Please try again.');
+      setIsProcessing(false);
+    } else {
+      onSuccess();
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="text-center mb-4">
+        <p className="text-muted-foreground">
+          Tip amount: <span className="text-lg font-bold text-foreground">${amount.toFixed(2)}</span>
+        </p>
+      </div>
+      
+      <PaymentElement />
+      
+      {errorMessage && (
+        <Alert variant="destructive">
+          <AlertTriangle className="w-4 h-4" />
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
+      )}
+      
+      <div className="flex gap-3">
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={onCancel}
+          disabled={isProcessing}
+          className="flex-1"
+          data-testid="button-cancel-tip-payment"
+        >
+          Cancel
+        </Button>
+        <Button 
+          type="submit" 
+          disabled={!stripe || isProcessing}
+          className="flex-1"
+          data-testid="button-confirm-tip-payment"
+        >
+          {isProcessing ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            <>
+              <Heart className="w-4 h-4 mr-2" />
+              Send ${amount.toFixed(2)} Tip
+            </>
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export default function TrackRide() {
   const { id } = useParams<{ id: string }>();
   const rideId = parseInt(id || "0");
@@ -79,6 +168,28 @@ export default function TrackRide() {
   const [selectedTip, setSelectedTip] = useState<number | null>(null);
   const [customTip, setCustomTip] = useState("");
   const [tipDialogOpen, setTipDialogOpen] = useState(false);
+  
+  const [stripePromise, setStripePromise] = useState<Promise<any> | null>(null);
+  const [tipClientSecret, setTipClientSecret] = useState<string | null>(null);
+  const [showTipPayment, setShowTipPayment] = useState(false);
+  const [pendingTipAmount, setPendingTipAmount] = useState<number>(0);
+  
+  useEffect(() => {
+    const fetchStripeKey = async () => {
+      try {
+        const response = await fetch('/api/stripe/publishable-key');
+        if (response.ok) {
+          const { publishableKey } = await response.json();
+          if (publishableKey) {
+            setStripePromise(loadStripe(publishableKey));
+          }
+        }
+      } catch (error) {
+        console.log('Stripe not configured:', error);
+      }
+    };
+    fetchStripeKey();
+  }, []);
 
   // Get tracking token from URL query params and store it
   const [trackingToken, setTrackingToken] = useState<string | null>(() => {
@@ -164,15 +275,40 @@ export default function TrackRide() {
     },
   });
 
-  const tipMutation = useMutation({
-    mutationFn: async (tipAmount: string) => {
-      const res = await apiRequest("POST", `/api/rides/${rideId}/tip`, { tipAmount });
+  const [tipPaymentIntentId, setTipPaymentIntentId] = useState<string | null>(null);
+
+  const createTipPaymentMutation = useMutation({
+    mutationFn: async (tipAmount: number) => {
+      const res = await apiRequest("POST", `/api/rides/${rideId}/tip-payment`, { tipAmount });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setTipClientSecret(data.clientSecret);
+      setTipPaymentIntentId(data.paymentIntentId);
+      setShowTipPayment(true);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Could not set up tip payment",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const confirmTipMutation = useMutation({
+    mutationFn: async ({ tipAmount, paymentIntentId }: { tipAmount: string; paymentIntentId?: string }) => {
+      const res = await apiRequest("POST", `/api/rides/${rideId}/tip`, { tipAmount, paymentIntentId });
       return res.json();
     },
     onSuccess: () => {
       setTipDialogOpen(false);
+      setShowTipPayment(false);
+      setTipClientSecret(null);
+      setTipPaymentIntentId(null);
       setSelectedTip(null);
       setCustomTip("");
+      setPendingTipAmount(0);
       queryClient.invalidateQueries({ queryKey: ["/api/rides", rideId] });
       toast({
         title: "Thank You!",
@@ -199,10 +335,29 @@ export default function TrackRide() {
   };
 
   const handleTip = () => {
-    const tipAmount = customTip ? customTip : selectedTip ? (getFinalFare() * selectedTip / 100).toFixed(2) : null;
-    if (tipAmount && parseFloat(tipAmount) > 0) {
-      tipMutation.mutate(tipAmount);
+    const tipAmount = customTip ? parseFloat(customTip) : selectedTip ? (getFinalFare() * selectedTip / 100) : 0;
+    if (tipAmount > 0) {
+      setPendingTipAmount(tipAmount);
+      if (stripePromise) {
+        createTipPaymentMutation.mutate(tipAmount);
+      } else {
+        confirmTipMutation.mutate({ tipAmount: tipAmount.toFixed(2) });
+      }
     }
+  };
+
+  const handleTipPaymentSuccess = () => {
+    confirmTipMutation.mutate({ 
+      tipAmount: pendingTipAmount.toFixed(2), 
+      paymentIntentId: tipPaymentIntentId || undefined 
+    });
+  };
+
+  const handleTipPaymentCancel = () => {
+    setShowTipPayment(false);
+    setTipClientSecret(null);
+    setTipPaymentIntentId(null);
+    setPendingTipAmount(0);
   };
 
   const getCurrentStep = () => {
@@ -584,79 +739,118 @@ export default function TrackRide() {
             </Link>
 
             {ride.status === "completed" && !ride.tipAmount && (
-              <Dialog open={tipDialogOpen} onOpenChange={setTipDialogOpen}>
+              <Dialog open={tipDialogOpen} onOpenChange={(open) => {
+                setTipDialogOpen(open);
+                if (!open) {
+                  setShowTipPayment(false);
+                  setTipClientSecret(null);
+                }
+              }}>
                 <DialogTrigger asChild>
                   <Button variant="default" data-testid="button-add-tip">
                     <Heart className="w-4 h-4 mr-2" />
                     Add Tip
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-md">
                   <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                       <Heart className="w-5 h-5 text-red-500" />
                       Thank Your Driver
                     </DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                      Show your appreciation! 100% of tips go directly to your driver.
-                    </p>
-                    
-                    <div className="flex gap-2">
-                      {tipOptions.map((option) => (
-                        <Button
-                          key={option.percent}
-                          variant={selectedTip === option.percent ? "default" : "outline"}
-                          onClick={() => {
-                            setSelectedTip(option.percent);
-                            setCustomTip("");
-                          }}
-                          className="flex-1"
-                          data-testid={`button-tip-${option.percent}`}
-                        >
-                          <div className="text-center">
-                            <div className="font-semibold">{option.label}</div>
-                            <div className="text-xs opacity-75">
-                              ${(getFinalFare() * option.percent / 100).toFixed(2)}
-                            </div>
-                          </div>
-                        </Button>
-                      ))}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="custom-tip">Or enter a custom amount</Label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          id="custom-tip"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={customTip}
-                          onChange={(e) => {
-                            setCustomTip(e.target.value);
-                            setSelectedTip(null);
-                          }}
-                          placeholder="0.00"
-                          className="pl-8"
-                          data-testid="input-custom-tip"
+                  
+                  {showTipPayment && tipClientSecret && stripePromise ? (
+                    <div className="space-y-4">
+                      <Elements 
+                        stripe={stripePromise} 
+                        options={{ 
+                          clientSecret: tipClientSecret,
+                          appearance: { theme: 'stripe' },
+                        }}
+                      >
+                        <TipPaymentFormContent 
+                          onSuccess={handleTipPaymentSuccess} 
+                          onCancel={handleTipPaymentCancel}
+                          amount={pendingTipAmount}
                         />
+                      </Elements>
+                      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                        <Shield className="w-4 h-4" />
+                        <span>Secure payment powered by Stripe</span>
                       </div>
                     </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Show your appreciation! 100% of tips go directly to your driver.
+                      </p>
+                      
+                      <div className="flex gap-2">
+                        {tipOptions.map((option) => (
+                          <Button
+                            key={option.percent}
+                            variant={selectedTip === option.percent ? "default" : "outline"}
+                            onClick={() => {
+                              setSelectedTip(option.percent);
+                              setCustomTip("");
+                            }}
+                            className="flex-1"
+                            data-testid={`button-tip-${option.percent}`}
+                          >
+                            <div className="text-center">
+                              <div className="font-semibold">{option.label}</div>
+                              <div className="text-xs opacity-75">
+                                ${(getFinalFare() * option.percent / 100).toFixed(2)}
+                              </div>
+                            </div>
+                          </Button>
+                        ))}
+                      </div>
 
-                    <Button
-                      onClick={handleTip}
-                      disabled={(!selectedTip && !customTip) || tipMutation.isPending}
-                      className="w-full"
-                      data-testid="button-submit-tip"
-                    >
-                      {tipMutation.isPending ? "Sending..." : 
-                        `Add $${customTip || (selectedTip ? (getFinalFare() * selectedTip / 100).toFixed(2) : "0.00")} Tip`
-                      }
-                    </Button>
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="custom-tip">Or enter a custom amount</Label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            id="custom-tip"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={customTip}
+                            onChange={(e) => {
+                              setCustomTip(e.target.value);
+                              setSelectedTip(null);
+                            }}
+                            placeholder="0.00"
+                            className="pl-8"
+                            data-testid="input-custom-tip"
+                          />
+                        </div>
+                      </div>
+
+                      <Button
+                        onClick={handleTip}
+                        disabled={(!selectedTip && !customTip) || createTipPaymentMutation.isPending || confirmTipMutation.isPending}
+                        className="w-full"
+                        data-testid="button-submit-tip"
+                      >
+                        {createTipPaymentMutation.isPending || confirmTipMutation.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            {createTipPaymentMutation.isPending ? "Setting up..." : "Sending..."}
+                          </>
+                        ) : stripePromise ? (
+                          <>
+                            <CreditCard className="w-4 h-4 mr-2" />
+                            Continue to Pay ${customTip || (selectedTip ? (getFinalFare() * selectedTip / 100).toFixed(2) : "0.00")}
+                          </>
+                        ) : (
+                          `Add $${customTip || (selectedTip ? (getFinalFare() * selectedTip / 100).toFixed(2) : "0.00")} Tip`
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </DialogContent>
               </Dialog>
             )}

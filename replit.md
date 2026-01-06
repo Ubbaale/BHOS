@@ -155,15 +155,27 @@ Database tables:
   - "Tips Received" shows total tips as separate metric
   - Full earnings breakdown available via API
 
-### Payment System (Pending Stripe Setup)
-- **Current Status**: Payment integration not yet configured (user dismissed Stripe setup twice)
-- **Intended Workflow**: 
-  - Payment collected UPFRONT at booking time (estimated fare based on distance)
-  - Tips collected separately after ride completion
+### Payment System (Stripe Integration)
+- **Stripe Integration**: Fully configured via Replit connector with stripe-replit-sync
+- **Upfront Payment Flow** (self-pay rides):
+  1. Patient enters ride details and sees estimated fare
+  2. Clicks "Continue to Payment" to initiate Stripe checkout
+  3. Stripe Elements payment form collects card details securely
+  4. Payment confirmed before ride is created in the system
+  5. Ride is marked with `paymentStatus: 'paid'` and `stripePaymentIntentId`
+- **Tip Payment Flow**:
+  1. After ride completion, patient can add tip from tracking page
+  2. Three preset options (15%, 20%, 25%) or custom amount
+  3. Stripe payment form for tip collection
+  4. Backend verifies payment intent before recording tip
+  5. 100% of tips go directly to drivers
+- **Insurance Rides**: No upfront payment required (billed to insurance)
 - **Fare Structure**: $20 base + $2.50/mile, $22 minimum
-- **Future Integration**: Stripe payment processing required
-- **To Enable Payments**: User needs to complete Stripe integration setup via Replit connector
-- **Note**: Until Stripe is configured, fares are calculated but not collected
+- **Database Fields**:
+  - `stripePaymentIntentId` - Tracks Stripe payment intent
+  - `paidAmount` - Amount collected at booking
+  - `paymentStatus` - pending/paid/completed/failed/refunded
+  - `tipAmount`, `tipPaidAt` - Tip tracking
 
 ### Healthcare-Friendly Operational Policies
 

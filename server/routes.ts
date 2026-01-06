@@ -2049,12 +2049,11 @@ export async function registerRoutes(
     }
   });
 
-  // Add tip to a completed ride
-  // Protected: Only authenticated users can add tips
-  app.post("/api/rides/:id/tip", requireAuth, async (req, res) => {
+  // Add tip to a completed ride (with optional Stripe verification)
+  app.post("/api/rides/:id/tip", async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
-      const { tipAmount } = req.body;
+      const { tipAmount, paymentIntentId } = req.body;
       
       if (!tipAmount || parseFloat(tipAmount) <= 0) {
         return res.status(400).json({ message: "Valid tip amount is required" });
@@ -2071,6 +2070,29 @@ export async function registerRoutes(
       
       if (ride.tipAmount && parseFloat(ride.tipAmount) > 0) {
         return res.status(400).json({ message: "Tip already added to this ride" });
+      }
+      
+      // If a payment intent ID is provided, verify the payment succeeded
+      if (paymentIntentId) {
+        try {
+          const stripe = await getUncachableStripeClient();
+          const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+          
+          if (paymentIntent.status !== 'succeeded') {
+            return res.status(400).json({ 
+              message: "Payment not completed",
+              paymentStatus: paymentIntent.status
+            });
+          }
+          
+          // Verify the payment intent is for this ride
+          if (paymentIntent.metadata.rideId !== rideId.toString()) {
+            return res.status(400).json({ message: "Payment intent does not match this ride" });
+          }
+        } catch (stripeError) {
+          console.error("Error verifying payment:", stripeError);
+          return res.status(400).json({ message: "Could not verify payment" });
+        }
       }
       
       const updatedRide = await storage.addTip(rideId, tipAmount);
