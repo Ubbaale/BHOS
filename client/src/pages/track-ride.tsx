@@ -80,21 +80,61 @@ export default function TrackRide() {
   const [customTip, setCustomTip] = useState("");
   const [tipDialogOpen, setTipDialogOpen] = useState(false);
 
-  const { data: ride, isLoading: rideLoading } = useQuery<Ride>({
+  // Get tracking token from URL query params and store it
+  const [trackingToken, setTrackingToken] = useState<string | null>(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get("token");
+  });
+
+  // Strip token from URL after reading (security: avoid leaking in referrers/logs)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get("token");
+    if (token) {
+      setTrackingToken(token);
+      if (window.history.replaceState) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("token");
+        window.history.replaceState({}, "", url.pathname);
+      }
+    }
+  }, []);
+
+  const { data: ride, isLoading: rideLoading, error: rideError } = useQuery<Ride>({
     queryKey: ["/api/rides", rideId],
     refetchInterval: 10000,
   });
 
-  const { data: driverInfo, isLoading: driverLoading } = useQuery<DriverInfo>({
-    queryKey: ["/api/rides", rideId, "driver-info"],
-    enabled: !!ride,
+  const { data: driverInfo, isLoading: driverLoading, error: driverInfoError } = useQuery<DriverInfo>({
+    queryKey: ["/api/rides", rideId, "driver-info", trackingToken],
+    queryFn: async () => {
+      if (!trackingToken) throw new Error("Access token required");
+      const res = await fetch(`/api/rides/${rideId}/driver-info?token=${trackingToken}`, { credentials: "include" });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to fetch driver info");
+      }
+      return res.json();
+    },
+    enabled: !!ride && !!trackingToken,
     refetchInterval: 10000,
+    retry: false,
   });
 
-  const { data: trackingInfo } = useQuery<TrackingInfo>({
-    queryKey: ["/api/rides", rideId, "tracking"],
-    enabled: !!ride && ["accepted", "driver_enroute", "arrived", "in_progress"].includes(ride?.status || ""),
+  const { data: trackingInfo, error: trackingError } = useQuery<TrackingInfo>({
+    queryKey: ["/api/rides", rideId, "tracking", trackingToken],
+    queryFn: async () => {
+      if (!trackingToken) throw new Error("Access token required");
+      const res = await fetch(`/api/rides/${rideId}/tracking?token=${trackingToken}`, { credentials: "include" });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to fetch tracking info");
+      }
+      return res.json();
+    },
+    enabled: !!ride && !!trackingToken && ["accepted", "driver_enroute", "arrived", "in_progress"].includes(ride?.status || ""),
     refetchInterval: 5000,
+    retry: false,
   });
 
   const shareTripMutation = useMutation({

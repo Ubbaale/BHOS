@@ -358,7 +358,7 @@ export default function BookRide() {
   const [locationMode, setLocationMode] = useState<"pickup" | "dropoff">("pickup");
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
   const [bookingSuccess, setBookingSuccess] = useState(false);
-  const [bookedRide, setBookedRide] = useState<Ride | null>(null);
+  const [bookedRide, setBookedRide] = useState<(Ride & { trackingToken?: string | null }) | null>(null);
   const [fareEstimate, setFareEstimate] = useState<{ distance: number; fare: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [accountStatus, setAccountStatus] = useState<PatientAccountStatus | null>(null);
@@ -718,7 +718,7 @@ export default function BookRide() {
                 </div>
               </div>
               <div className="flex gap-4 justify-center flex-wrap">
-                <Link href={`/track/${bookedRide.id}`}>
+                <Link href={`/track/${bookedRide.id}${bookedRide.trackingToken ? `?token=${bookedRide.trackingToken}` : ''}`}>
                   <Button data-testid="button-track-ride">
                     <MapPin className="w-4 h-4 mr-2" />
                     Track Your Ride
