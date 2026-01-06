@@ -29,7 +29,15 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText, Navigation, AlertTriangle } from "lucide-react";
+import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText, Navigation, AlertTriangle, Heart, Users } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Alert,
   AlertDescription,
@@ -79,6 +87,12 @@ const dropoffIcon = new L.Icon({
 const bookRideSchema = z.object({
   patientName: z.string().min(1, "Name is required"),
   patientPhone: z.string().min(10, "Valid phone number is required"),
+  // Booking for someone else
+  bookedByOther: z.boolean().default(false),
+  bookerName: z.string().optional(),
+  bookerPhone: z.string().optional(),
+  bookerEmail: z.string().email().optional().or(z.literal("")),
+  bookerRelation: z.enum(["spouse", "child", "parent", "caregiver", "other"]).optional(),
   pickupAddress: z.string().min(1, "Pickup address is required"),
   pickupLat: z.string(),
   pickupLng: z.string(),
@@ -317,6 +331,11 @@ export default function BookRide() {
     defaultValues: {
       patientName: "",
       patientPhone: "",
+      bookedByOther: false,
+      bookerName: "",
+      bookerPhone: "",
+      bookerEmail: "",
+      bookerRelation: undefined,
       pickupAddress: "",
       pickupLat: "",
       pickupLng: "",
@@ -333,6 +352,8 @@ export default function BookRide() {
       priorAuthNumber: "",
     },
   });
+
+  const bookedByOther = form.watch("bookedByOther");
 
   const paymentType = form.watch("paymentType");
   const patientPhone = form.watch("patientPhone");
@@ -767,6 +788,114 @@ export default function BookRide() {
                         )}
                       />
                     </div>
+
+                    {/* Booking for someone else toggle */}
+                    <FormField
+                      control={form.control}
+                      name="bookedByOther"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
+                          <div className="space-y-0.5">
+                            <FormLabel className="text-sm font-medium flex items-center gap-2">
+                              <Heart className="w-4 h-4 text-primary" />
+                              Booking for a family member or loved one?
+                            </FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                              You can book a ride on behalf of someone else and track their journey
+                            </p>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              data-testid="switch-booked-by-other"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Booker information fields - shown when booking for someone else */}
+                    {bookedByOther && (
+                      <Card className="border-primary/20">
+                        <CardContent className="pt-4 space-y-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Users className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-medium">Your Information (Person Booking)</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                              control={form.control}
+                              name="bookerName"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Your Name</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="Your full name" {...field} data-testid="input-booker-name" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="bookerPhone"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Your Phone</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="(555) 123-4567" {...field} data-testid="input-booker-phone" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                              control={form.control}
+                              name="bookerEmail"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Your Email (for updates)</FormLabel>
+                                  <FormControl>
+                                    <Input type="email" placeholder="your@email.com" {...field} data-testid="input-booker-email" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="bookerRelation"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Relationship to Patient</FormLabel>
+                                  <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl>
+                                      <SelectTrigger data-testid="select-booker-relation">
+                                        <SelectValue placeholder="Select..." />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="spouse">Spouse/Partner</SelectItem>
+                                      <SelectItem value="child">Son/Daughter</SelectItem>
+                                      <SelectItem value="parent">Parent</SelectItem>
+                                      <SelectItem value="caregiver">Caregiver</SelectItem>
+                                      <SelectItem value="other">Other</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            You'll receive a tracking link after booking so you can monitor your loved one's ride in real-time.
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     <FormField
                       control={form.control}

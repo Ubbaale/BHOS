@@ -12,6 +12,7 @@ import DriverKyc from "@/pages/driver-kyc";
 import AdminDrivers from "@/pages/admin-drivers";
 import TripReceipt from "@/pages/trip-receipt";
 import TrackRide from "@/pages/track-ride";
+import SharedTracking from "@/pages/shared-tracking";
 
 function Router() {
   return (
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/book-ride" component={BookRide} />
       <Route path="/track/:id" component={TrackRide} />
+      <Route path="/share/:code" component={SharedTracking} />
       <Route path="/driver" component={DriverDashboard} />
       <Route path="/driver/apply" component={DriverApply} />
       <Route path="/driver/kyc" component={DriverKyc} />

@@ -1259,16 +1259,20 @@ export async function registerRoutes(
       
       let driver = null;
       if (ride.driverId) {
-        driver = await storage.getDriver(ride.driverId);
-        if (driver) {
+        const driverData = await storage.getDriver(ride.driverId);
+        if (driverData) {
           driver = {
-            fullName: driver.fullName,
-            vehicleType: driver.vehicleType,
-            vehiclePlate: driver.vehiclePlate,
-            vehicleColor: driver.vehicleColor,
-            vehicleMake: driver.vehicleMake,
-            vehicleModel: driver.vehicleModel,
-            profilePhotoDoc: driver.profilePhotoDoc
+            fullName: driverData.fullName,
+            phone: driverData.phone,
+            vehicleType: driverData.vehicleType,
+            vehiclePlate: driverData.vehiclePlate,
+            vehicleColor: driverData.vehicleColor,
+            vehicleMake: driverData.vehicleMake,
+            vehicleModel: driverData.vehicleModel,
+            vehicleYear: driverData.vehicleYear,
+            profilePhotoDoc: driverData.profilePhotoDoc,
+            wheelchairAccessible: driverData.wheelchairAccessible,
+            stretcherCapable: driverData.stretcherCapable
           };
         }
       }
@@ -1277,16 +1281,26 @@ export async function registerRoutes(
         ride: {
           id: ride.id,
           status: ride.status,
+          patientName: ride.patientName,
+          patientPhone: ride.patientPhone,
           pickupAddress: ride.pickupAddress,
           dropoffAddress: ride.dropoffAddress,
+          appointmentTime: ride.appointmentTime,
+          mobilityNeeds: ride.mobilityNeeds,
           estimatedArrivalTime: ride.estimatedArrivalTime,
+          verificationCode: ride.verificationCode,
+          bookedByOther: ride.bookedByOther,
+          bookerName: ride.bookerName,
           pickupLat: ride.pickupLat,
           pickupLng: ride.pickupLng,
           dropoffLat: ride.dropoffLat,
           dropoffLng: ride.dropoffLng
         },
         driver,
-        sharedWith: share.contactName
+        share: {
+          contactName: share.contactName,
+          isActive: share.isActive
+        }
       });
     } catch (error) {
       console.error("Error tracking trip:", error);
