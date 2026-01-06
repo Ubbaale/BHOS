@@ -40,6 +40,24 @@ interface DriverInfo {
   };
 }
 
+interface TrackingInfo {
+  ride: Ride;
+  driver: {
+    id: number;
+    fullName: string;
+    phone: string;
+    currentLat: string | null;
+    currentLng: string | null;
+  } | null;
+  tracking: {
+    distanceToPickup: string | null;
+    distanceToDropoff: string | null;
+    estimatedMinutesToPickup: number | null;
+    estimatedMinutesToDropoff: number | null;
+    lastUpdated: string;
+  };
+}
+
 const statusSteps = [
   { status: "requested", label: "Requested", icon: Clock },
   { status: "accepted", label: "Driver Assigned", icon: User },
@@ -70,6 +88,12 @@ export default function TrackRide() {
     queryKey: ["/api/rides", rideId, "driver-info"],
     enabled: !!ride,
     refetchInterval: 10000,
+  });
+
+  const { data: trackingInfo } = useQuery<TrackingInfo>({
+    queryKey: ["/api/rides", rideId, "tracking"],
+    enabled: !!ride && ["accepted", "driver_enroute", "arrived", "in_progress"].includes(ride?.status || ""),
+    refetchInterval: 5000,
   });
 
   const shareTripMutation = useMutation({
@@ -278,10 +302,41 @@ export default function TrackRide() {
                       )}
                     </div>
 
+                    {trackingInfo?.tracking && (trackingInfo.tracking.distanceToPickup || trackingInfo.tracking.distanceToDropoff) && (
+                      <div className="bg-primary/10 rounded-md p-3 space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <Navigation className="w-4 h-4 text-primary" />
+                          <span className="text-primary">Live Location</span>
+                        </div>
+                        {["accepted", "driver_enroute"].includes(ride.status) && trackingInfo.tracking.distanceToPickup && (
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-sm text-muted-foreground">Distance to pickup:</span>
+                            <span className="font-semibold" data-testid="text-distance-pickup">
+                              {trackingInfo.tracking.distanceToPickup} mi
+                              {trackingInfo.tracking.estimatedMinutesToPickup && (
+                                <span className="text-muted-foreground font-normal"> ({trackingInfo.tracking.estimatedMinutesToPickup} min)</span>
+                              )}
+                            </span>
+                          </div>
+                        )}
+                        {ride.status === "in_progress" && trackingInfo.tracking.distanceToDropoff && (
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-sm text-muted-foreground">Distance to destination:</span>
+                            <span className="font-semibold" data-testid="text-distance-dropoff">
+                              {trackingInfo.tracking.distanceToDropoff} mi
+                              {trackingInfo.tracking.estimatedMinutesToDropoff && (
+                                <span className="text-muted-foreground font-normal"> ({trackingInfo.tracking.estimatedMinutesToDropoff} min)</span>
+                              )}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {driverInfo?.ride.estimatedArrivalTime && (
                       <div className="flex items-center gap-2 text-sm">
                         <Clock className="w-4 h-4" />
-                        <span>ETA: {format(new Date(driverInfo.ride.estimatedArrivalTime), "h:mm a")}</span>
+                        <span>Scheduled ETA: {format(new Date(driverInfo.ride.estimatedArrivalTime), "h:mm a")}</span>
                       </div>
                     )}
                   </div>
