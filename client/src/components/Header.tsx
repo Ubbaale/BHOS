@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Menu, X, Phone, Car, Truck } from "lucide-react";
-import logoImg from "@assets/Screenshot_2025-12-11_223813_1765510798530.jpg";
+import logoImg from "@assets/Logocare-Picsart-BackgroundRemover_1767809315800.jpg";
 import JobPostingForm from "./JobPostingForm";
 
 export default function Header() {
