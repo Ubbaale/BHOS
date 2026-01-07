@@ -409,32 +409,41 @@ export async function registerRoutes(
         }
       }
 
-      // Set session data
-      req.session.userId = user.id;
-      req.session.username = user.username;
-      req.session.role = user.role || "user";
-      if (driverId) {
-        req.session.driverId = driverId;
-      }
+      // Regenerate session to prevent session fixation attacks
+      const oldSession = req.session;
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error("Session regeneration error:", err);
+          return res.status(500).json({ message: "Login failed" });
+        }
+        
+        // Set session data on new session
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        req.session.role = user.role || "user";
+        if (driverId) {
+          req.session.driverId = driverId;
+        }
 
-      // Clear rate limiting on successful login
-      if ((req as any).loginRateLimitKey) {
-        clearLoginAttempts((req as any).loginRateLimitKey);
-      }
+        // Clear rate limiting on successful login
+        if ((req as any).loginRateLimitKey) {
+          clearLoginAttempts((req as any).loginRateLimitKey);
+        }
 
-      res.json({ 
-        message: "Login successful",
-        user: { 
-          id: user.id, 
-          username: user.username, 
-          role: user.role 
-        },
-        driver: driverProfile ? {
-          id: driverProfile.id,
-          fullName: driverProfile.fullName,
-          applicationStatus: driverProfile.applicationStatus,
-          kycStatus: driverProfile.kycStatus
-        } : null
+        res.json({ 
+          message: "Login successful",
+          user: { 
+            id: user.id, 
+            username: user.username, 
+            role: user.role 
+          },
+          driver: driverProfile ? {
+            id: driverProfile.id,
+            fullName: driverProfile.fullName,
+            applicationStatus: driverProfile.applicationStatus,
+            kycStatus: driverProfile.kycStatus
+          } : null
+        });
       });
     } catch (error) {
       console.error("Login error:", error);
