@@ -15,14 +15,19 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
   // Referrer policy
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   
-  // Content Security Policy (adjust as needed for your app)
+  // Content Security Policy - production-hardened with minimal unsafe directives
+  // Note: 'unsafe-inline' is required for React/Vite development HMR
+  const isProduction = process.env.NODE_ENV === "production";
   const cspDirectives = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://maps.googleapis.com",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    // In production, remove unsafe-eval; in development, allow for HMR
+    isProduction 
+      ? "script-src 'self' https://js.stripe.com https://maps.googleapis.com https://unpkg.com"
+      : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://maps.googleapis.com https://unpkg.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com https://*.googleapis.com",
-    "connect-src 'self' https://api.stripe.com https://maps.googleapis.com wss://*.replit.dev wss://*.replit.app",
+    "connect-src 'self' https://api.stripe.com https://maps.googleapis.com wss://*.replit.dev wss://*.replit.app ws://localhost:* wss://localhost:*",
     "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
     "object-src 'none'",
     "base-uri 'self'",
@@ -85,12 +90,27 @@ setInterval(() => {
 
 // Global rate limiting (requests per minute per IP)
 const requestCounts: Map<string, { count: number; resetAt: number }> = new Map();
-const GLOBAL_RATE_LIMIT = 100; // requests per minute
+const GLOBAL_RATE_LIMIT = 200; // requests per minute - generous for development
 const GLOBAL_RATE_WINDOW = 60 * 1000; // 1 minute
 
 export function globalRateLimiter(req: Request, res: Response, next: NextFunction) {
-  // Skip rate limiting for static assets
-  if (req.path.startsWith("/assets") || req.path.endsWith(".js") || req.path.endsWith(".css")) {
+  // Skip rate limiting in development for better DX
+  if (process.env.NODE_ENV !== "production") {
+    return next();
+  }
+  
+  // Skip rate limiting for static assets and Vite HMR
+  if (
+    req.path.startsWith("/assets") || 
+    req.path.startsWith("/@") ||
+    req.path.startsWith("/node_modules") ||
+    req.path.endsWith(".js") || 
+    req.path.endsWith(".css") ||
+    req.path.endsWith(".map") ||
+    req.path.endsWith(".ico") ||
+    req.path.endsWith(".png") ||
+    req.path.endsWith(".svg")
+  ) {
     return next();
   }
   

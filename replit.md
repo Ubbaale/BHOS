@@ -41,10 +41,15 @@ Preferred communication style: Simple, everyday language.
     -   API documentation available at `/api/mobile/docs`.
 
 ### Security and Data Protection
--   **Session Security**: PostgreSQL-backed sessions, HttpOnly and SameSite=strict cookies.
--   **Authentication**: Rate limiting for login attempts, token-based authentication for WebSockets.
--   **Password Security**: bcrypt hashing.
+-   **Session Security**: PostgreSQL-backed sessions, HttpOnly and SameSite=strict cookies, session regeneration on login to prevent session fixation.
+-   **Authentication**: Rate limiting for login attempts (5 attempts per 15 min, 30 min block), token-based authentication for WebSockets.
+-   **Password Security**: bcrypt hashing with strong password requirements (uppercase, lowercase, number, special character).
 -   **Input Validation**: Zod schemas for all API inputs.
+-   **Security Headers**: X-Frame-Options (DENY), X-XSS-Protection, X-Content-Type-Options (nosniff), Content-Security-Policy, HSTS (production), Referrer-Policy, Permissions-Policy.
+-   **Global Rate Limiting**: 100 requests per minute per IP to prevent DoS attacks.
+-   **File Upload Security**: 10MB size limit, restricted MIME types (PNG, JPG, PDF only).
+-   **CORS**: Strict allowlist for session-based endpoints, configured for Capacitor/Ionic mobile apps.
+-   **WebSocket Security**: Single-use authentication tokens required for ride updates and chat connections.
 
 ## Mobile App Store Preparation
 
