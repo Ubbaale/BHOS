@@ -364,6 +364,54 @@ export async function registerRoutes(
     next();
   };
 
+  // Seed test accounts endpoint (one-time setup)
+  app.get("/api/setup/seed-test-accounts", async (req, res) => {
+    try {
+      // Check if test accounts already exist
+      const existingDriver = await storage.getUserByUsername("driver@test.com");
+      const existingPatient = await storage.getUserByUsername("patient@test.com");
+      
+      const results: string[] = [];
+      
+      if (!existingDriver) {
+        const driverHash = await bcrypt.hash("TestDriver123!", 10);
+        await storage.createUser({
+          username: "driver@test.com",
+          password: driverHash,
+          role: "driver"
+        });
+        results.push("Driver account created: driver@test.com / TestDriver123!");
+      } else {
+        results.push("Driver account already exists: driver@test.com");
+      }
+      
+      if (!existingPatient) {
+        const patientHash = await bcrypt.hash("TestPatient123!", 10);
+        await storage.createUser({
+          username: "patient@test.com",
+          password: patientHash,
+          role: "patient"
+        });
+        results.push("Patient account created: patient@test.com / TestPatient123!");
+      } else {
+        results.push("Patient account already exists: patient@test.com");
+      }
+      
+      res.json({ 
+        success: true, 
+        message: "Test accounts setup complete",
+        results,
+        credentials: {
+          driver: { username: "driver@test.com", password: "TestDriver123!" },
+          patient: { username: "patient@test.com", password: "TestPatient123!" }
+        }
+      });
+    } catch (error) {
+      console.error("Error seeding test accounts:", error);
+      res.status(500).json({ message: "Failed to seed test accounts", error: String(error) });
+    }
+  });
+
   // Auth routes with rate limiting protection
   app.post("/api/auth/login", loginRateLimiter, async (req, res) => {
     try {
