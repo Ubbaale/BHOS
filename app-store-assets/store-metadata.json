@@ -1,0 +1,95 @@
+{
+  "appId": "com.carehubapp.app",
+  "appName": "Carehub",
+  "appSubtitle": "Medical Transport & Healthcare",
+  "version": "1.0.0",
+  "buildNumber": 1,
+  
+  "ios": {
+    "bundleId": "com.carehubapp.app",
+    "teamId": "YOUR_TEAM_ID",
+    "category": {
+      "primary": "Medical",
+      "secondary": "Travel"
+    },
+    "ageRating": "4+",
+    "privacyPolicyUrl": "https://carehubapp.com/privacy",
+    "supportUrl": "https://carehubapp.com/support",
+    "marketingUrl": "https://carehubapp.com"
+  },
+  
+  "android": {
+    "packageName": "com.carehubapp.app",
+    "category": "MEDICAL",
+    "contentRating": "Everyone",
+    "privacyPolicyUrl": "https://carehubapp.com/privacy"
+  },
+  
+  "localization": {
+    "en-US": {
+      "name": "Carehub - Medical Transport",
+      "subtitle": "NEMT Rides Made Easy",
+      "shortDescription": "Book medical rides instantly. NEMT transportation made easy.",
+      "fullDescription": "Carehub connects patients with reliable non-emergency medical transportation (NEMT) services. Whether you need a ride to a doctor's appointment, dialysis treatment, or physical therapy session, Carehub makes booking easy and stress-free.\n\nFeatures:\n• Book rides instantly or schedule in advance\n• Real-time driver tracking and ETAs\n• Secure in-app messaging with your driver\n• Wheelchair and mobility assistance options\n• Insurance billing support\n• 24/7 customer support\n\nFor Healthcare Workers:\n• Find healthcare staffing opportunities\n• Apply for positions at top facilities\n• Manage your schedule and availability\n\nFor Drivers:\n• Accept ride requests in your area\n• Navigate with integrated maps\n• Track your earnings and tips\n\nDownload Carehub today for reliable medical transportation!",
+      "keywords": "medical transport,NEMT,healthcare ride,doctor appointment,medical taxi,wheelchair transport,dialysis transport,healthcare staffing",
+      "whatsNew": "Initial release with ride booking, real-time tracking, and healthcare staffing features."
+    }
+  },
+  
+  "screenshots": {
+    "iphone6_7": {
+      "size": "1290x2796",
+      "count": 6,
+      "required": ["home", "booking", "tracking", "chat", "driver", "profile"]
+    },
+    "iphone6_5": {
+      "size": "1284x2778",
+      "count": 6
+    },
+    "iphone5_5": {
+      "size": "1242x2208",
+      "count": 6
+    },
+    "ipadPro12_9": {
+      "size": "2048x2732",
+      "count": 6
+    },
+    "android_phone": {
+      "size": "1080x1920",
+      "count": 8
+    },
+    "android_tablet7": {
+      "size": "1200x1920",
+      "count": 8
+    },
+    "android_tablet10": {
+      "size": "1600x2560",
+      "count": 8
+    }
+  },
+  
+  "permissions": {
+    "ios": {
+      "NSLocationWhenInUseUsageDescription": "Carehub needs your location to show nearby rides and navigate to pickup/dropoff locations.",
+      "NSLocationAlwaysAndWhenInUseUsageDescription": "Carehub needs your location in the background to track rides and provide accurate ETAs.",
+      "NSCameraUsageDescription": "Carehub needs camera access to capture documents for driver verification.",
+      "NSPhotoLibraryUsageDescription": "Carehub needs photo library access to upload documents."
+    },
+    "android": [
+      "android.permission.INTERNET",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.VIBRATE",
+      "android.permission.RECEIVE_BOOT_COMPLETED"
+    ]
+  },
+  
+  "contact": {
+    "email": "support@carehubapp.com",
+    "phone": "774-581-9700",
+    "website": "https://carehubapp.com"
+  }
+}
