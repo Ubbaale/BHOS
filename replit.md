@@ -46,6 +46,21 @@ Preferred communication style: Simple, everyday language.
 -   **Password Security**: bcrypt hashing.
 -   **Input Validation**: Zod schemas for all API inputs.
 
+## Mobile App Store Preparation
+
+The application is configured for iOS App Store and Google Play submission:
+
+-   **Build Guide**: `MOBILE_BUILD_GUIDE.md` - Complete step-by-step instructions
+-   **Store Metadata**: `app-store-assets/store-metadata.json` - App descriptions, keywords, screenshots specs
+-   **Capacitor Config**: `capacitor.config.ts` - Native app settings for iOS and Android
+
+### Quick Build Steps
+1. Build web assets: `npm run build`
+2. Add platforms: `npx cap add ios` and `npx cap add android`
+3. Sync assets: `npx cap sync`
+4. Open in IDE: `npx cap open ios` or `npx cap open android`
+5. Build and sign for release
+
 ## External Dependencies
 
 -   **Database**: PostgreSQL, Drizzle Kit (for migrations).
