@@ -518,7 +518,7 @@ export async function registerRoutes(
       }
 
       const tokenPayload = {
-        userId: user.id,
+        userId: typeof user.id === 'string' ? parseInt(user.id) : user.id,
         username: user.username,
         role: user.role || "user",
         driverId,
@@ -526,11 +526,14 @@ export async function registerRoutes(
       };
 
       const accessToken = generateAccessToken(tokenPayload);
-      const refreshToken = generateRefreshToken(tokenPayload);
+      const refreshTokenValue = generateRefreshToken(tokenPayload);
+
+      // Clear rate limit on successful login
+      clearLoginAttempts((req as any).loginRateLimitKey);
 
       res.json({
         accessToken,
-        refreshToken,
+        refreshToken: refreshTokenValue,
         expiresIn: 900, // 15 minutes in seconds
         user: {
           id: user.id,
@@ -631,6 +634,184 @@ export async function registerRoutes(
       console.error("Mobile auth me error:", error);
       res.status(500).json({ message: "Failed to get user info" });
     }
+  });
+
+  // Mobile - register device for push notifications (FCM/APNs)
+  app.post("/api/mobile/push/register", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const { deviceToken, platform, deviceId } = req.body;
+      
+      if (!deviceToken || !platform) {
+        return res.status(400).json({ message: "Device token and platform are required" });
+      }
+      
+      if (!['fcm', 'apns', 'ios', 'android'].includes(platform.toLowerCase())) {
+        return res.status(400).json({ message: "Platform must be 'fcm', 'apns', 'ios', or 'android'" });
+      }
+      
+      // Store mobile push subscription using the push service
+      const endpoint = `mobile://${platform.toLowerCase()}/${deviceToken}`;
+      const p256dh = deviceId || 'mobile-device';
+      const auth = `user-${mobileUser.userId}`;
+      
+      await saveSubscription(endpoint, p256dh, auth, mobileUser.role, mobileUser.driverId);
+      
+      res.json({ 
+        message: "Device registered for push notifications",
+        platform: platform.toLowerCase()
+      });
+    } catch (error) {
+      console.error("Mobile push registration error:", error);
+      res.status(500).json({ message: "Failed to register device" });
+    }
+  });
+
+  // Mobile - get WebSocket token (using JWT auth)
+  app.get("/api/mobile/auth/ws-token", mobileAuthMiddleware, (req, res) => {
+    const mobileUser = (req as any).mobileUser as JwtPayload;
+    const token = generateWsToken(String(mobileUser.userId), mobileUser.role);
+    res.json({ token });
+  });
+
+  // Mobile - get available rides (for drivers)
+  app.get("/api/mobile/rides", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const { status, limit = 50 } = req.query;
+      
+      let rides = await storage.getAllRides();
+      
+      // Filter by driver if user is a driver
+      if (mobileUser.role === 'driver' && mobileUser.driverId) {
+        rides = rides.filter((r: any) => r.driverId === mobileUser.driverId);
+      }
+      
+      // Filter by status if provided
+      if (status && typeof status === 'string') {
+        rides = rides.filter((r: any) => r.status === status);
+      }
+      
+      // Limit results
+      rides = rides.slice(0, Number(limit));
+      
+      res.json({ rides });
+    } catch (error) {
+      console.error("Mobile get rides error:", error);
+      res.status(500).json({ message: "Failed to get rides" });
+    }
+  });
+
+  // Mobile - update ride status
+  app.patch("/api/mobile/rides/:id/status", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const rideId = parseInt(req.params.id);
+      const { status, latitude, longitude } = req.body;
+      
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      
+      // Verify driver owns this ride
+      if (mobileUser.role === 'driver' && ride.driverId !== mobileUser.driverId) {
+        return res.status(403).json({ message: "Not authorized for this ride" });
+      }
+      
+      // Update status
+      const updatedRide = await storage.updateRideStatus(rideId, status);
+      if (!updatedRide) {
+        return res.status(500).json({ message: "Failed to update ride" });
+      }
+      broadcastRideUpdate("status_change", updatedRide);
+      
+      res.json({ ride: updatedRide });
+    } catch (error) {
+      console.error("Mobile update ride status error:", error);
+      res.status(500).json({ message: "Failed to update ride status" });
+    }
+  });
+
+  // Mobile - update driver location
+  app.post("/api/mobile/driver/location", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      
+      if (!mobileUser.driverId) {
+        return res.status(403).json({ message: "Not a driver account" });
+      }
+      
+      const { latitude, longitude, rideId } = req.body;
+      
+      if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+        return res.status(400).json({ message: "Valid latitude and longitude required" });
+      }
+      
+      // Update driver's current location for active ride
+      if (rideId) {
+        const ride = await storage.getRide(rideId);
+        if (ride && ride.driverId === mobileUser.driverId) {
+          // Broadcast location update (ride entity doesn't store driver coordinates separately)
+          broadcastRideUpdate("driver_location", { ...ride, driverLatitude: latitude, driverLongitude: longitude });
+        }
+      }
+      
+      res.json({ message: "Location updated" });
+    } catch (error) {
+      console.error("Mobile driver location update error:", error);
+      res.status(500).json({ message: "Failed to update location" });
+    }
+  });
+
+  // Mobile API Documentation endpoint
+  app.get("/api/mobile/docs", (_req, res) => {
+    res.json({
+      apiVersion: "1.0.0",
+      baseUrl: "/api/mobile",
+      authentication: {
+        type: "Bearer Token (JWT)",
+        loginEndpoint: "POST /api/mobile/auth/login",
+        refreshEndpoint: "POST /api/mobile/auth/refresh",
+        logoutEndpoint: "POST /api/mobile/auth/logout",
+        tokenExpiry: "15 minutes (access), 7 days (refresh)"
+      },
+      endpoints: {
+        auth: [
+          { method: "POST", path: "/auth/login", description: "Login with username/password, returns access and refresh tokens", requiresAuth: false },
+          { method: "POST", path: "/auth/refresh", description: "Refresh access token using refresh token", requiresAuth: false },
+          { method: "POST", path: "/auth/logout", description: "Invalidate refresh token", requiresAuth: false },
+          { method: "GET", path: "/auth/me", description: "Get current user info", requiresAuth: true },
+          { method: "GET", path: "/auth/ws-token", description: "Get WebSocket authentication token", requiresAuth: true }
+        ],
+        push: [
+          { method: "POST", path: "/push/register", description: "Register device for push notifications (FCM/APNs)", requiresAuth: true }
+        ],
+        rides: [
+          { method: "GET", path: "/rides", description: "Get rides (filtered by driver for driver accounts)", requiresAuth: true },
+          { method: "PATCH", path: "/rides/:id/status", description: "Update ride status", requiresAuth: true }
+        ],
+        driver: [
+          { method: "POST", path: "/driver/location", description: "Update driver location", requiresAuth: true }
+        ]
+      },
+      websocket: {
+        jobsUrl: "wss://<host>/ws/jobs?token=<ws-token>",
+        ridesUrl: "wss://<host>/ws/rides?token=<ws-token>",
+        chatUrl: "wss://<host>/ws/chat/:rideId?token=<ws-token>",
+        note: "Get ws-token from /api/mobile/auth/ws-token endpoint"
+      },
+      requestFormat: {
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer <access_token>"
+        }
+      },
+      responseFormat: {
+        success: { "data": "..." },
+        error: { "message": "Error description" }
+      }
+    });
   });
 
   // Get a short-lived token for WebSocket authentication
@@ -2182,8 +2363,8 @@ export async function registerRoutes(
       // Check if user is the assigned driver
       let isDriver = false;
       if (ride.driverId) {
-        const driverProfile = await storage.getDriverProfile(ride.driverId);
-        if (driverProfile && driverProfile.userId === userId) {
+        const driverProfile = await storage.getDriver(ride.driverId);
+        if (driverProfile && driverProfile.userId !== null && parseInt(String(driverProfile.userId)) === userId) {
           isDriver = true;
         }
       }

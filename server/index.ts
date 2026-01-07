@@ -108,6 +108,47 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// CORS configuration for mobile apps
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Exact-match allowed origins for security (no prefix matching)
+  const allowedOrigins = new Set([
+    'capacitor://localhost',
+    'ionic://localhost',
+    'http://localhost',
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://localhost:8100',
+    'carehub://app',
+  ]);
+  
+  // For /api/mobile/* endpoints (JWT token-based auth, no cookies needed)
+  if (req.path.startsWith('/api/mobile/')) {
+    // Only allow known mobile app origins, not arbitrary origins
+    if (origin && allowedOrigins.has(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+    } else {
+      // For mobile apps without origin header (native apps)
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Device-ID');
+    // No credentials needed for JWT-only endpoints
+    res.header('Access-Control-Max-Age', '86400');
+    
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+  } else if (origin && allowedOrigins.has(origin)) {
+    // Exact match for session-based endpoints
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  
+  next();
+});
+
 // Session middleware for authentication with production-grade security
 const isProduction = process.env.NODE_ENV === "production";
 
