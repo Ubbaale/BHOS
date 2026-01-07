@@ -32,6 +32,13 @@ Preferred communication style: Simple, everyday language.
     -   Stripe integration for upfront payments (self-pay rides) and tip collection.
     -   Supports full or partial refunds via admin endpoint.
     -   Insurance billing support without upfront payment.
+-   **Mobile App Integration**:
+    -   JWT token-based authentication for native iOS/Android apps.
+    -   Access tokens (15min) and refresh tokens (7 days) with rotation.
+    -   CORS configured for Capacitor, Ionic, and custom app schemes.
+    -   Mobile push notification registration endpoint for FCM/APNs.
+    -   Mobile API endpoints: `/api/mobile/auth/login`, `/api/mobile/auth/refresh`, `/api/mobile/auth/me`, `/api/mobile/rides`, `/api/mobile/driver/location`.
+    -   API documentation available at `/api/mobile/docs`.
 
 ### Security and Data Protection
 -   **Session Security**: PostgreSQL-backed sessions, HttpOnly and SameSite=strict cookies.
