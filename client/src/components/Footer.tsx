@@ -156,7 +156,7 @@ export default function Footer() {
 
         <div className="border-t border-background/20 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-sm opacity-70">
-            2024 Carehub. All rights reserved.
+            {new Date().getFullYear()} Carehub. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
             <a
