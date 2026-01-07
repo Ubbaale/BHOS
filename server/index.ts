@@ -8,6 +8,7 @@ import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
+import { securityHeaders, globalRateLimiter } from "./security";
 
 const app = express();
 const httpServer = createServer(app);
@@ -107,6 +108,12 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Security headers (XSS protection, CSP, HSTS, etc.)
+app.use(securityHeaders);
+
+// Global rate limiting to prevent DoS attacks
+app.use(globalRateLimiter);
 
 // CORS configuration for mobile apps
 app.use((req, res, next) => {
