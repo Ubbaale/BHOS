@@ -991,13 +991,34 @@ export default function BookRide() {
             </p>
           </div>
 
-          {/* Mobile-only Driver Portal Tile */}
-          <div className="mb-6 md:hidden">
+          {/* Mobile-only Quick Action Tiles */}
+          <div className="mb-6 md:hidden space-y-4">
+            {/* Book Ride Tile */}
+            <Link href="/book-ride">
+              <Card className="hover-elevate cursor-pointer border-2 border-emerald-500 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 dark:from-emerald-500/20 dark:to-teal-500/20" data-testid="tile-book-ride-mobile">
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <Car className="w-7 h-7 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-lg text-emerald-700 dark:text-emerald-400">Book a Ride</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Schedule medical transportation
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                    <ArrowRight className="w-5 h-5 text-white" />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+
+            {/* Driver Portal Tile */}
             <Link href="/driver">
               <Card className="hover-elevate cursor-pointer border-2 border-blue-500 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 dark:from-blue-500/20 dark:to-indigo-500/20" data-testid="tile-driver-portal-mobile">
                 <CardContent className="p-4 flex items-center gap-4">
                   <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg">
-                    <Car className="w-7 h-7 text-white" />
+                    <UserCog className="w-7 h-7 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-bold text-lg text-blue-700 dark:text-blue-400">Driver Portal</h3>
