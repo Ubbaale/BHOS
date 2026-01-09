@@ -128,6 +128,10 @@ app.use((req, res, next) => {
     'http://localhost:5000',
     'http://localhost:8100',
     'carehub://app',
+    'https://carehubapp.com',
+    'https://www.carehubapp.com',
+    'https://carehubapp.replit.app',
+    'https://app.carehubapp.com',
   ]);
   
   // For /api/mobile/* endpoints (JWT token-based auth, no cookies needed)

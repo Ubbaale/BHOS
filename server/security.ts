@@ -27,7 +27,7 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com https://*.googleapis.com",
-    "connect-src 'self' https://api.stripe.com https://maps.googleapis.com wss://*.replit.dev wss://*.replit.app ws://localhost:* wss://localhost:*",
+    "connect-src 'self' https://api.stripe.com https://maps.googleapis.com wss://*.replit.dev wss://*.replit.app wss://carehubapp.com wss://www.carehubapp.com wss://carehubapp.replit.app ws://localhost:* wss://localhost:*",
     "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
     "object-src 'none'",
     "base-uri 'self'",
