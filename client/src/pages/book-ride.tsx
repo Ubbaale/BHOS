@@ -994,18 +994,20 @@ export default function BookRide() {
           {/* Mobile-only Driver Portal Tile */}
           <div className="mb-6 md:hidden">
             <Link href="/driver">
-              <Card className="hover-elevate cursor-pointer" data-testid="tile-driver-portal-mobile">
+              <Card className="hover-elevate cursor-pointer border-2 border-blue-500 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 dark:from-blue-500/20 dark:to-indigo-500/20" data-testid="tile-driver-portal-mobile">
                 <CardContent className="p-4 flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <UserCog className="w-6 h-6 text-primary" />
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <Car className="w-7 h-7 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold">Driver Portal</h3>
-                    <p className="text-sm text-muted-foreground truncate">
-                      Access driver dashboard & manage rides
+                    <h3 className="font-bold text-lg text-blue-700 dark:text-blue-400">Driver Portal</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Access dashboard & manage rides
                     </p>
                   </div>
-                  <ArrowRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                    <ArrowRight className="w-5 h-5 text-white" />
+                  </div>
                 </CardContent>
               </Card>
             </Link>
