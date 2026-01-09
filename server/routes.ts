@@ -364,9 +364,20 @@ export async function registerRoutes(
     next();
   };
 
-  // Seed test accounts endpoint (one-time setup)
+  // Seed test accounts endpoint (one-time setup, admin only in production)
   app.get("/api/setup/seed-test-accounts", async (req, res) => {
     try {
+      // Security: Only allow in development or if user is admin
+      const isProduction = process.env.NODE_ENV === "production";
+      const isAdmin = req.session?.role === "admin";
+      
+      if (isProduction && !isAdmin) {
+        return res.status(403).json({ 
+          message: "This endpoint requires admin authentication in production",
+          hint: "Login as admin first, then visit this URL"
+        });
+      }
+      
       // Check if test accounts already exist
       const existingDriver = await storage.getUserByUsername("driver@test.com");
       const existingPatient = await storage.getUserByUsername("patient@test.com");

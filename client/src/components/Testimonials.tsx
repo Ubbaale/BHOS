@@ -2,7 +2,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Star } from "lucide-react";
 
-// todo: remove mock functionality
 const testimonials = [
   {
     name: "Sarah Johnson",

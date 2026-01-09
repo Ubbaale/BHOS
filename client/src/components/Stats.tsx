@@ -1,6 +1,5 @@
 import { Users, Building2, Clock, Star } from "lucide-react";
 
-// todo: remove mock functionality
 const stats = [
   { icon: Users, value: "5,000+", label: "Healthcare Workers Placed" },
   { icon: Building2, value: "500+", label: "Facilities Served" },
