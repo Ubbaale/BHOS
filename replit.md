@@ -53,11 +53,20 @@ Preferred communication style: Simple, everyday language.
 
 ## Mobile App Store Preparation
 
+**Current Version: 1.1.0 (Build 2) - January 2026**
+
 The application is configured for iOS App Store and Google Play submission:
 
 -   **Build Guide**: `MOBILE_BUILD_GUIDE.md` - Complete step-by-step instructions
 -   **Store Metadata**: `app-store-assets/store-metadata.json` - App descriptions, keywords, screenshots specs
 -   **Capacitor Config**: `capacitor.config.ts` - Native app settings for iOS and Android
+
+### Version 1.1.0 Changes
+- New mobile-optimized quick action tiles (Book Ride, Driver Portal)
+- Enhanced mobile UI with vibrant gradient styling
+- Production domain support (carehubapp.com, carehubapp.replit.app)
+- Updated CORS and CSP security headers
+- Improved mobile responsiveness
 
 ### Quick Build Steps
 1. Build web assets: `npm run build`
@@ -65,6 +74,14 @@ The application is configured for iOS App Store and Google Play submission:
 3. Sync assets: `npx cap sync`
 4. Open in IDE: `npx cap open ios` or `npx cap open android`
 5. Build and sign for release
+
+### Pre-Submission Checklist
+- [ ] Run `npm run build` to create production assets
+- [ ] Run `npx cap sync` to update native projects
+- [ ] Update version in Xcode (iOS) and build.gradle (Android)
+- [ ] Test on real devices before submission
+- [ ] Capture new screenshots showing mobile tiles
+- [ ] Update "What's New" in app stores
 
 ## External Dependencies
 

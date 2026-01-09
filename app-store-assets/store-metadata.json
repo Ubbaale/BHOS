@@ -2,8 +2,8 @@
   "appId": "com.carehubapp.app",
   "appName": "Carehub",
   "appSubtitle": "Medical Transport & Healthcare",
-  "version": "1.0.0",
-  "buildNumber": 1,
+  "version": "1.1.0",
+  "buildNumber": 2,
   
   "ios": {
     "bundleId": "com.carehubapp.app",
@@ -32,7 +32,7 @@
       "shortDescription": "Book medical rides instantly. NEMT transportation made easy.",
       "fullDescription": "Carehub connects patients with reliable non-emergency medical transportation (NEMT) services. Whether you need a ride to a doctor's appointment, dialysis treatment, or physical therapy session, Carehub makes booking easy and stress-free.\n\nFeatures:\n• Book rides instantly or schedule in advance\n• Real-time driver tracking and ETAs\n• Secure in-app messaging with your driver\n• Wheelchair and mobility assistance options\n• Insurance billing support\n• 24/7 customer support\n\nFor Healthcare Workers:\n• Find healthcare staffing opportunities\n• Apply for positions at top facilities\n• Manage your schedule and availability\n\nFor Drivers:\n• Accept ride requests in your area\n• Navigate with integrated maps\n• Track your earnings and tips\n\nDownload Carehub today for reliable medical transportation!",
       "keywords": "medical transport,NEMT,healthcare ride,doctor appointment,medical taxi,wheelchair transport,dialysis transport,healthcare staffing",
-      "whatsNew": "Initial release with ride booking, real-time tracking, and healthcare staffing features."
+      "whatsNew": "Version 1.1.0 Updates:\n• New mobile-optimized quick action tiles for easier navigation\n• Enhanced Book a Ride interface with prominent scheduling options\n• Improved Driver Portal access from mobile devices\n• Production domain support for carehubapp.com\n• Enhanced security with updated CORS and CSP headers\n• Better mobile responsiveness throughout the app"
     }
   },
   
