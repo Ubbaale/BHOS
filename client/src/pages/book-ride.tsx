@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText, Navigation, AlertTriangle, Heart, Users, Loader2, ArrowLeft } from "lucide-react";
+import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText, Navigation, AlertTriangle, Heart, Users, Loader2, ArrowLeft, UserCog } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -989,6 +989,26 @@ export default function BookRide() {
             <p className="text-muted-foreground">
               Schedule non-emergency medical transportation for your appointment.
             </p>
+          </div>
+
+          {/* Mobile-only Driver Portal Tile */}
+          <div className="mb-6 md:hidden">
+            <Link href="/driver">
+              <Card className="hover-elevate cursor-pointer" data-testid="tile-driver-portal-mobile">
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <UserCog className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold">Driver Portal</h3>
+                    <p className="text-sm text-muted-foreground truncate">
+                      Access driver dashboard & manage rides
+                    </p>
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                </CardContent>
+              </Card>
+            </Link>
           </div>
 
           <div className="grid lg:grid-cols-2 gap-8">
