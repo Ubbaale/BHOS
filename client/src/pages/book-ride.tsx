@@ -1003,7 +1003,7 @@ export default function BookRide() {
                   <div className="flex-1 min-w-0">
                     <h3 className="font-bold text-lg text-emerald-700 dark:text-emerald-400">Book a Ride</h3>
                     <p className="text-sm text-muted-foreground">
-                      Schedule medical transportation
+                      Schedule Medical Transportation Below
                     </p>
                   </div>
                   <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
