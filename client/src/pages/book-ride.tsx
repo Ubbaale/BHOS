@@ -994,7 +994,7 @@ export default function BookRide() {
           {/* Mobile-only Quick Action Tiles */}
           <div className="mb-6 md:hidden space-y-4">
             {/* Book Ride Tile */}
-            <Link href="/book-ride">
+            <a href="https://carehubapp.com/book-ride">
               <Card className="hover-elevate cursor-pointer border-2 border-emerald-500 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 dark:from-emerald-500/20 dark:to-teal-500/20" data-testid="tile-book-ride-mobile">
                 <CardContent className="p-4 flex items-center gap-4">
                   <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-lg">
@@ -1011,7 +1011,7 @@ export default function BookRide() {
                   </div>
                 </CardContent>
               </Card>
-            </Link>
+            </a>
 
             {/* Driver Portal Tile */}
             <Link href="/driver">
