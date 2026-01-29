@@ -20,7 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet } from "lucide-react";
 import { openNavigation } from "@/lib/navigation";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RideChat } from "@/components/RideChat";
@@ -709,6 +709,21 @@ export default function DriverDashboard() {
                 </div>
               </CardContent>
             </Card>
+            <Link href="/driver-payouts">
+              <Card className="hover-elevate cursor-pointer bg-gradient-to-br from-green-600 to-emerald-700 text-white border-0">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white/20 rounded-md">
+                      <Wallet className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold">Cash Out</p>
+                      <p className="text-xs text-green-100">Transfer to bank</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           </div>
 
           <NotificationPrompt userType="driver" driverId={currentDriverId || undefined} />

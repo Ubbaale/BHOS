@@ -2984,6 +2984,337 @@ export async function registerRoutes(
     }
   });
 
+  // ============ DRIVER PAYOUT ROUTES ============
+
+  // Get driver payout balance and info
+  // Protected: Only authenticated drivers can view their own balance
+  app.get("/api/drivers/:id/payout-balance", requireDriver, async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      
+      // Security: Verify driver can only access their own data (admins can access any)
+      if (req.session.role !== "admin" && req.session.driverId !== driverId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const driver = await storage.getDriver(driverId);
+      
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+
+      // Calculate available balance from completed rides
+      const earnings = await storage.getDriverEarnings(driverId);
+      const payouts = await storage.getDriverPayouts(driverId);
+      
+      const totalEarned = parseFloat(earnings.totalEarnings || "0");
+      const totalPaidOut = payouts
+        .filter((p: any) => p.status === "completed")
+        .reduce((sum: number, p: any) => sum + parseFloat(p.netAmount || "0"), 0);
+      const pendingPayouts = payouts
+        .filter((p: any) => p.status === "pending" || p.status === "processing")
+        .reduce((sum: number, p: any) => sum + parseFloat(p.amount || "0"), 0);
+      
+      const availableBalance = Math.max(0, totalEarned - totalPaidOut - pendingPayouts);
+      
+      res.json({
+        availableBalance: availableBalance.toFixed(2),
+        pendingBalance: pendingPayouts.toFixed(2),
+        totalEarnings: totalEarned.toFixed(2),
+        totalPaidOut: totalPaidOut.toFixed(2),
+        stripeConnectOnboarded: driver.stripeConnectOnboarded || false,
+        payoutPreference: driver.payoutPreference || "manual",
+        bankLinked: !!driver.stripeConnectAccountId
+      });
+    } catch (error) {
+      console.error("Error fetching payout balance:", error);
+      res.status(500).json({ message: "Failed to fetch payout balance" });
+    }
+  });
+
+  // Create Stripe Connect onboarding link for driver
+  // Protected: Only authenticated drivers can start their own onboarding
+  app.post("/api/drivers/:id/stripe-connect-onboard", requireDriver, async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      
+      // Security: Verify driver can only onboard themselves
+      if (req.session.role !== "admin" && req.session.driverId !== driverId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const driver = await storage.getDriver(driverId);
+      
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+
+      const { getUncachableStripeClient } = await import("./stripeClient");
+      const stripe = await getUncachableStripeClient();
+
+      let accountId = driver.stripeConnectAccountId;
+
+      // Create Stripe Connect Express account if not exists
+      if (!accountId) {
+        const account = await stripe.accounts.create({
+          type: "express",
+          country: "US",
+          email: driver.email || undefined,
+          capabilities: {
+            card_payments: { requested: true },
+            transfers: { requested: true },
+          },
+          business_type: "individual",
+          metadata: {
+            driverId: driverId.toString(),
+            driverName: driver.fullName
+          }
+        });
+        
+        accountId = account.id;
+        await storage.updateDriverStripeConnect(driverId, accountId);
+      }
+
+      // Get the base URL for redirects with domain validation
+      const allowedDomains = [
+        "carehubapp.com",
+        "www.carehubapp.com",
+        "carehubapp.replit.app",
+        "app.carehubapp.com",
+        "localhost:5000",
+        "127.0.0.1:5000"
+      ];
+      
+      // Add Replit dev domains if available
+      if (process.env.REPLIT_DOMAINS) {
+        allowedDomains.push(...process.env.REPLIT_DOMAINS.split(','));
+      }
+      
+      const requestHost = (req.headers["x-forwarded-host"] || req.headers.host || req.get("host") || "") as string;
+      const isAllowedHost = allowedDomains.some(domain => 
+        requestHost === domain || requestHost.endsWith(`.${domain}`)
+      );
+      
+      let baseUrl: string;
+      if (isAllowedHost) {
+        const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+        baseUrl = `${protocol}://${requestHost}`;
+      } else {
+        // Fallback to Replit domain or localhost
+        const replitDomain = process.env.REPLIT_DOMAINS?.split(',')[0];
+        baseUrl = replitDomain ? `https://${replitDomain}` : "http://localhost:5000";
+      }
+
+      // Create account link for onboarding
+      const accountLink = await stripe.accountLinks.create({
+        account: accountId,
+        refresh_url: `${baseUrl}/driver-payouts?refresh=true`,
+        return_url: `${baseUrl}/driver-payouts?onboarding=complete`,
+        type: "account_onboarding",
+      });
+
+      res.json({ url: accountLink.url });
+    } catch (error) {
+      console.error("Error creating Stripe Connect onboarding:", error);
+      res.status(500).json({ message: "Failed to start bank account setup" });
+    }
+  });
+
+  // Check Stripe Connect onboarding status
+  // Protected: Only authenticated drivers can check their own status
+  app.get("/api/drivers/:id/stripe-connect-status", requireDriver, async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      
+      // Security: Verify driver can only check their own status
+      if (req.session.role !== "admin" && req.session.driverId !== driverId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const driver = await storage.getDriver(driverId);
+      
+      if (!driver || !driver.stripeConnectAccountId) {
+        return res.json({ 
+          hasAccount: false,
+          onboarded: false,
+          payoutsEnabled: false
+        });
+      }
+
+      const { getUncachableStripeClient } = await import("./stripeClient");
+      const stripe = await getUncachableStripeClient();
+
+      const account = await stripe.accounts.retrieve(driver.stripeConnectAccountId);
+      
+      const isOnboarded = account.details_submitted && account.payouts_enabled;
+      
+      // Update driver status if newly onboarded
+      if (isOnboarded && !driver.stripeConnectOnboarded) {
+        await storage.updateDriverStripeConnectOnboarded(driverId, true);
+      }
+
+      res.json({
+        hasAccount: true,
+        onboarded: account.details_submitted || false,
+        payoutsEnabled: account.payouts_enabled || false,
+        chargesEnabled: account.charges_enabled || false,
+        bankLast4: account.external_accounts?.data?.[0]?.last4 || null
+      });
+    } catch (error) {
+      console.error("Error checking Stripe Connect status:", error);
+      res.status(500).json({ message: "Failed to check account status" });
+    }
+  });
+
+  // Request a payout (Uber-style cash out)
+  // Protected: Only authenticated drivers can request their own payouts
+  app.post("/api/drivers/:id/request-payout", requireDriver, async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      
+      // Security: Verify driver can only request their own payouts
+      if (req.session.role !== "admin" && req.session.driverId !== driverId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const { amount, method = "standard" } = req.body;
+      
+      if (!amount || parseFloat(amount) <= 0) {
+        return res.status(400).json({ message: "Invalid payout amount" });
+      }
+
+      const driver = await storage.getDriver(driverId);
+      
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+
+      if (!driver.stripeConnectAccountId || !driver.stripeConnectOnboarded) {
+        return res.status(400).json({ message: "Please set up your bank account first" });
+      }
+
+      // Check available balance
+      const earnings = await storage.getDriverEarnings(driverId);
+      const payouts = await storage.getDriverPayouts(driverId);
+      
+      const totalEarned = parseFloat(earnings.totalEarnings || "0");
+      const totalPaidOut = payouts
+        .filter((p: any) => p.status === "completed")
+        .reduce((sum: number, p: any) => sum + parseFloat(p.netAmount || "0"), 0);
+      const pendingPayouts = payouts
+        .filter((p: any) => p.status === "pending" || p.status === "processing")
+        .reduce((sum: number, p: any) => sum + parseFloat(p.amount || "0"), 0);
+      
+      const availableBalance = totalEarned - totalPaidOut - pendingPayouts;
+      
+      if (parseFloat(amount) > availableBalance) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+
+      // Calculate fee (instant = 1.5%, standard = free)
+      const payoutAmount = parseFloat(amount);
+      const fee = method === "instant" ? payoutAmount * 0.015 : 0;
+      const netAmount = payoutAmount - fee;
+
+      // Create payout record
+      const payout = await storage.createDriverPayout({
+        driverId,
+        amount: payoutAmount.toFixed(2),
+        fee: fee.toFixed(2),
+        netAmount: netAmount.toFixed(2),
+        method,
+        status: "pending"
+      });
+
+      // In production, this would create a Stripe transfer
+      // For now, mark as processing and simulate
+      const { getUncachableStripeClient } = await import("./stripeClient");
+      const stripe = await getUncachableStripeClient();
+
+      try {
+        // Create transfer to connected account
+        const transfer = await stripe.transfers.create({
+          amount: Math.round(netAmount * 100), // cents
+          currency: "usd",
+          destination: driver.stripeConnectAccountId,
+          metadata: {
+            payoutId: payout.id.toString(),
+            driverId: driverId.toString(),
+            method
+          }
+        });
+
+        // Update payout with transfer ID
+        await storage.updateDriverPayoutStatus(payout.id, "processing", transfer.id);
+
+        res.json({ 
+          message: method === "instant" 
+            ? "Instant payout initiated - funds arriving within 30 minutes"
+            : "Payout initiated - funds arriving in 1-2 business days",
+          payout: {
+            id: payout.id,
+            amount: payoutAmount.toFixed(2),
+            fee: fee.toFixed(2),
+            netAmount: netAmount.toFixed(2),
+            method,
+            status: "processing"
+          }
+        });
+      } catch (stripeError: any) {
+        console.error("Stripe transfer error:", stripeError);
+        await storage.updateDriverPayoutStatus(payout.id, "failed", undefined, stripeError.message);
+        res.status(500).json({ message: "Payout failed: " + stripeError.message });
+      }
+    } catch (error) {
+      console.error("Error requesting payout:", error);
+      res.status(500).json({ message: "Failed to request payout" });
+    }
+  });
+
+  // Get driver payout history
+  // Protected: Only authenticated drivers can view their own payouts
+  app.get("/api/drivers/:id/payouts", requireDriver, async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      
+      // Security: Verify driver can only view their own payouts
+      if (req.session.role !== "admin" && req.session.driverId !== driverId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const payouts = await storage.getDriverPayouts(driverId);
+      res.json(payouts);
+    } catch (error) {
+      console.error("Error fetching payouts:", error);
+      res.status(500).json({ message: "Failed to fetch payouts" });
+    }
+  });
+
+  // Update payout preference
+  // Protected: Only authenticated drivers can update their own preference
+  app.patch("/api/drivers/:id/payout-preference", requireDriver, async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      
+      // Security: Verify driver can only update their own preference
+      if (req.session.role !== "admin" && req.session.driverId !== driverId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const { preference } = req.body;
+      
+      if (!["manual", "weekly", "daily"].includes(preference)) {
+        return res.status(400).json({ message: "Invalid payout preference" });
+      }
+
+      await storage.updateDriverPayoutPreference(driverId, preference);
+      res.json({ message: "Payout preference updated", preference });
+    } catch (error) {
+      console.error("Error updating payout preference:", error);
+      res.status(500).json({ message: "Failed to update preference" });
+    }
+  });
+
   // ============ ADMIN ROUTES ============
   
   // Get all rides for admin (with optional filters)

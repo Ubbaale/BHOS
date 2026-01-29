@@ -19,6 +19,7 @@ import TripReceipt from "@/pages/trip-receipt";
 import TrackRide from "@/pages/track-ride";
 import SharedTracking from "@/pages/shared-tracking";
 import DriverEarnings from "@/pages/driver-earnings";
+import DriverPayouts from "@/pages/driver-payouts";
 import ReportIncident from "@/pages/report-incident";
 
 function Router() {
@@ -39,6 +40,11 @@ function Router() {
       <Route path="/driver/earnings">
         <ProtectedRoute requiredRole="driver">
           <DriverEarnings />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/driver-payouts">
+        <ProtectedRoute requiredRole="driver">
+          <DriverPayouts />
         </ProtectedRoute>
       </Route>
       <Route path="/admin">

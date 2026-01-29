@@ -137,6 +137,13 @@ export const driverProfiles = pgTable("driver_profiles", {
   taxState: text("tax_state"),
   taxZip: text("tax_zip"),
   w9ReceivedAt: timestamp("w9_received_at"),
+  // Stripe Connect for payouts
+  stripeConnectAccountId: text("stripe_connect_account_id"),
+  stripeConnectOnboarded: boolean("stripe_connect_onboarded").default(false),
+  payoutPreference: text("payout_preference").default("manual"), // 'manual', 'weekly', 'daily'
+  availableBalance: numeric("available_balance").default("0"),
+  pendingBalance: numeric("pending_balance").default("0"),
+  totalEarnings: numeric("total_earnings").default("0"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -538,3 +545,35 @@ export const insertIncidentReportSchema = z.object({
 });
 export type InsertIncidentReport = z.infer<typeof insertIncidentReportSchema>;
 export type IncidentReport = typeof incidentReports.$inferSelect;
+
+// Driver payouts tracking
+export const driverPayouts = pgTable("driver_payouts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  driverId: integer("driver_id").references(() => driverProfiles.id).notNull(),
+  amount: numeric("amount").notNull(),
+  fee: numeric("fee").default("0"), // Platform/processing fee
+  netAmount: numeric("net_amount").notNull(), // Amount after fees
+  method: text("method").notNull().default("standard"), // 'instant', 'standard'
+  status: text("status").notNull().default("pending"), // 'pending', 'processing', 'completed', 'failed'
+  stripePayoutId: text("stripe_payout_id"),
+  stripeTransferId: text("stripe_transfer_id"),
+  destinationLast4: text("destination_last4"), // Last 4 of bank account
+  failureReason: text("failure_reason"),
+  requestedAt: timestamp("requested_at").defaultNow(),
+  processedAt: timestamp("processed_at"),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertDriverPayoutSchema = z.object({
+  driverId: z.number(),
+  amount: z.string(),
+  method: z.enum(["instant", "standard"]).optional(),
+});
+export type InsertDriverPayout = z.infer<typeof insertDriverPayoutSchema>;
+export type DriverPayout = typeof driverPayouts.$inferSelect;
+
+export const payoutMethods = ["instant", "standard"] as const;
+export type PayoutMethod = typeof payoutMethods[number];
+
+export const payoutStatuses = ["pending", "processing", "completed", "failed"] as const;
+export type PayoutStatus = typeof payoutStatuses[number];

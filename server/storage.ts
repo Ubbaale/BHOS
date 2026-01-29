@@ -12,7 +12,8 @@ import {
   type RideRating, type InsertRideRating,
   type PatientAccount, type SurgePricing, type AnnualEarnings,
   type IncidentReport, type InsertIncidentReport,
-  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing, annualEarnings, contractorAgreements, incidentReports
+  type DriverPayout,
+  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing, annualEarnings, contractorAgreements, incidentReports, driverPayouts
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ne, and, lt, isNull } from "drizzle-orm";
@@ -148,6 +149,14 @@ export interface IStorage {
   
   // Admin: Driver Account Management
   updateDriverAccountStatus(driverId: number, status: string, reason?: string): Promise<DriverProfile | undefined>;
+
+  // Driver Payouts
+  getDriverPayouts(driverId: number): Promise<DriverPayout[]>;
+  createDriverPayout(data: { driverId: number; amount: string; fee: string; netAmount: string; method: string; status: string }): Promise<DriverPayout>;
+  updateDriverPayoutStatus(payoutId: number, status: string, stripeTransferId?: string, failureReason?: string): Promise<DriverPayout | undefined>;
+  updateDriverStripeConnect(driverId: number, accountId: string): Promise<DriverProfile | undefined>;
+  updateDriverStripeConnectOnboarded(driverId: number, onboarded: boolean): Promise<DriverProfile | undefined>;
+  updateDriverPayoutPreference(driverId: number, preference: string): Promise<DriverProfile | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -977,6 +986,66 @@ export class DatabaseStorage implements IStorage {
         accountStatus: status,
         suspensionReason: reason
       })
+      .where(eq(driverProfiles.id, driverId))
+      .returning();
+    return updated;
+  }
+
+  // Driver Payout Methods
+  async getDriverPayouts(driverId: number): Promise<DriverPayout[]> {
+    return db.select().from(driverPayouts)
+      .where(eq(driverPayouts.driverId, driverId))
+      .orderBy(desc(driverPayouts.requestedAt));
+  }
+
+  async createDriverPayout(data: { driverId: number; amount: string; fee: string; netAmount: string; method: string; status: string }): Promise<DriverPayout> {
+    const [payout] = await db.insert(driverPayouts)
+      .values({
+        driverId: data.driverId,
+        amount: data.amount,
+        fee: data.fee,
+        netAmount: data.netAmount,
+        method: data.method,
+        status: data.status,
+        requestedAt: new Date()
+      })
+      .returning();
+    return payout;
+  }
+
+  async updateDriverPayoutStatus(payoutId: number, status: string, stripeTransferId?: string, failureReason?: string): Promise<DriverPayout | undefined> {
+    const updateData: any = { status };
+    if (stripeTransferId) updateData.stripeTransferId = stripeTransferId;
+    if (failureReason) updateData.failureReason = failureReason;
+    if (status === "processing") updateData.processedAt = new Date();
+    if (status === "completed") updateData.completedAt = new Date();
+    
+    const [updated] = await db.update(driverPayouts)
+      .set(updateData)
+      .where(eq(driverPayouts.id, payoutId))
+      .returning();
+    return updated;
+  }
+
+  async updateDriverStripeConnect(driverId: number, accountId: string): Promise<DriverProfile | undefined> {
+    const [updated] = await db.update(driverProfiles)
+      .set({ stripeConnectAccountId: accountId })
+      .where(eq(driverProfiles.id, driverId))
+      .returning();
+    return updated;
+  }
+
+  async updateDriverStripeConnectOnboarded(driverId: number, onboarded: boolean): Promise<DriverProfile | undefined> {
+    const [updated] = await db.update(driverProfiles)
+      .set({ stripeConnectOnboarded: onboarded })
+      .where(eq(driverProfiles.id, driverId))
+      .returning();
+    return updated;
+  }
+
+  async updateDriverPayoutPreference(driverId: number, preference: string): Promise<DriverProfile | undefined> {
+    const [updated] = await db.update(driverProfiles)
+      .set({ payoutPreference: preference })
       .where(eq(driverProfiles.id, driverId))
       .returning();
     return updated;
