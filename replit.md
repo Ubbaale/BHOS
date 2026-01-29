@@ -28,6 +28,7 @@ Preferred communication style: Simple, everyday language.
     -   **Onboarding**: Self-service application, admin review, KYC verification (document upload, admin dashboard).
     -   **Earnings**: Dashboard displaying net pay, tips, and 1099-NEC generation for tax purposes.
     -   **Independent Contractor**: Agreement logging, tax info collection, and deduction reminders.
+    -   **Uber-style Payouts**: Stripe Connect integration for driver bank account linking, instant payouts (1.5% fee), standard payouts (free, 1-2 business days), payout history tracking, and configurable payout preferences (manual, daily, weekly).
 -   **Payment System**:
     -   Stripe integration for upfront payments (self-pay rides) and tip collection.
     -   Supports full or partial refunds via admin endpoint.
