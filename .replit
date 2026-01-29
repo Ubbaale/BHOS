@@ -43,3 +43,7 @@ integrations = ["javascript_mem_db:1.0.0", "sendgrid:1.0.0", "stripe:2.0.0", "gi
 SENDGRID_FROM_EMAIL = "ss@myace.app"
 VAPID_PUBLIC_KEY = "BMFE1ulJBpvM5IbJsQoCZA_wxdnNHfC88SS5ZptGrfBRvRWIdZThIrZKMjlWKiJJBP5SrHyEcGX5E7V2X9pILvU"
 VITE_VAPID_PUBLIC_KEY = "BMFE1ulJBpvM5IbJsQoCZA_wxdnNHfC88SS5ZptGrfBRvRWIdZThIrZKMjlWKiJJBP5SrHyEcGX5E7V2X9pILvU"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
