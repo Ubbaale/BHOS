@@ -1760,9 +1760,9 @@ export default function BookRide() {
                                   <RadioGroupItem value="self_pay" id="self_pay" data-testid="radio-self-pay" />
                                   <Label htmlFor="self_pay" className="cursor-pointer">Self Pay</Label>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <RadioGroupItem value="insurance" id="insurance" data-testid="radio-insurance" />
-                                  <Label htmlFor="insurance" className="cursor-pointer">Insurance</Label>
+                                <div className="flex items-center gap-2 opacity-50">
+                                  <RadioGroupItem value="insurance" id="insurance" data-testid="radio-insurance" disabled />
+                                  <Label htmlFor="insurance" className="cursor-not-allowed text-muted-foreground">Insurance <span className="text-xs italic">(Coming Soon)</span></Label>
                                 </div>
                               </RadioGroup>
                             </FormControl>
