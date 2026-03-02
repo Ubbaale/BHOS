@@ -27,6 +27,13 @@ Preferred communication style: Simple, everyday language.
     -   **Policy Handling**: 15-minute free cancellation window, capped surge pricing (1.25x for self-pay, none for insurance rides), tiered patient accounts based on balance, traffic delay reporting.
     -   **Patient Email Notifications**: When a ride is booked on behalf of a patient (bookedByOther=true), an email is sent to the patient's email address notifying them of the ride details. Uses SendGrid.
     -   **Distance Warning**: If the user's device is more than 50 miles from the selected pickup location, an amber warning banner is displayed suggesting they double-check the address or toggle "booking for someone else."
+    -   **Medical Notes**: Special instructions for driver (e.g., "Patient is hard of hearing", "Oxygen equipment") stored per-ride and displayed prominently on driver dashboard.
+    -   **Round Trip**: Toggle for round-trip rides with return pickup time and wait time inputs; shown on driver dashboard and tracking page.
+    -   **Recurring Rides**: Schedule rides as daily, weekly, biweekly, or monthly with specific days of week and end date; stored as JSONB on ride.
+    -   **Ride History**: `/my-rides` page showing past rides with status, fare, dates, and action buttons (View Receipt, Book Again, Rate).
+    -   **Post-Ride Rating**: Star rating (1-5) with optional comment after ride completion; updates driver average rating; shown on tracking page and ride history.
+    -   **Live Tracking Map**: Embedded Leaflet map on tracking page showing pickup (green), dropoff (red), and driver (blue car) markers with route lines and ETA countdown.
+    -   **Enhanced Driver Card**: Uber-style driver info display with large avatar, vehicle details, license plate, verification code, and integrated call/message buttons.
 -   **Driver Management**:
     -   **Onboarding**: Self-service application, admin review, KYC verification (document upload, admin dashboard).
     -   **Earnings**: Dashboard displaying net pay, tips, and 1099-NEC generation for tax purposes.

@@ -101,6 +101,7 @@ export interface IStorage {
   
   // Ratings
   createRideRating(rating: InsertRideRating): Promise<RideRating>;
+  getRideRating(rideId: number, ratedBy: string): Promise<RideRating | undefined>;
   updateDriverRating(driverId: number, newRating: number): Promise<void>;
   
   // Patient accounts
@@ -690,6 +691,12 @@ export class DatabaseStorage implements IStorage {
   async createRideRating(rating: InsertRideRating): Promise<RideRating> {
     const [rideRating] = await db.insert(rideRatings).values(rating).returning();
     return rideRating;
+  }
+
+  async getRideRating(rideId: number, ratedBy: string): Promise<RideRating | undefined> {
+    const [rating] = await db.select().from(rideRatings)
+      .where(and(eq(rideRatings.rideId, rideId), eq(rideRatings.ratedBy, ratedBy)));
+    return rating;
   }
 
   async updateDriverRating(driverId: number, newRating: number): Promise<void> {

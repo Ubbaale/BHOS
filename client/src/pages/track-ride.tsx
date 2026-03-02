@@ -215,6 +215,11 @@ export default function TrackRide() {
   const [tipClientSecret, setTipClientSecret] = useState<string | null>(null);
   const [showTipPayment, setShowTipPayment] = useState(false);
   const [pendingTipAmount, setPendingTipAmount] = useState<number>(0);
+  const [ratingValue, setRatingValue] = useState<number>(0);
+  const [ratingHover, setRatingHover] = useState<number>(0);
+  const [ratingComment, setRatingComment] = useState("");
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
+  const [hasRated, setHasRated] = useState(false);
   
   useEffect(() => {
     const fetchStripeKey = async () => {
@@ -290,6 +295,11 @@ export default function TrackRide() {
     retry: false,
   });
 
+  const { data: existingRating } = useQuery<{ rating: number; comment: string } | null>({
+    queryKey: [`/api/rides/${rideId}/rating`],
+    enabled: !!ride && ride.status === "completed",
+  });
+
   const shareTripMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/rides/${rideId}/share`, {
@@ -355,6 +365,34 @@ export default function TrackRide() {
       toast({
         title: "Thank You!",
         description: "Your tip has been sent to the driver.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const submitRatingMutation = useMutation({
+    mutationFn: async ({ rating, comment }: { rating: number; comment: string }) => {
+      const res = await apiRequest("POST", `/api/rides/${rideId}/rate`, { 
+        rating, 
+        comment: comment || undefined,
+        ratedBy: "patient"
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      setRatingDialogOpen(false);
+      setHasRated(true);
+      queryClient.invalidateQueries({ queryKey: [`/api/rides/${rideId}/rating`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rides", rideId] });
+      toast({
+        title: "Thanks for your feedback!",
+        description: `You rated this ride ${ratingValue} star${ratingValue !== 1 ? 's' : ''}.`,
       });
     },
     onError: (error: Error) => {
@@ -1028,6 +1066,98 @@ export default function TrackRide() {
               <Badge variant="secondary" className="px-3 py-2" data-testid="badge-tip-added">
                 <Heart className="w-4 h-4 mr-1 text-red-500" />
                 Tip Added: ${parseFloat(ride.tipAmount).toFixed(2)}
+              </Badge>
+            )}
+
+            {ride.status === "completed" && !hasRated && !existingRating && (
+              <Dialog open={ratingDialogOpen} onOpenChange={setRatingDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950/30" data-testid="button-rate-ride">
+                    <Star className="w-4 h-4 mr-2 fill-yellow-400 text-yellow-400" />
+                    Rate Your Ride
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle className="text-center text-lg">How was your ride?</DialogTitle>
+                  </DialogHeader>
+                  <div className="flex flex-col items-center gap-4 py-4">
+                    <div className="flex gap-2" data-testid="rating-stars">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          className="p-1 transition-transform hover:scale-110 focus:outline-none"
+                          onMouseEnter={() => setRatingHover(star)}
+                          onMouseLeave={() => setRatingHover(0)}
+                          onClick={() => setRatingValue(star)}
+                          data-testid={`star-${star}`}
+                        >
+                          <Star
+                            className={`w-10 h-10 transition-colors ${
+                              star <= (ratingHover || ratingValue)
+                                ? "fill-yellow-400 text-yellow-400"
+                                : "text-gray-300 dark:text-gray-600"
+                            }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                    {ratingValue > 0 && (
+                      <p className="text-sm text-muted-foreground" data-testid="rating-label">
+                        {ratingValue === 1 && "Poor"}
+                        {ratingValue === 2 && "Fair"}
+                        {ratingValue === 3 && "Good"}
+                        {ratingValue === 4 && "Great"}
+                        {ratingValue === 5 && "Excellent!"}
+                      </p>
+                    )}
+                    <div className="w-full">
+                      <Label htmlFor="rating-comment" className="text-sm text-muted-foreground">
+                        Comments (optional)
+                      </Label>
+                      <Input
+                        id="rating-comment"
+                        placeholder="Tell us about your experience..."
+                        value={ratingComment}
+                        onChange={(e) => setRatingComment(e.target.value)}
+                        className="mt-1"
+                        data-testid="input-rating-comment"
+                      />
+                    </div>
+                    <Button
+                      className="w-full"
+                      disabled={ratingValue === 0 || submitRatingMutation.isPending}
+                      onClick={() => submitRatingMutation.mutate({ rating: ratingValue, comment: ratingComment })}
+                      data-testid="button-submit-rating"
+                    >
+                      {submitRatingMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Star className="w-4 h-4 mr-2" />
+                      )}
+                      Submit Rating
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {(hasRated || existingRating) && (
+              <Badge variant="secondary" className="px-3 py-2" data-testid="badge-rating">
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`w-3 h-3 ${
+                        star <= (existingRating?.rating || ratingValue)
+                          ? "fill-yellow-400 text-yellow-400"
+                          : "text-gray-300"
+                      }`}
+                    />
+                  ))}
+                  <span className="ml-1 text-xs">{existingRating?.rating || ratingValue}/5</span>
+                </div>
               </Badge>
             )}
           </div>

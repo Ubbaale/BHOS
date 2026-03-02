@@ -2689,6 +2689,18 @@ export async function registerRoutes(
   });
 
   // Rate ride
+  app.get("/api/rides/:id/rating", async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const ratedBy = (req.query.ratedBy as string) || "patient";
+      const rating = await storage.getRideRating(rideId, ratedBy);
+      res.json(rating || null);
+    } catch (error) {
+      console.error("Error fetching ride rating:", error);
+      res.status(500).json({ message: "Failed to fetch rating" });
+    }
+  });
+
   app.post("/api/rides/:id/rate", async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
