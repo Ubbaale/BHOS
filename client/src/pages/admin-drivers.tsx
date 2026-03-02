@@ -313,7 +313,7 @@ export default function AdminDrivers() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header />
+      <Header title="Admin Dashboard" showBack />
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="mb-4">
           <BackToHome />

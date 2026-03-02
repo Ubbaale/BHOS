@@ -189,7 +189,7 @@ export default function DriverKyc() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
-        <Header />
+        <Header title="Verification" showBack />
         <main className="flex-1 container mx-auto px-4 py-8 flex items-center justify-center">
           <div className="animate-pulse text-muted-foreground">Loading...</div>
         </main>
@@ -201,7 +201,7 @@ export default function DriverKyc() {
   if (!driver) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
-        <Header />
+        <Header title="Verification" showBack />
         <main className="flex-1 container mx-auto px-4 py-8 flex items-center justify-center">
           <Card className="max-w-md w-full">
             <CardContent className="pt-6 text-center">
@@ -225,7 +225,7 @@ export default function DriverKyc() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header />
+      <Header title="Verification" showBack />
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="mb-4">
           <BackToHome />

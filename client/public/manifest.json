@@ -4,10 +4,12 @@
   "description": "24/7 healthcare staffing and medical transportation services",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0ea5e9",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#f7f7f8",
+  "theme_color": "#1573b0",
   "orientation": "portrait-primary",
   "scope": "/",
+  "id": "/",
   "icons": [
     {
       "src": "/favicon.png",
@@ -29,5 +31,11 @@
   ],
   "categories": ["health", "medical", "transportation"],
   "screenshots": [],
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "edge_side_panel": {
+    "preferred_width": 400
+  }
 }

@@ -582,7 +582,7 @@ export default function DriverDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <Header title="Driver Dashboard" showBack />
       <main className="container mx-auto px-4 py-8">
         <div className="mb-4">
           <BackToHome />

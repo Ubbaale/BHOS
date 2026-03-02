@@ -189,7 +189,7 @@ export default function DriverEarnings() {
   if (!driverId) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
-        <Header />
+        <Header title="Earnings" showBack />
         <main className="flex-1 container mx-auto px-4 py-8">
           <Card>
             <CardContent className="py-8 text-center">
@@ -205,7 +205,7 @@ export default function DriverEarnings() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header />
+      <Header title="Earnings" showBack />
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="mb-4">
           <BackToHome />

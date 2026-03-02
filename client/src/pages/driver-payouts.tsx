@@ -150,7 +150,7 @@ export default function DriverPayouts() {
   if (!driverId) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
-        <Header />
+        <Header title="Payouts" showBack />
         <main className="flex-1 container mx-auto px-4 py-8">
           <Card>
             <CardContent className="py-8 text-center">
@@ -166,7 +166,7 @@ export default function DriverPayouts() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header />
+      <Header title="Payouts" showBack />
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="mb-4">
           <BackToHome />

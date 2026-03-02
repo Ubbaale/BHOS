@@ -8,12 +8,15 @@ import IssueReport from "@/components/IssueReport";
 import Testimonials from "@/components/Testimonials";
 import DemoVideo from "@/components/DemoVideo";
 import Footer from "@/components/Footer";
+import { usePlatform } from "@/hooks/use-platform";
 
 export default function Home() {
+  const { showMobileUI } = usePlatform();
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main>
+      <main className={showMobileUI ? "native-scroll" : ""}>
         <Hero />
         <QuickActions />
         <Services />
@@ -23,7 +26,7 @@ export default function Home() {
         <Testimonials />
         <DemoVideo />
       </main>
-      <Footer />
+      {!showMobileUI && <Footer />}
     </div>
   );
 }

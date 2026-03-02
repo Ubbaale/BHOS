@@ -60,7 +60,7 @@ export default function SharedTracking() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
+        <Header title="Ride Tracking" showBack />
         <main className="container mx-auto px-4 py-8">
           <div className="text-center py-12">Loading ride details...</div>
         </main>
@@ -71,7 +71,7 @@ export default function SharedTracking() {
   if (error || !data) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
+        <Header title="Ride Tracking" showBack />
         <main className="container mx-auto px-4 py-8">
           <Card className="max-w-md mx-auto">
             <CardContent className="py-8 text-center">
@@ -95,7 +95,7 @@ export default function SharedTracking() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <Header title="Ride Tracking" showBack />
       <main className="container mx-auto px-4 py-8">
         <div className="mb-4">
           <BackToHome />

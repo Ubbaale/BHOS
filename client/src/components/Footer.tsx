@@ -1,5 +1,6 @@
 import { Phone, Mail, MapPin } from "lucide-react";
 import { SiFacebook, SiLinkedin, SiInstagram, SiApple, SiGoogleplay } from "react-icons/si";
+import { usePlatform } from "@/hooks/use-platform";
 
 const footerLinks = {
   company: [
@@ -29,6 +30,10 @@ const footerLinks = {
 };
 
 export default function Footer() {
+  const { showMobileUI } = usePlatform();
+
+  if (showMobileUI) return null;
+
   return (
     <footer id="contact" className="bg-foreground text-background py-16">
       <div className="max-w-7xl mx-auto px-6">

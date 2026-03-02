@@ -4,6 +4,7 @@ import { useParams, Link } from "wouter";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import Header from "@/components/Header";
+
 import BackToHome from "@/components/BackToHome";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -369,7 +370,7 @@ export default function TrackRide() {
   if (rideLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
+        <Header title="Track Ride" showBack />
         <main className="container mx-auto px-4 py-8">
           <div className="text-center py-12">Loading ride details...</div>
         </main>
@@ -380,7 +381,7 @@ export default function TrackRide() {
   if (!ride) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
+        <Header title="Track Ride" showBack />
         <main className="container mx-auto px-4 py-8">
           <div className="text-center py-12">
             <h2 className="text-xl font-semibold mb-2">Ride not found</h2>
@@ -398,7 +399,7 @@ export default function TrackRide() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <Header title="Track Ride" showBack />
       <main className="container mx-auto px-4 py-8">
         <div className="mb-4">
           <BackToHome />

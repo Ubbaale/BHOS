@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { AuthProvider } from "@/lib/auth";
+import MobileAppShell from "@/components/MobileAppShell";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
@@ -71,7 +72,9 @@ function App() {
       <AuthProvider>
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <MobileAppShell>
+            <Router />
+          </MobileAppShell>
           <InstallPrompt />
         </TooltipProvider>
       </AuthProvider>

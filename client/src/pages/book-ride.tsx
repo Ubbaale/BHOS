@@ -846,7 +846,7 @@ export default function BookRide() {
   if (showPaymentStep && clientSecret && stripePromise && fareEstimate) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
+        <Header title="Book a Ride" showBack />
         <main className="container mx-auto px-4 py-16">
           <Card className="max-w-md mx-auto">
             <CardHeader>
@@ -894,7 +894,7 @@ export default function BookRide() {
   if (bookingSuccess && bookedRide) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
+        <Header title="Book a Ride" showBack />
         <main className="container mx-auto px-4 py-16">
           <Card className="max-w-2xl mx-auto">
             <CardContent className="p-8 text-center">
@@ -977,7 +977,7 @@ export default function BookRide() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <Header title="Book a Ride" showBack />
       <main className="container mx-auto px-4 py-8">
         <div className="mb-4">
           <BackToHome />

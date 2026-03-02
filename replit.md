@@ -33,6 +33,16 @@ Preferred communication style: Simple, everyday language.
     -   Stripe integration for upfront payments (self-pay rides) and tip collection.
     -   Supports full or partial refunds via admin endpoint.
     -   Insurance billing support without upfront payment.
+-   **Native Mobile App UI**:
+    -   Platform detection hook (`usePlatform`) for iOS, Android, and standalone mode.
+    -   Bottom tab bar navigation (Home, Book Ride, Jobs, Report, Account) on mobile.
+    -   Compact mobile header with centered title and iOS-style back navigation on sub-pages.
+    -   Native-style quick action tiles with gradient cards (2x2 grid on mobile).
+    -   Safe area inset support (`viewport-fit=cover`, `env(safe-area-inset-*)`) for iOS notch/home indicator.
+    -   Touch-optimized interactions (44px min tap targets, touch feedback animations, no tap highlights).
+    -   Auto-hiding footer on mobile (replaced by bottom tab bar).
+    -   Mobile app shell (`MobileAppShell`) wraps all routes with bottom padding and tab bar.
+    -   PWA-enhanced manifest with standalone display override.
 -   **Mobile App Integration**:
     -   JWT token-based authentication for native iOS/Android apps.
     -   Access tokens (15min) and refresh tokens (7 days) with rotation.
