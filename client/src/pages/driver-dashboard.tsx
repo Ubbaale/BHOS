@@ -20,7 +20,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet, Star, AlertTriangle, History, ShieldCheck } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { openNavigation } from "@/lib/navigation";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RideChat } from "@/components/RideChat";
@@ -442,6 +443,17 @@ export default function DriverDashboard() {
     queryKey: ["/api/drivers"],
   });
 
+  interface DocumentAlert {
+    type: string;
+    document: string;
+    expiryDate: string;
+    status: "expired" | "expiring_soon" | "valid";
+  }
+  const { data: documentAlerts } = useQuery<{ alerts: DocumentAlert[]; backgroundCheckStatus: string }>({
+    queryKey: [`/api/drivers/${currentDriverId}/document-alerts`],
+    enabled: !!currentDriverId,
+  });
+
   const updateLocationMutation = useMutation({
     mutationFn: async (location: { lat: number; lng: number }) => {
       if (!currentDriverId) return;
@@ -690,6 +702,21 @@ export default function DriverDashboard() {
                 </div>
               </CardContent>
             </Card>
+            <Link href="/driver/trip-history">
+              <Card className="hover-elevate cursor-pointer">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-500/10 rounded-md">
+                      <Clock className="w-5 h-5 text-purple-500" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold">History</p>
+                      <p className="text-xs text-muted-foreground">Trip details</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
             <Link href="/driver/earnings">
               <Card className="hover-elevate cursor-pointer">
                 <CardContent className="p-4">
@@ -741,6 +768,89 @@ export default function DriverDashboard() {
               </Card>
             </Link>
           </div>
+
+          {documentAlerts && documentAlerts.alerts.filter(a => a.status === "expired" || a.status === "expiring_soon").length > 0 && (
+            <div className="space-y-2 mb-6" data-testid="document-alerts">
+              {documentAlerts.alerts.filter(a => a.status === "expired").map((alert, i) => (
+                <Alert key={`expired-${i}`} variant="destructive">
+                  <AlertTriangle className="w-4 h-4" />
+                  <AlertDescription>
+                    <span className="font-semibold">{alert.document}</span> expired on {alert.expiryDate}. Please update immediately to continue accepting rides.
+                  </AlertDescription>
+                </Alert>
+              ))}
+              {documentAlerts.alerts.filter(a => a.status === "expiring_soon").map((alert, i) => (
+                <Alert key={`expiring-${i}`} className="border-amber-500 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <AlertDescription>
+                    <span className="font-semibold">{alert.document}</span> expires on {alert.expiryDate}. Please renew soon.
+                  </AlertDescription>
+                </Alert>
+              ))}
+            </div>
+          )}
+
+          {currentDriver && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" data-testid="driver-stats">
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star key={s} className={`w-4 h-4 ${s <= Math.round(parseFloat(currentDriver.averageRating || "5")) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+                    ))}
+                  </div>
+                  <p className="text-2xl font-bold" data-testid="text-avg-rating">{parseFloat(currentDriver.averageRating || "5").toFixed(1)}</p>
+                  <p className="text-xs text-muted-foreground">Average Rating ({currentDriver.totalRatings || 0} reviews)</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-green-600" data-testid="text-acceptance-rate">
+                    {currentDriver.totalRidesCompleted && (currentDriver.totalRidesCompleted + (currentDriver.totalRidesCancelled || 0)) > 0
+                      ? Math.round((currentDriver.totalRidesCompleted / (currentDriver.totalRidesCompleted + (currentDriver.totalRidesCancelled || 0))) * 100)
+                      : 100}%
+                  </p>
+                  <p className="text-xs text-muted-foreground">Acceptance Rate</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-amber-600" data-testid="text-cancel-rate">
+                    {currentDriver.totalRidesCancelled && (currentDriver.totalRidesCompleted || 0) + currentDriver.totalRidesCancelled > 0
+                      ? Math.round((currentDriver.totalRidesCancelled / ((currentDriver.totalRidesCompleted || 0) + currentDriver.totalRidesCancelled)) * 100)
+                      : 0}%
+                  </p>
+                  <p className="text-xs text-muted-foreground">Cancellation Rate</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <div className="mb-1">
+                    {documentAlerts?.backgroundCheckStatus === "passed" && <ShieldCheck className="w-6 h-6 text-green-600 mx-auto" />}
+                    {documentAlerts?.backgroundCheckStatus === "pending" && <Shield className="w-6 h-6 text-yellow-500 mx-auto" />}
+                    {documentAlerts?.backgroundCheckStatus === "failed" && <AlertTriangle className="w-6 h-6 text-red-500 mx-auto" />}
+                    {(!documentAlerts?.backgroundCheckStatus || documentAlerts?.backgroundCheckStatus === "not_started") && <Shield className="w-6 h-6 text-gray-400 mx-auto" />}
+                  </div>
+                  <Badge
+                    variant={documentAlerts?.backgroundCheckStatus === "passed" ? "default" : "secondary"}
+                    className={`no-default-hover-elevate ${
+                      documentAlerts?.backgroundCheckStatus === "passed" ? "bg-green-600" :
+                      documentAlerts?.backgroundCheckStatus === "pending" ? "bg-yellow-500" :
+                      documentAlerts?.backgroundCheckStatus === "failed" ? "bg-red-500 text-white" :
+                      ""
+                    }`}
+                    data-testid="badge-background-check"
+                  >
+                    {documentAlerts?.backgroundCheckStatus === "passed" ? "BG Check Passed" :
+                     documentAlerts?.backgroundCheckStatus === "pending" ? "BG Check Pending" :
+                     documentAlerts?.backgroundCheckStatus === "failed" ? "BG Check Failed" :
+                     "BG Check Not Started"}
+                  </Badge>
+                  <p className="text-xs text-muted-foreground mt-1">Background Check</p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           <NotificationPrompt userType="driver" driverId={currentDriverId || undefined} />
 

@@ -160,6 +160,27 @@ export default function AdminDrivers() {
     },
   });
 
+  const updateBackgroundCheckMutation = useMutation({
+    mutationFn: async ({ driverId, status, provider }: { driverId: number; status: string; provider?: string }) => {
+      const response = await apiRequest("PATCH", `/api/admin/drivers/${driverId}/background-check`, { status, provider });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drivers/all"] });
+      toast({
+        title: "Background Check Updated",
+        description: "The driver's background check status has been updated.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const pendingDrivers = drivers.filter(d => d.applicationStatus === "pending");
   const approvedDrivers = drivers.filter(d => d.applicationStatus === "approved");
   const rejectedDrivers = drivers.filter(d => d.applicationStatus === "rejected");
@@ -444,6 +465,7 @@ export default function AdminDrivers() {
                     <TableHead>Insurance</TableHead>
                     <TableHead>Documents</TableHead>
                     <TableHead>KYC Status</TableHead>
+                    <TableHead>Background Check</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -522,6 +544,19 @@ export default function AdminDrivers() {
                         </div>
                       </TableCell>
                       <TableCell>{getKycStatusBadge(driver.kycStatus)}</TableCell>
+                      <TableCell>
+                        <select
+                          className="text-xs border rounded px-2 py-1 bg-background"
+                          value={driver.backgroundCheckStatus || "not_started"}
+                          onChange={(e) => updateBackgroundCheckMutation.mutate({ driverId: driver.id, status: e.target.value })}
+                          data-testid={`select-bg-check-${driver.id}`}
+                        >
+                          <option value="not_started">Not Started</option>
+                          <option value="pending">Pending</option>
+                          <option value="passed">Passed</option>
+                          <option value="failed">Failed</option>
+                        </select>
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button

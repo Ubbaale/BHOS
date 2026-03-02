@@ -37,6 +37,12 @@ Preferred communication style: Simple, everyday language.
 -   **Driver Management**:
     -   **Onboarding**: Self-service application, admin review, KYC verification (document upload, admin dashboard).
     -   **Earnings**: Dashboard displaying net pay, tips, and 1099-NEC generation for tax purposes.
+    -   **Weekly Earnings Summary**: Bar chart on earnings page showing last 5 weeks of earnings and tips (Recharts).
+    -   **Trip History**: Per-trip fare breakdown page (`/driver/trip-history`) showing base fare, distance fee, tolls, tip, platform fee, and driver net for each completed ride.
+    -   **Driver Stats**: Dashboard card showing average rating (stars), acceptance rate %, cancellation rate %, and background check status badge.
+    -   **Document Expiration Alerts**: Red/amber banners on driver dashboard for expired or soon-to-expire documents (license, insurance, vehicle inspection).
+    -   **Vehicle Inspection Tracking**: Inspection date and expiry fields on KYC form, checked in document alerts.
+    -   **Background Check Status**: Admin-manageable status (not_started, pending, passed, failed) via dropdown on admin-drivers page; displayed on driver dashboard.
     -   **Independent Contractor**: Agreement logging, tax info collection, and deduction reminders.
     -   **Uber-style Payouts**: Stripe Connect integration for driver bank account linking, instant payouts (1.5% fee), standard payouts (free, 1-2 business days), payout history tracking, and configurable payout preferences (manual, daily, weekly).
 -   **Payment System**:

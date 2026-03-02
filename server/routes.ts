@@ -3684,6 +3684,170 @@ export async function registerRoutes(
     }
   });
   
+  app.get("/api/drivers/:id/trip-history", requireDriver, async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      if (req.session.role !== "admin" && req.session.driverId !== driverId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const allRides = await storage.getRides();
+      const driverRides = allRides
+        .filter(r => r.driverId === driverId && r.status === "completed")
+        .sort((a, b) => {
+          const dateA = a.actualDropoffTime ? new Date(a.actualDropoffTime).getTime() : (a.updatedAt ? new Date(a.updatedAt).getTime() : 0);
+          const dateB = b.actualDropoffTime ? new Date(b.actualDropoffTime).getTime() : (b.updatedAt ? new Date(b.updatedAt).getTime() : 0);
+          return dateB - dateA;
+        });
+      
+      const paginatedRides = driverRides.slice(offset, offset + limit);
+      const trips = paginatedRides.map(ride => {
+        const finalFare = parseFloat(ride.finalFare || ride.estimatedFare || "0");
+        const tip = parseFloat(ride.tipAmount || "0");
+        const driverNet = parseFloat(ride.driverEarnings || "0");
+        const baseFare = parseFloat(ride.baseFare || "5");
+        const distance = parseFloat(ride.distanceMiles || "0");
+        const perMileRate = 2.50;
+        const distanceFee = distance * perMileRate;
+        const tolls = parseFloat(ride.actualTolls || ride.estimatedTolls || "0");
+        const platformFee = finalFare - driverNet;
+        
+        return {
+          id: ride.id,
+          date: ride.actualDropoffTime || ride.appointmentTime,
+          pickupAddress: ride.pickupAddress,
+          dropoffAddress: ride.dropoffAddress,
+          patientName: ride.patientName,
+          distanceMiles: distance.toFixed(1),
+          fareBreakdown: {
+            baseFare: baseFare.toFixed(2),
+            distanceFee: distanceFee.toFixed(2),
+            tolls: tolls.toFixed(2),
+            totalFare: finalFare.toFixed(2),
+            tip: tip.toFixed(2),
+            platformFee: platformFee.toFixed(2),
+            driverNet: driverNet.toFixed(2),
+            totalWithTip: (driverNet + tip).toFixed(2),
+          },
+          status: ride.status,
+          paymentType: ride.paymentType,
+        };
+      });
+      
+      res.json({ trips, total: driverRides.length, hasMore: offset + limit < driverRides.length });
+    } catch (error) {
+      console.error("Error fetching trip history:", error);
+      res.status(500).json({ message: "Failed to fetch trip history" });
+    }
+  });
+
+  app.get("/api/drivers/:id/weekly-summary", requireDriver, async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      if (req.session.role !== "admin" && req.session.driverId !== driverId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const allRides = await storage.getRides();
+      const driverRides = allRides.filter(r => r.driverId === driverId && r.status === "completed");
+      
+      const now = new Date();
+      const weeks: Array<{ weekStart: string; weekEnd: string; earnings: number; tips: number; trips: number }> = [];
+      
+      for (let w = 0; w < 5; w++) {
+        const weekEnd = new Date(now);
+        weekEnd.setDate(weekEnd.getDate() - (w * 7));
+        weekEnd.setHours(23, 59, 59, 999);
+        
+        const weekStart = new Date(weekEnd);
+        weekStart.setDate(weekStart.getDate() - 6);
+        weekStart.setHours(0, 0, 0, 0);
+        
+        const weekRides = driverRides.filter(r => {
+          const rideDate = new Date(r.completedAt || r.appointmentTime || "");
+          return rideDate >= weekStart && rideDate <= weekEnd;
+        });
+        
+        const earnings = weekRides.reduce((sum, r) => sum + parseFloat(r.driverEarnings || "0"), 0);
+        const tips = weekRides.reduce((sum, r) => sum + parseFloat(r.tipAmount || "0"), 0);
+        
+        weeks.push({
+          weekStart: weekStart.toISOString().split("T")[0],
+          weekEnd: weekEnd.toISOString().split("T")[0],
+          earnings: parseFloat(earnings.toFixed(2)),
+          tips: parseFloat(tips.toFixed(2)),
+          trips: weekRides.length,
+        });
+      }
+      
+      res.json({ weeks });
+    } catch (error) {
+      console.error("Error fetching weekly summary:", error);
+      res.status(500).json({ message: "Failed to fetch weekly summary" });
+    }
+  });
+
+  app.get("/api/drivers/:id/document-alerts", requireDriver, async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      if (req.session.role !== "admin" && req.session.driverId !== driverId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const driver = await storage.getDriverProfile(driverId);
+      if (!driver) return res.status(404).json({ message: "Driver not found" });
+      
+      const now = new Date();
+      const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const alerts: Array<{ type: string; document: string; expiryDate: string; status: "expired" | "expiring_soon" | "valid" }> = [];
+      
+      const checkExpiry = (name: string, dateStr: string | null) => {
+        if (!dateStr) return;
+        const expiry = new Date(dateStr);
+        if (expiry < now) {
+          alerts.push({ type: "error", document: name, expiryDate: dateStr, status: "expired" });
+        } else if (expiry < thirtyDaysFromNow) {
+          alerts.push({ type: "warning", document: name, expiryDate: dateStr, status: "expiring_soon" });
+        } else {
+          alerts.push({ type: "info", document: name, expiryDate: dateStr, status: "valid" });
+        }
+      };
+      
+      checkExpiry("Driver's License", driver.driversLicenseExpiry);
+      checkExpiry("Insurance", driver.insuranceExpiry);
+      checkExpiry("Vehicle Inspection", driver.vehicleInspectionExpiry);
+      
+      res.json({ alerts, backgroundCheckStatus: driver.backgroundCheckStatus || "not_started" });
+    } catch (error) {
+      console.error("Error fetching document alerts:", error);
+      res.status(500).json({ message: "Failed to fetch document alerts" });
+    }
+  });
+
+  app.patch("/api/admin/drivers/:id/background-check", requireAdmin, async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      const { status, provider } = req.body;
+      
+      if (!["not_started", "pending", "passed", "failed"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      
+      const driver = await storage.getDriverProfile(driverId);
+      if (!driver) return res.status(404).json({ message: "Driver not found" });
+      
+      await storage.updateDriverKyc(driverId, {
+        backgroundCheckStatus: status,
+        backgroundCheckDate: new Date().toISOString().split("T")[0],
+        backgroundCheckProvider: provider || undefined,
+      } as any);
+      
+      res.json({ message: "Background check status updated" });
+    } catch (error) {
+      console.error("Error updating background check:", error);
+      res.status(500).json({ message: "Failed to update background check" });
+    }
+  });
+
   // Get fare breakdown for a ride (shows commission)
   // Protected: Only authenticated users can view fare breakdown
   app.get("/api/rides/:id/fare-breakdown", requireAuth, async (req, res) => {

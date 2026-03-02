@@ -23,6 +23,7 @@ import DriverEarnings from "@/pages/driver-earnings";
 import DriverPayouts from "@/pages/driver-payouts";
 import ReportIncident from "@/pages/report-incident";
 import RideHistory from "@/pages/ride-history";
+import DriverTripHistory from "@/pages/driver-trip-history";
 
 function Router() {
   return (
@@ -37,6 +38,11 @@ function Router() {
       <Route path="/driver">
         <ProtectedRoute requiredRole="driver">
           <DriverDashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/driver/trip-history">
+        <ProtectedRoute requiredRole="driver">
+          <DriverTripHistory />
         </ProtectedRoute>
       </Route>
       <Route path="/driver/earnings">

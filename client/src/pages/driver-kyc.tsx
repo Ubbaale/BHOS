@@ -71,6 +71,8 @@ export default function DriverKyc() {
     vehicleMake: "",
     vehicleModel: "",
     vehicleColor: "",
+    vehicleInspectionDate: "",
+    vehicleInspectionExpiry: "",
   });
 
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
@@ -448,6 +450,38 @@ export default function DriverKyc() {
                       {uploadingDoc === "vehicleRegistration" ? "Uploading..." : "Upload Registration"}
                     </Button>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="w-5 h-5" />
+                  Vehicle Inspection
+                </CardTitle>
+                <CardDescription>Most recent vehicle safety inspection</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Inspection Date</Label>
+                    <Input
+                      type="date"
+                      value={formData.vehicleInspectionDate || driver?.vehicleInspectionDate || ""}
+                      onChange={(e) => setFormData(prev => ({ ...prev, vehicleInspectionDate: e.target.value }))}
+                      data-testid="input-inspection-date"
+                    />
+                  </div>
+                  <div>
+                    <Label>Inspection Expiry</Label>
+                    <Input
+                      type="date"
+                      value={formData.vehicleInspectionExpiry || driver?.vehicleInspectionExpiry || ""}
+                      onChange={(e) => setFormData(prev => ({ ...prev, vehicleInspectionExpiry: e.target.value }))}
+                      data-testid="input-inspection-expiry"
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>

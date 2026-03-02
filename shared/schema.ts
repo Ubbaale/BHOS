@@ -148,6 +148,11 @@ export const driverProfiles = pgTable("driver_profiles", {
   availableBalance: numeric("available_balance").default("0"),
   pendingBalance: numeric("pending_balance").default("0"),
   totalEarnings: numeric("total_earnings").default("0"),
+  vehicleInspectionDate: text("vehicle_inspection_date"),
+  vehicleInspectionExpiry: text("vehicle_inspection_expiry"),
+  backgroundCheckStatus: text("background_check_status").default("not_started"),
+  backgroundCheckDate: text("background_check_date"),
+  backgroundCheckProvider: text("background_check_provider"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

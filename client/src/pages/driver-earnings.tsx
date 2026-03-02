@@ -1,13 +1,16 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { jsPDF } from "jspdf";
+import { Bar, BarChart, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BackToHome from "@/components/BackToHome";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { DollarSign, FileText, Download, Calendar, TrendingUp, AlertCircle, CheckCircle2, Car, MapPin, Printer } from "lucide-react";
+import { DollarSign, FileText, Download, Calendar, TrendingUp, AlertCircle, CheckCircle2, Car, MapPin, Printer, BarChart3, History } from "lucide-react";
 import type { DriverProfile } from "@shared/schema";
 
 interface AnnualEarnings {
@@ -25,6 +28,23 @@ interface AnnualEarnings {
   totalRides: number;
   totalMiles: string;
 }
+
+interface WeekSummary {
+  weekStart: string;
+  weekEnd: string;
+  earnings: number;
+  tips: number;
+  trips: number;
+}
+
+interface WeeklySummaryResponse {
+  weeks: WeekSummary[];
+}
+
+const weeklyChartConfig: ChartConfig = {
+  earnings: { label: "Earnings", color: "hsl(var(--chart-1))" },
+  tips: { label: "Tips", color: "hsl(var(--chart-2))" },
+};
 
 interface Form1099Data {
   taxYear: number;
@@ -87,6 +107,11 @@ export default function DriverEarnings() {
   const { data: earnings, isLoading: earningsLoading } = useQuery<AnnualEarnings>({
     queryKey: ["/api/drivers", driverId, "annual-earnings", selectedYear],
     enabled: driverId > 0 && selectedYear > 0
+  });
+
+  const { data: weeklySummary } = useQuery<WeeklySummaryResponse>({
+    queryKey: ["/api/drivers", driverId, "weekly-summary"],
+    enabled: driverId > 0
   });
 
   const contractorOnboardMutation = useMutation({
@@ -216,12 +241,20 @@ export default function DriverEarnings() {
               <h1 className="text-2xl font-bold">Earnings & Tax Documents</h1>
               <p className="text-muted-foreground">View your earnings and download tax forms</p>
             </div>
-            {!driver?.isContractorOnboarded && (
-              <Button onClick={() => setShowContractorForm(true)} data-testid="button-contractor-onboard">
-                <FileText className="w-4 h-4 mr-2" />
-                Complete Tax Setup
-              </Button>
-            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link href="/driver/trip-history">
+                <Button variant="outline" data-testid="link-trip-history">
+                  <History className="w-4 h-4 mr-2" />
+                  Trip History
+                </Button>
+              </Link>
+              {!driver?.isContractorOnboarded && (
+                <Button onClick={() => setShowContractorForm(true)} data-testid="button-contractor-onboard">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Complete Tax Setup
+                </Button>
+              )}
+            </div>
           </div>
 
           {!driver?.isContractorOnboarded && (
@@ -312,6 +345,47 @@ export default function DriverEarnings() {
               </CardContent>
             </Card>
           </div>
+
+          {weeklySummary && weeklySummary.weeks && weeklySummary.weeks.length > 0 && (
+            <Card data-testid="card-weekly-summary">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  Weekly Earnings Summary
+                </CardTitle>
+                <CardDescription>
+                  This week: ${(weeklySummary.weeks[0].earnings + weeklySummary.weeks[0].tips).toFixed(2)} from {weeklySummary.weeks[0].trips} trip{weeklySummary.weeks[0].trips !== 1 ? "s" : ""}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={weeklyChartConfig} className="h-[220px] w-full">
+                  <BarChart
+                    data={[...weeklySummary.weeks].reverse().map((w) => ({
+                      week: format(new Date(w.weekStart), "MMM d"),
+                      earnings: w.earnings,
+                      tips: w.tips,
+                    }))}
+                  >
+                    <XAxis dataKey="week" tickLine={false} axisLine={false} fontSize={12} />
+                    <YAxis tickLine={false} axisLine={false} fontSize={12} tickFormatter={(v) => `$${v}`} />
+                    <Tooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="earnings" stackId="a" fill="var(--color-earnings)" radius={[0, 0, 4, 4]} />
+                    <Bar dataKey="tips" stackId="a" fill="var(--color-tips)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
+                <div className="flex items-center justify-center gap-6 mt-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: "hsl(var(--chart-1))" }} />
+                    Earnings
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: "hsl(var(--chart-2))" }} />
+                    Tips
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
