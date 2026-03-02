@@ -869,14 +869,15 @@ export async function registerRoutes(
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
-      const userRole = role === "driver" ? "driver" : "user";
+      const validRoles = ["user", "driver", "employer", "healthcare_worker", "patient"];
+      const userRole = validRoles.includes(role) ? role : "user";
       const user = await storage.createUser({
         username,
         password: hashedPassword,
         role: userRole,
       });
 
-      if (userRole === "user" && (fullName || phone)) {
+      if ((userRole === "user" || userRole === "patient") && (fullName || phone)) {
         try {
           await storage.createPatient({
             userId: user.id,
@@ -1614,7 +1615,7 @@ export async function registerRoutes(
       },
       endpoints: {
         auth: [
-          { method: "POST", path: "/auth/register", description: "Register new user account", requiresAuth: false, body: { username: "email", password: "string", role: "user|driver", fullName: "string (optional)", phone: "string (optional)" } },
+          { method: "POST", path: "/auth/register", description: "Register new user account with role selection", requiresAuth: false, body: { username: "email", password: "string", role: "employer|healthcare_worker|patient|driver", fullName: "string (optional)", phone: "string (optional)" } },
           { method: "POST", path: "/auth/login", description: "Login with username/password, returns access and refresh tokens", requiresAuth: false, body: { username: "email", password: "string", deviceId: "string (optional)" } },
           { method: "POST", path: "/auth/refresh", description: "Refresh access token using refresh token", requiresAuth: false, body: { refreshToken: "string" } },
           { method: "POST", path: "/auth/logout", description: "Invalidate refresh token", requiresAuth: false },
@@ -1759,7 +1760,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/jobs", async (req, res) => {
+  app.post("/api/jobs", requireAuth, async (req, res) => {
     try {
       const parsed = insertJobSchema.parse(req.body);
       const job = await storage.createJob(parsed);

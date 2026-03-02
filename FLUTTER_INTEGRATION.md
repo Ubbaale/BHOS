@@ -23,7 +23,7 @@ Content-Type: application/json
 {
   "username": "user@email.com",
   "password": "SecurePass1!",
-  "role": "user",           // "user" for patients, "driver" for drivers
+  "role": "employer",       // "employer", "healthcare_worker", "patient", or "driver"
   "fullName": "John Doe",   // optional
   "phone": "555-0123",      // optional
   "deviceId": "device-uuid" // optional, for token tracking

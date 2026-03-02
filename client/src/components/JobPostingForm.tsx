@@ -29,10 +29,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { CheckCircle2, Loader2, Plus, X, Briefcase } from "lucide-react";
+import { CheckCircle2, Loader2, Plus, X, Briefcase, LogIn } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Job } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/auth";
 
 const US_STATES = [
   { value: "AL", label: "Alabama", lat: 32.806671, lng: -86.791130 },
@@ -118,6 +119,7 @@ export default function JobPostingForm() {
   const [submitted, setSubmitted] = useState(false);
   const [requirements, setRequirements] = useState<string[]>([]);
   const [newRequirement, setNewRequirement] = useState("");
+  const { isAuthenticated } = useAuth();
 
   const form = useForm<JobPostingFormData>({
     resolver: zodResolver(jobPostingSchema),
@@ -192,7 +194,26 @@ export default function JobPostingForm() {
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        {submitted ? (
+        {!isAuthenticated ? (
+          <div className="p-6 text-center">
+            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+              <LogIn className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h3 className="text-2xl font-semibold mb-2" data-testid="text-login-required">Account Required</h3>
+            <p className="text-muted-foreground mb-6">
+              You need to sign in to your CareHub account before posting healthcare jobs. This ensures all job postings are verified and trustworthy.
+            </p>
+            <Button asChild className="w-full" data-testid="button-sign-in-to-post">
+              <a href="https://app.carehubapp.com/#/login">
+                <LogIn className="w-4 h-4 mr-2" />
+                Sign In to Post Jobs
+              </a>
+            </Button>
+            <p className="text-xs text-muted-foreground mt-4">
+              Don't have an account? You can register as an employer, healthcare worker, patient, or driver.
+            </p>
+          </div>
+        ) : submitted ? (
           <div className="p-6 text-center">
             <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="w-8 h-8 text-green-600 dark:text-green-400" />

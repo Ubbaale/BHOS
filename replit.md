@@ -15,7 +15,8 @@ Preferred communication style: Simple, everyday language.
 -   **Monorepo Structure**: Client, server, and shared code (schema, types) in a single repository.
 
 ### Key Features
--   **Healthcare Staffing**: Interactive job map using Leaflet.js, job posting and real-time updates via WebSocket.
+-   **Healthcare Staffing**: Interactive job map using Leaflet.js, job posting (requires authentication) and real-time updates via WebSocket. Unauthenticated users are redirected to app.carehubapp.com to sign in before posting.
+    -   **User Roles**: Users pick their role at registration: employer, healthcare_worker, patient, or driver. All roles can post jobs once authenticated.
 -   **Issue Reporting**: Support ticket system with file attachments and email notifications.
 -   **Medical Ride-Hailing (NEMT)**:
     -   **Marketplace Model**: Patients post requests to a driver pool, drivers claim jobs.
