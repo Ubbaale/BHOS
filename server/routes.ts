@@ -1007,7 +1007,7 @@ export async function registerRoutes(
       broadcastRideUpdate("new", ride);
 
       try {
-        await notifyDriversOfNewRide(ride);
+        await notifyDriversOfNewRide(ride.pickupAddress, new Date(ride.appointmentTime));
       } catch (e) {
         console.error("Failed to notify drivers:", e);
       }
@@ -1097,7 +1097,7 @@ export async function registerRoutes(
         broadcastRideUpdate("status_change", finalRide);
 
         try {
-          if (finalRide) await notifyPatientOfRideUpdate(finalRide, "Your ride has been accepted by a driver!");
+          if (finalRide) await notifyPatientOfRideUpdate("accepted", finalRide.driverId?.toString());
         } catch (e) {
           console.error("Failed to notify patient:", e);
         }
@@ -1137,7 +1137,7 @@ export async function registerRoutes(
           await storage.incrementDriverCompletedRides(mobileUser.driverId);
         }
         try {
-          await notifyPatientOfRideUpdate(updatedRide, "Your ride has been completed. Thank you!");
+          await notifyPatientOfRideUpdate("completed");
         } catch (e) {
           console.error("Failed to notify patient:", e);
         }
