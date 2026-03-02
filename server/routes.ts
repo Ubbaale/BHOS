@@ -750,17 +750,16 @@ export async function registerRoutes(
       
       let rides = await storage.getAllRides();
       
-      // Filter by driver if user is a driver
       if (mobileUser.role === 'driver' && mobileUser.driverId) {
         rides = rides.filter((r: any) => r.driverId === mobileUser.driverId);
+      } else {
+        rides = rides.filter((r: any) => String(r.patientId) === String(mobileUser.userId));
       }
       
-      // Filter by status if provided
       if (status && typeof status === 'string') {
         rides = rides.filter((r: any) => r.status === status);
       }
       
-      // Limit results
       rides = rides.slice(0, Number(limit));
       
       res.json({ rides });
@@ -816,11 +815,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Valid latitude and longitude required" });
       }
       
-      // Update driver's current location for active ride
+      await storage.updateDriverLocation(mobileUser.driverId, latitude, longitude);
+      
       if (rideId) {
         const ride = await storage.getRide(rideId);
         if (ride && ride.driverId === mobileUser.driverId) {
-          // Broadcast location update (ride entity doesn't store driver coordinates separately)
           broadcastRideUpdate("driver_location", { ...ride, driverLatitude: latitude, driverLongitude: longitude });
         }
       }
@@ -832,42 +831,844 @@ export async function registerRoutes(
     }
   });
 
-  // Mobile API Documentation endpoint
+  // ============================================
+  // MOBILE API - USER REGISTRATION
+  // ============================================
+
+  app.post("/api/mobile/auth/register", loginRateLimiter, async (req, res) => {
+    try {
+      const { username, password, confirmPassword, role, fullName, phone } = req.body;
+
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username (email) and password are required" });
+      }
+
+      if (password.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+      if (!/[A-Z]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain at least one uppercase letter" });
+      }
+      if (!/[a-z]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain at least one lowercase letter" });
+      }
+      if (!/[0-9]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain at least one number" });
+      }
+      if (!/[^A-Za-z0-9]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain at least one special character" });
+      }
+
+      if (confirmPassword && password !== confirmPassword) {
+        return res.status(400).json({ message: "Passwords don't match" });
+      }
+
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Email is already registered. Please use a different email or login." });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const userRole = role === "driver" ? "driver" : "user";
+      const user = await storage.createUser({
+        username,
+        password: hashedPassword,
+        role: userRole,
+      });
+
+      if (userRole === "user" && (fullName || phone)) {
+        try {
+          await storage.createPatient({
+            userId: user.id,
+            fullName: fullName || username,
+            phone: phone || "",
+            email: username,
+            mobilityNeeds: [],
+            emergencyContactName: null,
+            emergencyContactPhone: null,
+            savedAddresses: [],
+          });
+        } catch (e) {
+          console.error("Failed to create patient profile during registration:", e);
+        }
+      }
+
+      const tokenPayload = {
+        userId: typeof user.id === 'string' ? parseInt(user.id) : user.id,
+        username: user.username,
+        role: user.role || "user",
+        deviceId: req.body.deviceId || 'unknown'
+      };
+
+      const accessToken = generateAccessToken(tokenPayload);
+      const refreshTokenValue = generateRefreshToken(tokenPayload);
+
+      res.status(201).json({
+        accessToken,
+        refreshToken: refreshTokenValue,
+        expiresIn: 900,
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role
+        }
+      });
+    } catch (error) {
+      console.error("Mobile registration error:", error);
+      res.status(500).json({ message: "Registration failed" });
+    }
+  });
+
+  // ============================================
+  // MOBILE API - JOBS
+  // ============================================
+
+  app.get("/api/mobile/jobs", async (req, res) => {
+    try {
+      const { state, zipCode, shift, search, limit = "50" } = req.query;
+      let jobs = await storage.getAvailableJobs();
+
+      if (state && typeof state === 'string') {
+        jobs = jobs.filter((j: any) => j.state?.toLowerCase() === state.toLowerCase());
+      }
+      if (zipCode && typeof zipCode === 'string') {
+        jobs = jobs.filter((j: any) => j.zipCode === zipCode);
+      }
+      if (shift && typeof shift === 'string') {
+        jobs = jobs.filter((j: any) => j.shift?.toLowerCase() === shift.toLowerCase());
+      }
+      if (search && typeof search === 'string') {
+        const q = search.toLowerCase();
+        jobs = jobs.filter((j: any) =>
+          j.title?.toLowerCase().includes(q) ||
+          j.facility?.toLowerCase().includes(q) ||
+          j.location?.toLowerCase().includes(q)
+        );
+      }
+
+      jobs = jobs.slice(0, Number(limit));
+      res.json({ jobs, total: jobs.length });
+    } catch (error) {
+      console.error("Mobile get jobs error:", error);
+      res.status(500).json({ message: "Failed to get jobs" });
+    }
+  });
+
+  app.get("/api/mobile/jobs/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const job = await storage.getJob(id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      res.json({ job });
+    } catch (error) {
+      console.error("Mobile get job error:", error);
+      res.status(500).json({ message: "Failed to get job" });
+    }
+  });
+
+  app.post("/api/mobile/jobs", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const parsed = insertJobSchema.parse(req.body);
+      const job = await storage.createJob(parsed);
+      broadcastJobUpdate("add", job);
+      res.status(201).json({ job });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid job data", errors: error.errors });
+      }
+      console.error("Mobile create job error:", error);
+      res.status(500).json({ message: "Failed to create job" });
+    }
+  });
+
+  // ============================================
+  // MOBILE API - RIDES (Extended)
+  // ============================================
+
+  app.post("/api/mobile/rides", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const rideData = {
+        ...req.body,
+        patientId: mobileUser.userId,
+        status: "requested",
+      };
+
+      const parsed = insertRideSchema.parse(rideData);
+      const ride = await storage.createRide(parsed);
+
+      const trackingData = generateTrackingToken();
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
+
+      broadcastRideUpdate("new", ride);
+
+      try {
+        await notifyDriversOfNewRide(ride);
+      } catch (e) {
+        console.error("Failed to notify drivers:", e);
+      }
+
+      res.status(201).json({ ride });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid ride data", errors: error.errors });
+      }
+      console.error("Mobile create ride error:", error);
+      res.status(500).json({ message: "Failed to create ride" });
+    }
+  });
+
+  app.get("/api/mobile/rides/pool", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      if (mobileUser.role !== 'driver') {
+        return res.status(403).json({ message: "Only drivers can view the ride pool" });
+      }
+
+      let rides = await storage.getAllRides();
+      rides = rides.filter((r: any) => r.status === "requested" && !r.driverId);
+      res.json({ rides });
+    } catch (error) {
+      console.error("Mobile ride pool error:", error);
+      res.status(500).json({ message: "Failed to get ride pool" });
+    }
+  });
+
+  app.get("/api/mobile/rides/:id", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      const isPatient = String(ride.patientId) === String(mobileUser.userId);
+      const isDriver = mobileUser.driverId && ride.driverId === mobileUser.driverId;
+      if (!isPatient && !isDriver) {
+        return res.status(403).json({ message: "Not authorized for this ride" });
+      }
+      res.json({ ride });
+    } catch (error) {
+      console.error("Mobile get ride error:", error);
+      res.status(500).json({ message: "Failed to get ride" });
+    }
+  });
+
+  app.post("/api/mobile/rides/:id/accept", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      if (!mobileUser.driverId) {
+        return res.status(403).json({ message: "Only drivers can accept rides" });
+      }
+
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      if (ride.status !== "requested") {
+        return res.status(400).json({ message: "Ride is no longer available" });
+      }
+
+      const updatedRide = await storage.assignDriver(rideId, mobileUser.driverId);
+      if (updatedRide) {
+        await storage.updateRideStatus(rideId, "accepted");
+        const finalRide = await storage.getRide(rideId);
+        broadcastRideUpdate("status_change", finalRide);
+
+        try {
+          if (finalRide) await notifyPatientOfRideUpdate(finalRide, "Your ride has been accepted by a driver!");
+        } catch (e) {
+          console.error("Failed to notify patient:", e);
+        }
+
+        res.json({ ride: finalRide });
+      } else {
+        res.status(500).json({ message: "Failed to accept ride" });
+      }
+    } catch (error) {
+      console.error("Mobile accept ride error:", error);
+      res.status(500).json({ message: "Failed to accept ride" });
+    }
+  });
+
+  app.post("/api/mobile/rides/:id/complete", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      if (mobileUser.role === 'driver' && ride.driverId !== mobileUser.driverId) {
+        return res.status(403).json({ message: "Not authorized for this ride" });
+      }
+
+      const { actualDistanceMiles } = req.body;
+      const updatedRide = await storage.completeRide(rideId, {
+        actualPickupTime: ride.actualPickupTime || new Date(),
+        actualDropoffTime: new Date(),
+        actualDistanceMiles: actualDistanceMiles || ride.distanceMiles,
+      });
+
+      if (updatedRide) {
+        broadcastRideUpdate("status_change", updatedRide);
+        if (mobileUser.driverId) {
+          await storage.incrementDriverCompletedRides(mobileUser.driverId);
+        }
+        try {
+          await notifyPatientOfRideUpdate(updatedRide, "Your ride has been completed. Thank you!");
+        } catch (e) {
+          console.error("Failed to notify patient:", e);
+        }
+      }
+
+      res.json({ ride: updatedRide });
+    } catch (error) {
+      console.error("Mobile complete ride error:", error);
+      res.status(500).json({ message: "Failed to complete ride" });
+    }
+  });
+
+  app.post("/api/mobile/rides/:id/cancel", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      const { reason } = req.body;
+      const cancelledBy = mobileUser.role === 'driver' ? 'driver' : 'patient';
+      const updatedRide = await storage.cancelRide(rideId, cancelledBy, reason || "Cancelled via mobile app");
+
+      if (updatedRide) {
+        broadcastRideUpdate("status_change", updatedRide);
+        if (cancelledBy === 'driver' && mobileUser.driverId) {
+          await storage.incrementDriverCancellations(mobileUser.driverId);
+        }
+      }
+
+      res.json({ ride: updatedRide });
+    } catch (error) {
+      console.error("Mobile cancel ride error:", error);
+      res.status(500).json({ message: "Failed to cancel ride" });
+    }
+  });
+
+  app.get("/api/mobile/rides/:id/messages", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      const isPatient = String(ride.patientId) === String(mobileUser.userId);
+      const isDriver = mobileUser.driverId && ride.driverId === mobileUser.driverId;
+      if (!isPatient && !isDriver) {
+        return res.status(403).json({ message: "Not authorized for this ride" });
+      }
+      const messages = await storage.getRideMessages(rideId);
+      res.json({ messages });
+    } catch (error) {
+      console.error("Mobile get messages error:", error);
+      res.status(500).json({ message: "Failed to get messages" });
+    }
+  });
+
+  app.post("/api/mobile/rides/:id/messages", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const rideId = parseInt(req.params.id);
+      const { message: messageText } = req.body;
+
+      if (!messageText || typeof messageText !== 'string' || messageText.trim().length === 0) {
+        return res.status(400).json({ message: "Message text is required" });
+      }
+
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      const isPatient = String(ride.patientId) === String(mobileUser.userId);
+      const isDriver = mobileUser.driverId && ride.driverId === mobileUser.driverId;
+      if (!isPatient && !isDriver) {
+        return res.status(403).json({ message: "Not authorized for this ride" });
+      }
+
+      const senderType = mobileUser.role === 'driver' ? 'driver' : 'patient';
+      const msg = await storage.createRideMessage({
+        rideId,
+        senderType,
+        message: messageText.trim(),
+        isQuickMessage: false,
+      });
+
+      broadcastChatMessage(rideId, msg);
+      res.status(201).json({ message: msg });
+    } catch (error) {
+      console.error("Mobile send message error:", error);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  app.get("/api/mobile/rides/:id/events", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      const isPatient = String(ride.patientId) === String(mobileUser.userId);
+      const isDriver = mobileUser.driverId && ride.driverId === mobileUser.driverId;
+      if (!isPatient && !isDriver) {
+        return res.status(403).json({ message: "Not authorized for this ride" });
+      }
+      const events = await storage.getRideEvents(rideId);
+      res.json({ events });
+    } catch (error) {
+      console.error("Mobile get events error:", error);
+      res.status(500).json({ message: "Failed to get ride events" });
+    }
+  });
+
+  app.post("/api/mobile/rides/:id/rate", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const rideId = parseInt(req.params.id);
+      const { rating, comment } = req.body;
+
+      if (!rating || typeof rating !== 'number' || rating < 1 || rating > 5) {
+        return res.status(400).json({ message: "Rating must be a number between 1 and 5" });
+      }
+
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      const isPatient = String(ride.patientId) === String(mobileUser.userId);
+      const isDriver = mobileUser.driverId && ride.driverId === mobileUser.driverId;
+      if (!isPatient && !isDriver) {
+        return res.status(403).json({ message: "Not authorized for this ride" });
+      }
+
+      const rideRating = await storage.createRideRating({
+        rideId,
+        ratedBy: mobileUser.role,
+        rating,
+        comment: comment || null,
+      });
+
+      if (ride.driverId && mobileUser.role !== 'driver') {
+        await storage.updateDriverRating(ride.driverId, rating);
+      }
+
+      res.status(201).json({ rating: rideRating });
+    } catch (error) {
+      console.error("Mobile rate ride error:", error);
+      res.status(500).json({ message: "Failed to rate ride" });
+    }
+  });
+
+  // ============================================
+  // MOBILE API - DRIVER PROFILE & MANAGEMENT
+  // ============================================
+
+  app.get("/api/mobile/driver/profile", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      if (!mobileUser.driverId) {
+        const driverByUser = await storage.getDriverByUserId(mobileUser.userId);
+        if (!driverByUser) {
+          return res.status(404).json({ message: "No driver profile found" });
+        }
+        return res.json({ driver: driverByUser });
+      }
+      const driver = await storage.getDriver(mobileUser.driverId);
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+      res.json({ driver });
+    } catch (error) {
+      console.error("Mobile get driver profile error:", error);
+      res.status(500).json({ message: "Failed to get driver profile" });
+    }
+  });
+
+  app.patch("/api/mobile/driver/availability", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      if (!mobileUser.driverId) {
+        return res.status(403).json({ message: "Not a driver account" });
+      }
+      const { isAvailable } = req.body;
+      if (typeof isAvailable !== 'boolean') {
+        return res.status(400).json({ message: "isAvailable must be a boolean" });
+      }
+      const driver = await storage.updateDriverAvailability(mobileUser.driverId, isAvailable);
+      res.json({ driver });
+    } catch (error) {
+      console.error("Mobile update availability error:", error);
+      res.status(500).json({ message: "Failed to update availability" });
+    }
+  });
+
+  app.get("/api/mobile/driver/earnings", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      if (!mobileUser.driverId) {
+        return res.status(403).json({ message: "Not a driver account" });
+      }
+      const earnings = await storage.getDriverEarnings(mobileUser.driverId);
+      const driver = await storage.getDriver(mobileUser.driverId);
+      res.json({
+        earnings,
+        balance: {
+          available: driver?.availableBalance || "0",
+          pending: driver?.pendingBalance || "0",
+          total: driver?.totalEarnings || "0",
+        }
+      });
+    } catch (error) {
+      console.error("Mobile get earnings error:", error);
+      res.status(500).json({ message: "Failed to get earnings" });
+    }
+  });
+
+  app.get("/api/mobile/driver/payouts", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      if (!mobileUser.driverId) {
+        return res.status(403).json({ message: "Not a driver account" });
+      }
+      const payouts = await storage.getDriverPayouts(mobileUser.driverId);
+      res.json({ payouts });
+    } catch (error) {
+      console.error("Mobile get payouts error:", error);
+      res.status(500).json({ message: "Failed to get payouts" });
+    }
+  });
+
+  app.post("/api/mobile/driver/apply", async (req, res) => {
+    try {
+      const { email, password, confirmPassword, ...driverData } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+      if (password.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+      if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain uppercase, lowercase, number, and special character" });
+      }
+      if (confirmPassword && password !== confirmPassword) {
+        return res.status(400).json({ message: "Passwords don't match" });
+      }
+
+      const existingUser = await storage.getUserByUsername(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "Email is already registered" });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await storage.createUser({ username: email, password: hashedPassword, role: "driver" });
+
+      const parsed = insertDriverProfileSchema.parse({
+        ...driverData,
+        email,
+        userId: user.id,
+      });
+      const driver = await storage.createDriver(parsed);
+
+      const tokenPayload = {
+        userId: typeof user.id === 'string' ? parseInt(user.id) : user.id,
+        username: user.username,
+        role: "driver",
+        driverId: driver.id,
+        deviceId: req.body.deviceId || 'unknown'
+      };
+      const accessToken = generateAccessToken(tokenPayload);
+      const refreshTokenValue = generateRefreshToken(tokenPayload);
+
+      res.status(201).json({
+        accessToken,
+        refreshToken: refreshTokenValue,
+        expiresIn: 900,
+        user: { id: user.id, username: user.username, role: "driver" },
+        driver: { id: driver.id, fullName: driver.fullName, applicationStatus: driver.applicationStatus }
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid driver data", errors: error.errors });
+      }
+      console.error("Mobile driver apply error:", error);
+      res.status(500).json({ message: "Failed to submit driver application" });
+    }
+  });
+
+  // ============================================
+  // MOBILE API - PATIENT PROFILE
+  // ============================================
+
+  app.get("/api/mobile/patient/profile", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const patient = await storage.getPatient(mobileUser.userId);
+      if (!patient) {
+        return res.status(404).json({ message: "Patient profile not found" });
+      }
+      res.json({ patient });
+    } catch (error) {
+      console.error("Mobile get patient profile error:", error);
+      res.status(500).json({ message: "Failed to get patient profile" });
+    }
+  });
+
+  app.post("/api/mobile/patient/profile", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const existing = await storage.getPatient(mobileUser.userId);
+      if (existing) {
+        return res.json({ patient: existing });
+      }
+
+      const { fullName, phone, email, mobilityNeeds, emergencyContactName, emergencyContactPhone } = req.body;
+      const patient = await storage.createPatient({
+        userId: mobileUser.userId,
+        fullName: fullName || mobileUser.username,
+        phone: phone || "",
+        email: email || mobileUser.username,
+        mobilityNeeds: mobilityNeeds || [],
+        emergencyContactName: emergencyContactName || null,
+        emergencyContactPhone: emergencyContactPhone || null,
+        savedAddresses: [],
+      });
+
+      res.status(201).json({ patient });
+    } catch (error) {
+      console.error("Mobile create patient profile error:", error);
+      res.status(500).json({ message: "Failed to create patient profile" });
+    }
+  });
+
+  // ============================================
+  // MOBILE API - SURGE PRICING
+  // ============================================
+
+  app.get("/api/mobile/surge/current", async (_req, res) => {
+    try {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentDay = now.getDay();
+
+      const activeSurge = await storage.getActiveSurgePricing(currentDay, currentHour);
+
+      res.json({
+        isActive: !!activeSurge,
+        multiplier: activeSurge ? activeSurge.multiplier : 1.0,
+        reason: activeSurge ? activeSurge.reason : null,
+      });
+    } catch (error) {
+      console.error("Mobile surge pricing error:", error);
+      res.status(500).json({ message: "Failed to get surge pricing" });
+    }
+  });
+
+  // ============================================
+  // MOBILE API - INCIDENTS
+  // ============================================
+
+  app.post("/api/mobile/incidents", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const incidentData = {
+        ...req.body,
+        reporterId: mobileUser.userId,
+        reporterType: mobileUser.role,
+      };
+
+      const incident = await storage.createIncidentReport(incidentData);
+      res.status(201).json({ incident });
+    } catch (error) {
+      console.error("Mobile create incident error:", error);
+      res.status(500).json({ message: "Failed to report incident" });
+    }
+  });
+
+  // ============================================
+  // MOBILE API - PAYMENTS (Stripe)
+  // ============================================
+
+  app.post("/api/mobile/rides/:id/payment-intent", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      const isPatient = String(ride.patientId) === String(mobileUser.userId);
+      if (!isPatient) {
+        return res.status(403).json({ message: "Only the ride patient can create a payment" });
+      }
+
+      const fare = parseFloat(ride.estimatedFare || "0");
+      if (fare <= 0) {
+        return res.status(400).json({ message: "Invalid fare amount" });
+      }
+
+      const stripeClient = getUncachableStripeClient();
+      if (!stripeClient) {
+        return res.status(500).json({ message: "Payment service unavailable" });
+      }
+
+      const paymentIntent = await stripeClient.paymentIntents.create({
+        amount: Math.round(fare * 100),
+        currency: "usd",
+        metadata: { rideId: String(rideId), type: "ride_payment" },
+      });
+
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        publishableKey: getStripePublishableKey(),
+        amount: fare,
+      });
+    } catch (error) {
+      console.error("Mobile payment intent error:", error);
+      res.status(500).json({ message: "Failed to create payment" });
+    }
+  });
+
+  app.post("/api/mobile/rides/:id/tip", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const rideId = parseInt(req.params.id);
+      const { amount } = req.body;
+
+      if (!amount || typeof amount !== 'number' || amount <= 0 || amount > 500) {
+        return res.status(400).json({ message: "Tip amount must be a number between $0.01 and $500" });
+      }
+
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      const isPatient = String(ride.patientId) === String(mobileUser.userId);
+      if (!isPatient) {
+        return res.status(403).json({ message: "Only the ride patient can tip" });
+      }
+
+      const stripeClient = getUncachableStripeClient();
+      if (!stripeClient) {
+        return res.status(500).json({ message: "Payment service unavailable" });
+      }
+
+      const paymentIntent = await stripeClient.paymentIntents.create({
+        amount: Math.round(amount * 100),
+        currency: "usd",
+        metadata: { rideId: String(rideId), type: "tip" },
+      });
+
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        publishableKey: getStripePublishableKey(),
+        amount,
+      });
+    } catch (error) {
+      console.error("Mobile tip payment error:", error);
+      res.status(500).json({ message: "Failed to create tip payment" });
+    }
+  });
+
+  // ============================================
+  // MOBILE API DOCUMENTATION (Complete)
+  // ============================================
+
   app.get("/api/mobile/docs", (_req, res) => {
     res.json({
-      apiVersion: "1.0.0",
+      apiVersion: "2.0.0",
       baseUrl: "/api/mobile",
+      flutterIntegration: {
+        note: "This API is designed for the Flutter app (com.fieldhcp.app) to connect to the CareHub backend",
+        authentication: "Use Bearer token in Authorization header for all authenticated requests",
+        firebasePush: "Register your FCM token via POST /api/mobile/push/register after login",
+        webSockets: "Get a ws-token via GET /api/mobile/auth/ws-token, then connect to wss://<host>/ws/rides?token=<ws-token>",
+      },
       authentication: {
         type: "Bearer Token (JWT)",
         loginEndpoint: "POST /api/mobile/auth/login",
+        registerEndpoint: "POST /api/mobile/auth/register",
         refreshEndpoint: "POST /api/mobile/auth/refresh",
         logoutEndpoint: "POST /api/mobile/auth/logout",
-        tokenExpiry: "15 minutes (access), 7 days (refresh)"
+        tokenExpiry: "15 minutes (access), 7 days (refresh)",
+        passwordRequirements: "Min 8 chars, uppercase, lowercase, number, special character"
       },
       endpoints: {
         auth: [
-          { method: "POST", path: "/auth/login", description: "Login with username/password, returns access and refresh tokens", requiresAuth: false },
-          { method: "POST", path: "/auth/refresh", description: "Refresh access token using refresh token", requiresAuth: false },
+          { method: "POST", path: "/auth/register", description: "Register new user account", requiresAuth: false, body: { username: "email", password: "string", role: "user|driver", fullName: "string (optional)", phone: "string (optional)" } },
+          { method: "POST", path: "/auth/login", description: "Login with username/password, returns access and refresh tokens", requiresAuth: false, body: { username: "email", password: "string", deviceId: "string (optional)" } },
+          { method: "POST", path: "/auth/refresh", description: "Refresh access token using refresh token", requiresAuth: false, body: { refreshToken: "string" } },
           { method: "POST", path: "/auth/logout", description: "Invalidate refresh token", requiresAuth: false },
-          { method: "GET", path: "/auth/me", description: "Get current user info", requiresAuth: true },
+          { method: "GET", path: "/auth/me", description: "Get current user info and driver profile if applicable", requiresAuth: true },
           { method: "GET", path: "/auth/ws-token", description: "Get WebSocket authentication token", requiresAuth: true }
         ],
         push: [
-          { method: "POST", path: "/push/register", description: "Register device for push notifications (FCM/APNs)", requiresAuth: true }
+          { method: "POST", path: "/push/register", description: "Register device for push notifications (FCM/APNs)", requiresAuth: true, body: { deviceToken: "string", platform: "fcm|apns|ios|android", deviceId: "string (optional)" } }
+        ],
+        jobs: [
+          { method: "GET", path: "/jobs", description: "List available jobs with optional filters", requiresAuth: false, query: { state: "string", zipCode: "string", shift: "string", search: "string", limit: "number" } },
+          { method: "GET", path: "/jobs/:id", description: "Get job details", requiresAuth: false },
+          { method: "POST", path: "/jobs", description: "Create a new job posting", requiresAuth: true }
         ],
         rides: [
-          { method: "GET", path: "/rides", description: "Get rides (filtered by driver for driver accounts)", requiresAuth: true },
-          { method: "PATCH", path: "/rides/:id/status", description: "Update ride status", requiresAuth: true }
+          { method: "GET", path: "/rides", description: "Get user's rides (filtered by driver for driver accounts)", requiresAuth: true, query: { status: "string", limit: "number" } },
+          { method: "POST", path: "/rides", description: "Book a new ride", requiresAuth: true },
+          { method: "GET", path: "/rides/pool", description: "Get available rides for drivers to claim", requiresAuth: true },
+          { method: "GET", path: "/rides/:id", description: "Get ride details", requiresAuth: true },
+          { method: "PATCH", path: "/rides/:id/status", description: "Update ride status", requiresAuth: true },
+          { method: "POST", path: "/rides/:id/accept", description: "Driver accepts a ride", requiresAuth: true },
+          { method: "POST", path: "/rides/:id/complete", description: "Mark ride as completed", requiresAuth: true },
+          { method: "POST", path: "/rides/:id/cancel", description: "Cancel a ride", requiresAuth: true, body: { reason: "string (optional)" } },
+          { method: "GET", path: "/rides/:id/messages", description: "Get chat messages for a ride", requiresAuth: true },
+          { method: "POST", path: "/rides/:id/messages", description: "Send chat message", requiresAuth: true, body: { message: "string" } },
+          { method: "GET", path: "/rides/:id/events", description: "Get ride event history", requiresAuth: true },
+          { method: "POST", path: "/rides/:id/rate", description: "Rate a completed ride", requiresAuth: true, body: { rating: "1-5", comment: "string (optional)" } },
+          { method: "POST", path: "/rides/:id/payment-intent", description: "Create Stripe payment intent for ride", requiresAuth: true },
+          { method: "POST", path: "/rides/:id/tip", description: "Create payment intent for driver tip", requiresAuth: true, body: { amount: "number" } }
         ],
         driver: [
-          { method: "POST", path: "/driver/location", description: "Update driver location", requiresAuth: true }
+          { method: "GET", path: "/driver/profile", description: "Get driver profile", requiresAuth: true },
+          { method: "PATCH", path: "/driver/availability", description: "Toggle driver availability", requiresAuth: true, body: { isAvailable: "boolean" } },
+          { method: "POST", path: "/driver/location", description: "Update driver GPS location", requiresAuth: true, body: { latitude: "number", longitude: "number", rideId: "number (optional)" } },
+          { method: "GET", path: "/driver/earnings", description: "Get driver earnings summary", requiresAuth: true },
+          { method: "GET", path: "/driver/payouts", description: "Get payout history", requiresAuth: true },
+          { method: "POST", path: "/driver/apply", description: "Apply as a new driver (creates account)", requiresAuth: false }
+        ],
+        patient: [
+          { method: "GET", path: "/patient/profile", description: "Get patient profile", requiresAuth: true },
+          { method: "POST", path: "/patient/profile", description: "Create patient profile", requiresAuth: true }
+        ],
+        surge: [
+          { method: "GET", path: "/surge/current", description: "Get current surge pricing status", requiresAuth: false }
+        ],
+        incidents: [
+          { method: "POST", path: "/incidents", description: "Report a safety incident", requiresAuth: true }
         ]
       },
       websocket: {
         jobsUrl: "wss://<host>/ws/jobs?token=<ws-token>",
         ridesUrl: "wss://<host>/ws/rides?token=<ws-token>",
         chatUrl: "wss://<host>/ws/chat/:rideId?token=<ws-token>",
-        note: "Get ws-token from /api/mobile/auth/ws-token endpoint"
+        note: "Get ws-token from GET /api/mobile/auth/ws-token endpoint. Tokens are single-use and expire after 60 seconds."
       },
       requestFormat: {
         headers: {
@@ -876,9 +1677,11 @@ export async function registerRoutes(
         }
       },
       responseFormat: {
-        success: { "data": "..." },
-        error: { "message": "Error description" }
-      }
+        success: "{ data: ... } or { rides: [...] } etc.",
+        error: "{ message: 'Error description' }"
+      },
+      rideStatuses: ["requested", "accepted", "en_route", "arrived", "in_progress", "completed", "cancelled"],
+      paymentTypes: ["self_pay", "insurance"],
     });
   });
 

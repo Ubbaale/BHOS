@@ -43,13 +43,14 @@ Preferred communication style: Simple, everyday language.
     -   Auto-hiding footer on mobile (replaced by bottom tab bar).
     -   Mobile app shell (`MobileAppShell`) wraps all routes with bottom padding and tab bar.
     -   PWA-enhanced manifest with standalone display override.
--   **Mobile App Integration**:
-    -   JWT token-based authentication for native iOS/Android apps.
+-   **Mobile App Integration (v2.0 API)**:
+    -   JWT token-based authentication for native iOS/Android apps (including Flutter app `com.fieldhcp.app`).
     -   Access tokens (15min) and refresh tokens (7 days) with rotation.
-    -   CORS configured for Capacitor, Ionic, and custom app schemes.
-    -   Mobile push notification registration endpoint for FCM/APNs.
-    -   Mobile API endpoints: `/api/mobile/auth/login`, `/api/mobile/auth/refresh`, `/api/mobile/auth/me`, `/api/mobile/rides`, `/api/mobile/driver/location`.
-    -   API documentation available at `/api/mobile/docs`.
+    -   CORS configured for Capacitor, Ionic, custom app schemes, and Flutter native apps (no-origin requests allowed for `/api/mobile/*`).
+    -   Comprehensive mobile API covering: auth (register/login/refresh), jobs (list/search/create), rides (book/accept/complete/cancel/rate/chat), driver management (profile/availability/location/earnings/payouts/apply), patient profiles, surge pricing, incidents, and Stripe payments.
+    -   Firebase push notification registration endpoint for FCM/APNs tokens.
+    -   API documentation available at `/api/mobile/docs` (v2.0).
+    -   Flutter integration guide at `FLUTTER_INTEGRATION.md`.
 
 ### Security and Data Protection
 -   **Session Security**: PostgreSQL-backed sessions, HttpOnly and SameSite=strict cookies, session regeneration on login to prevent session fixation.
