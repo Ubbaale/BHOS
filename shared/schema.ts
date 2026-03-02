@@ -8,6 +8,9 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   role: text("role").notNull().default("user"),
+  tosAcceptedAt: timestamp("tos_accepted_at"),
+  tosVersion: text("tos_version"),
+  privacyPolicyAcceptedAt: timestamp("privacy_policy_accepted_at"),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -597,3 +600,32 @@ export type PayoutMethod = typeof payoutMethods[number];
 
 export const payoutStatuses = ["pending", "processing", "completed", "failed"] as const;
 export type PayoutStatus = typeof payoutStatuses[number];
+
+export const auditLogs = pgTable("audit_logs", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: varchar("user_id"),
+  action: text("action").notNull(),
+  resource: text("resource").notNull(),
+  resourceId: text("resource_id"),
+  details: jsonb("details"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+
+export const legalAgreements = pgTable("legal_agreements", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  agreementType: text("agreement_type").notNull(),
+  version: text("version").notNull(),
+  acceptedAt: timestamp("accepted_at").defaultNow(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  content: text("content"),
+  signerName: text("signer_name"),
+  contentHash: text("content_hash"),
+});
+
+export type LegalAgreement = typeof legalAgreements.$inferSelect;

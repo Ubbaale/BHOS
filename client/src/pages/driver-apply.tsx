@@ -49,6 +49,7 @@ const driverApplicationSchema = z.object({
   vehiclePlate: z.string().min(1, "License plate is required"),
   wheelchairAccessible: z.boolean().default(false),
   stretcherCapable: z.boolean().default(false),
+  tosAccepted: z.literal(true, { errorMap: () => ({ message: "You must accept the Terms of Service and Privacy Policy" }) }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -82,6 +83,7 @@ export default function DriverApply() {
       vehiclePlate: "",
       wheelchairAccessible: false,
       stretcherCapable: false,
+      tosAccepted: false as unknown as true,
     },
   });
 
@@ -385,6 +387,35 @@ export default function DriverApply() {
                       />
                     </div>
                   </div>
+
+                  <FormField
+                    control={form.control}
+                    name="tosAccepted"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value === true}
+                            onCheckedChange={field.onChange}
+                            data-testid="checkbox-tos-accept"
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="cursor-pointer text-sm">
+                            I agree to the{" "}
+                            <a href="/terms" target="_blank" className="text-primary underline" data-testid="link-terms-of-service">
+                              Terms of Service
+                            </a>{" "}
+                            and{" "}
+                            <a href="/privacy" target="_blank" className="text-primary underline" data-testid="link-privacy-policy">
+                              Privacy Policy
+                            </a>
+                          </FormLabel>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
 
                   <Button 
                     type="submit" 

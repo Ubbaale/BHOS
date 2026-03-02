@@ -24,6 +24,9 @@ import DriverPayouts from "@/pages/driver-payouts";
 import ReportIncident from "@/pages/report-incident";
 import RideHistory from "@/pages/ride-history";
 import DriverTripHistory from "@/pages/driver-trip-history";
+import ICAgreement from "@/pages/ic-agreement";
+import TermsOfService from "@/pages/terms-of-service";
+import PrivacyPolicy from "@/pages/privacy-policy";
 
 function Router() {
   return (
@@ -35,6 +38,11 @@ function Router() {
       <Route path="/driver/login" component={DriverLogin} />
       <Route path="/driver/apply" component={DriverApply} />
       <Route path="/driver/kyc" component={DriverKyc} />
+      <Route path="/driver/ic-agreement">
+        <ProtectedRoute requiredRole="driver">
+          <ICAgreement />
+        </ProtectedRoute>
+      </Route>
       <Route path="/driver">
         <ProtectedRoute requiredRole="driver">
           <DriverDashboard />
@@ -69,6 +77,8 @@ function Router() {
       <Route path="/receipt/:id" component={TripReceipt} />
       <Route path="/report/:id" component={ReportIncident} />
       <Route path="/report" component={ReportIncident} />
+      <Route path="/terms" component={TermsOfService} />
+      <Route path="/privacy" component={PrivacyPolicy} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -68,6 +68,12 @@ Preferred communication style: Simple, everyday language.
     -   API documentation available at `/api/mobile/docs` (v2.0).
     -   Flutter integration guide at `FLUTTER_INTEGRATION.md`.
 
+### Legal Protection and Compliance
+-   **Terms of Service**: TOS page at `/terms`, Privacy Policy at `/privacy`. TOS acceptance required at driver registration (`tosAcceptedAt`, `tosVersion` on users table). Existing users can accept via `POST /api/auth/accept-tos`.
+-   **Independent Contractor Agreement**: Digital signature page at `/driver/ic-agreement`. Server-side canonical agreement text (v1.0) with SHA-256 content hash. Signer name, IP, user agent stored in `legal_agreements` table. Driver dashboard shows amber banner if IC agreement not signed.
+-   **Audit Logging**: `audit_logs` table tracks sensitive actions (ride acceptance, PHI access, background check updates, payout requests, IC agreement signing, admin ride views). Admin endpoint `GET /api/admin/audit-logs` with filtering.
+-   **Driver Compliance Enforcement**: `checkDriverCompliance()` blocks ride acceptance and availability toggle for drivers with expired license/insurance/inspection or failed background checks. `getAvailableDrivers()` filters non-compliant drivers from ride pool. Red compliance banner on driver dashboard.
+
 ### Security and Data Protection
 -   **Session Security**: PostgreSQL-backed sessions, HttpOnly and SameSite=strict cookies, session regeneration on login to prevent session fixation.
 -   **Authentication**: Rate limiting for login attempts (5 attempts per 15 min, 30 min block), token-based authentication for WebSockets.

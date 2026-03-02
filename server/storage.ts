@@ -330,12 +330,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAvailableDrivers(): Promise<DriverProfile[]> {
-    return db.select().from(driverProfiles).where(
+    const drivers = await db.select().from(driverProfiles).where(
       and(
         eq(driverProfiles.isAvailable, true),
         eq(driverProfiles.applicationStatus, "approved")
       )
     );
+    const now = new Date();
+    return drivers.filter(d => {
+      if (d.driversLicenseExpiry && new Date(d.driversLicenseExpiry) < now) return false;
+      if (d.insuranceExpiry && new Date(d.insuranceExpiry) < now) return false;
+      if (d.vehicleInspectionExpiry && new Date(d.vehicleInspectionExpiry) < now) return false;
+      if (d.backgroundCheckStatus === "failed") return false;
+      return true;
+    });
   }
 
   async getAllDrivers(): Promise<DriverProfile[]> {

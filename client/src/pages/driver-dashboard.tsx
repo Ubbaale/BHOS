@@ -20,7 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet, Star, AlertTriangle, History, ShieldCheck } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet, Star, AlertTriangle, History, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { openNavigation } from "@/lib/navigation";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -768,6 +768,47 @@ export default function DriverDashboard() {
               </Card>
             </Link>
           </div>
+
+          {documentAlerts && (documentAlerts.alerts.some((a: any) => a.status === "expired") || documentAlerts.backgroundCheckStatus === "failed") && (
+            <Alert variant="destructive" className="mb-6" data-testid="banner-compliance">
+              <ShieldAlert className="w-4 h-4" />
+              <AlertDescription>
+                <div className="font-semibold mb-2">Compliance Issues — Action Required</div>
+                <ul className="list-disc pl-5 space-y-1 text-sm">
+                  {documentAlerts.alerts.filter((a: any) => a.status === "expired").map((alert: any, i: number) => (
+                    <li key={i}>{alert.document} is expired (since {alert.expiryDate})</li>
+                  ))}
+                  {documentAlerts.backgroundCheckStatus === "failed" && (
+                    <li>Background check failed</li>
+                  )}
+                  {documentAlerts.backgroundCheckStatus === "not_started" && (
+                    <li>Background check not completed</li>
+                  )}
+                </ul>
+                <p className="text-sm mt-2">You cannot accept rides until these issues are resolved.</p>
+                <Link href="/driver-kyc">
+                  <Button variant="outline" size="sm" className="mt-2" data-testid="button-update-docs">
+                    Update Documents
+                  </Button>
+                </Link>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {currentDriver && !currentDriver.isContractorOnboarded && (
+            <Alert className="mb-6 border-amber-500 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300" data-testid="banner-ic-agreement">
+              <FileText className="w-4 h-4 text-amber-600" />
+              <AlertDescription className="flex items-center justify-between gap-4 flex-wrap">
+                <span className="font-semibold">Action Required: Sign Independent Contractor Agreement</span>
+                <Link href="/driver/ic-agreement">
+                  <Button variant="outline" data-testid="button-sign-ic-agreement">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Sign Agreement
+                  </Button>
+                </Link>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {documentAlerts && documentAlerts.alerts.filter(a => a.status === "expired" || a.status === "expiring_soon").length > 0 && (
             <div className="space-y-2 mb-6" data-testid="document-alerts">

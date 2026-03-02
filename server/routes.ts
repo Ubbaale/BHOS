@@ -2,7 +2,9 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import { sendIssueNotification, sendRideBookedForPatientEmail, FileAttachment } from "./email";
 import { saveSubscription, removeSubscription, getVapidPublicKey, notifyDriversOfNewRide, notifyPatientOfRideUpdate } from "./push";
@@ -551,6 +553,21 @@ export async function registerRoutes(
     });
   });
 
+  app.post("/api/auth/accept-tos", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      await db.update(users).set({
+        tosAcceptedAt: new Date(),
+        tosVersion: "1.0",
+        privacyPolicyAcceptedAt: new Date(),
+      }).where(eq(users.id, userId));
+      res.json({ message: "Terms of Service and Privacy Policy accepted" });
+    } catch (error) {
+      console.error("Error accepting TOS:", error);
+      res.status(500).json({ message: "Failed to accept Terms of Service" });
+    }
+  });
+
   // ============================================
   // MOBILE API ENDPOINTS (Token-based auth)
   // ============================================
@@ -876,6 +893,14 @@ export async function registerRoutes(
         password: hashedPassword,
         role: userRole,
       });
+
+      if (req.body.tosAccepted) {
+        await db.update(users).set({
+          tosAcceptedAt: new Date(),
+          tosVersion: "1.0",
+          privacyPolicyAcceptedAt: new Date(),
+        }).where(eq(users.id, user.id));
+      }
 
       if ((userRole === "user" || userRole === "patient") && (fullName || phone)) {
         try {
@@ -2032,6 +2057,9 @@ export async function registerRoutes(
       if (!ride) {
         return res.status(404).json({ message: "Ride not found" });
       }
+      if (ride.medicalNotes && req.session?.userId) {
+        logAudit(req.session.userId, "view_ride_with_phi", "ride", String(id), { hasMedicalNotes: true }, req);
+      }
       res.json(ride);
     } catch (error) {
       console.error("Error fetching ride:", error);
@@ -2234,6 +2262,14 @@ export async function registerRoutes(
       if (!driver) {
         return res.status(404).json({ message: "Driver not found" });
       }
+
+      const compliance = await checkDriverCompliance(driverId);
+      if (!compliance.compliant) {
+        return res.status(403).json({ 
+          message: "Cannot accept rides due to compliance issues",
+          issues: compliance.issues
+        });
+      }
       
       // Check if ride is still available (prevents race condition)
       const existingRide = await storage.getRide(rideId);
@@ -2273,6 +2309,8 @@ export async function registerRoutes(
       notifyPatientOfRideUpdate("accepted", driver.fullName).catch(err => {
         console.error("Failed to send push notification:", err);
       });
+
+      logAudit(req.session.userId || null, "accept_ride", "ride", rideId.toString(), { driverId }, req);
       
       res.json(ride);
     } catch (error) {
@@ -2857,6 +2895,16 @@ export async function registerRoutes(
       if (typeof isAvailable !== "boolean") {
         return res.status(400).json({ message: "isAvailable must be a boolean" });
       }
+
+      if (isAvailable) {
+        const compliance = await checkDriverCompliance(id);
+        if (!compliance.compliant) {
+          return res.status(403).json({ 
+            message: "Cannot go online due to compliance issues",
+            issues: compliance.issues
+          });
+        }
+      }
       
       const driver = await storage.updateDriverAvailability(id, isAvailable);
       if (!driver) {
@@ -3008,9 +3056,17 @@ export async function registerRoutes(
         role: "driver",
       });
       
-      // Create driver profile linked to user
+      if (driverData.tosAccepted) {
+        await db.update(users).set({
+          tosAcceptedAt: new Date(),
+          tosVersion: "1.0",
+          privacyPolicyAcceptedAt: new Date(),
+        }).where(eq(users.id, user.id));
+      }
+
+      const { tosAccepted, ...profileData } = driverData;
       const parsed = insertDriverProfileSchema.parse({
-        ...driverData,
+        ...profileData,
         userId: user.id,
       });
       const driver = await storage.createDriver(parsed);
@@ -3840,6 +3896,8 @@ export async function registerRoutes(
         backgroundCheckDate: new Date().toISOString().split("T")[0],
         backgroundCheckProvider: provider || undefined,
       } as any);
+
+      logAudit(req.session.userId || null, "update_background_check", "driver", driverId.toString(), { status, provider }, req);
       
       res.json({ message: "Background check status updated" });
     } catch (error) {
@@ -3936,6 +3994,120 @@ export async function registerRoutes(
     }
   });
   
+  // IC Agreement Digital Signature
+  const IC_AGREEMENT_VERSION = "1.0";
+  const IC_AGREEMENT_TEXT = `INDEPENDENT CONTRACTOR AGREEMENT
+
+This Independent Contractor Agreement ("Agreement") is entered into between CareHub ("Company") and the undersigned independent contractor ("Contractor").
+
+1. INDEPENDENT CONTRACTOR RELATIONSHIP
+Contractor acknowledges that they are an independent contractor and not an employee of the Company. Nothing in this Agreement shall be construed to create an employer-employee, partnership, or joint venture relationship.
+
+2. SERVICES
+Contractor agrees to provide non-emergency medical transportation (NEMT) services through the CareHub platform. Contractor retains full discretion over when, where, and how to perform services.
+
+3. WORK SCHEDULE
+Contractor has complete freedom to set their own schedule, accept or decline ride requests, and work for competing platforms simultaneously.
+
+4. EQUIPMENT AND EXPENSES
+Contractor is responsible for providing and maintaining their own vehicle, insurance, fuel, and all other equipment necessary to perform services. Company shall not reimburse Contractor for these expenses.
+
+5. INSURANCE REQUIREMENTS
+Contractor must maintain valid auto insurance meeting or exceeding state minimum requirements, plus any additional coverage required by applicable NEMT regulations. Contractor must provide proof of insurance upon request.
+
+6. COMPENSATION
+Contractor will be compensated per completed ride based on the fare schedule published on the platform. Contractor is responsible for all taxes, including self-employment tax. Company will issue a 1099-NEC form for annual earnings exceeding $600.
+
+7. BACKGROUND CHECK AND COMPLIANCE
+Contractor consents to background checks and must maintain a valid driver's license, vehicle registration, and vehicle inspection. Failure to maintain compliance may result in immediate deactivation.
+
+8. CONFIDENTIALITY
+Contractor agrees to keep confidential all patient information, ride details, and proprietary Company information encountered during the performance of services, in compliance with HIPAA and applicable privacy laws.
+
+9. INDEMNIFICATION
+Contractor agrees to indemnify and hold harmless the Company from any claims, damages, or liabilities arising from Contractor's performance of services, including traffic violations, accidents, or injury.
+
+10. TERMINATION
+Either party may terminate this Agreement at any time, with or without cause, by providing written notice. Company may immediately deactivate Contractor's account for safety violations or compliance failures.
+
+11. DISPUTE RESOLUTION
+Any disputes arising under this Agreement shall be resolved through binding arbitration in accordance with the rules of the American Arbitration Association.
+
+12. GOVERNING LAW
+This Agreement shall be governed by the laws of the state in which Contractor primarily operates.
+
+[NOTE: This is a template agreement. Consult with a licensed attorney before use in production.]`;
+
+  app.get("/api/drivers/ic-agreement-text", requireDriver, (_req, res) => {
+    res.json({ version: IC_AGREEMENT_VERSION, content: IC_AGREEMENT_TEXT });
+  });
+
+  app.post("/api/drivers/:id/sign-ic-agreement", requireDriver, async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.id);
+      const { fullLegalName } = req.body;
+
+      if (!fullLegalName || fullLegalName.trim().length < 2) {
+        return res.status(400).json({ message: "Full legal name is required for digital signature" });
+      }
+
+      if (req.session.driverId !== driverId && req.session.role !== "admin") {
+        return res.status(403).json({ message: "You can only sign agreements for your own account" });
+      }
+
+      const driver = await storage.getDriver(driverId);
+      if (!driver) {
+        return res.status(404).json({ message: "Driver not found" });
+      }
+
+      if (!driver.userId) {
+        return res.status(400).json({ message: "Driver profile has no associated user" });
+      }
+
+      const ipAddress = req.ip || req.socket.remoteAddress || "unknown";
+      const userAgent = req.headers["user-agent"] || "unknown";
+
+      const crypto = await import("crypto");
+      const contentHash = crypto.createHash("sha256").update(IC_AGREEMENT_TEXT).digest("hex");
+
+      const { db } = await import("./db");
+      const { legalAgreements, driverProfiles } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+
+      await db.insert(legalAgreements).values({
+        userId: driver.userId,
+        agreementType: "ic_agreement",
+        version: IC_AGREEMENT_VERSION,
+        ipAddress,
+        userAgent,
+        content: IC_AGREEMENT_TEXT,
+        signerName: fullLegalName.trim(),
+        contentHash,
+      });
+
+      await db.update(driverProfiles)
+        .set({
+          contractorAgreementSignedAt: new Date(),
+          isContractorOnboarded: true,
+        })
+        .where(eq(driverProfiles.id, driverId));
+
+      await storage.createContractorAgreement({
+        driverId,
+        agreementVersion: IC_AGREEMENT_VERSION,
+        ipAddress,
+        userAgent,
+      });
+
+      logAudit(driver.userId, "sign_ic_agreement", "legal_agreement", String(driverId), { version: IC_AGREEMENT_VERSION, signerName: fullLegalName.trim() }, req);
+
+      res.json({ message: "Independent Contractor Agreement signed successfully" });
+    } catch (error) {
+      console.error("Error signing IC agreement:", error);
+      res.status(500).json({ message: "Failed to sign agreement" });
+    }
+  });
+
   // Get driver annual earnings summary
   // Protected: Only authenticated drivers can view annual earnings
   app.get("/api/drivers/:id/annual-earnings/:year", requireDriver, async (req, res) => {
@@ -4291,6 +4463,8 @@ export async function registerRoutes(
         // Update payout with transfer ID
         await storage.updateDriverPayoutStatus(payout.id, "processing", transfer.id);
 
+        logAudit(req.session.userId || null, "request_payout", "payout", payout.id.toString(), { driverId, amount: payoutAmount, method, netAmount }, req);
+
         res.json({ 
           message: method === "instant" 
             ? "Instant payout initiated - funds arriving within 30 minutes"
@@ -4378,6 +4552,8 @@ export async function registerRoutes(
       if (patientPhone) {
         filteredRides = filteredRides.filter(r => r.patientPhone === patientPhone);
       }
+
+      logAudit(req.session.userId || null, "admin_view_rides", "rides", null, { filters: { status, driverId, patientPhone }, count: filteredRides.length }, req);
       
       res.json(filteredRides);
     } catch (error) {
@@ -4386,6 +4562,17 @@ export async function registerRoutes(
     }
   });
   
+  app.get("/api/admin/audit-logs", requireAdmin, async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+      const logs = await db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
+      res.json(logs);
+    } catch (error) {
+      console.error("Error fetching audit logs:", error);
+      res.status(500).json({ message: "Failed to fetch audit logs" });
+    }
+  });
+
   // Get admin dashboard stats
   // Protected: Only admins can view stats
   app.get("/api/admin/stats", requireAdmin, async (req, res) => {
