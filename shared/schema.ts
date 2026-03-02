@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, numeric, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, numeric, integer, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -62,6 +62,8 @@ export const patientProfiles = pgTable("patient_profiles", {
   phone: text("phone").notNull(),
   email: text("email"),
   mobilityNeeds: text("mobility_needs").array().default([]),
+  medicalNotes: text("medical_notes"),
+  preferredDriverId: integer("preferred_driver_id"),
   emergencyContactName: text("emergency_contact_name"),
   emergencyContactPhone: text("emergency_contact_phone"),
   savedAddresses: text("saved_addresses").array().default([]),
@@ -74,6 +76,8 @@ export const insertPatientProfileSchema = z.object({
   phone: z.string().min(1),
   email: z.string().email().optional(),
   mobilityNeeds: z.array(z.string()).optional(),
+  medicalNotes: z.string().optional(),
+  preferredDriverId: z.number().optional(),
   emergencyContactName: z.string().optional(),
   emergencyContactPhone: z.string().optional(),
   savedAddresses: z.array(z.string()).optional(),
@@ -215,6 +219,11 @@ export const rides = pgTable("rides", {
   appointmentTime: timestamp("appointment_time").notNull(),
   mobilityNeeds: text("mobility_needs").array().default([]),
   notes: text("notes"),
+  medicalNotes: text("medical_notes"),
+  isRoundTrip: boolean("is_round_trip").default(false),
+  returnPickupTime: text("return_pickup_time"),
+  returnStatus: text("return_status"),
+  recurringSchedule: jsonb("recurring_schedule"),
   distanceMiles: numeric("distance_miles"),
   estimatedFare: numeric("estimated_fare"),
   paymentType: text("payment_type").notNull().default("self_pay"),
@@ -290,6 +299,10 @@ export const insertRideSchema = z.object({
   appointmentTime: z.coerce.date(),
   mobilityNeeds: z.array(z.string()).optional(),
   notes: z.string().optional(),
+  medicalNotes: z.string().optional(),
+  isRoundTrip: z.boolean().optional().default(false),
+  returnPickupTime: z.string().optional(),
+  recurringSchedule: z.any().optional(),
   distanceMiles: z.string().optional(),
   estimatedFare: z.string().optional(),
   paymentType: z.enum(["self_pay", "insurance"]).default("self_pay"),

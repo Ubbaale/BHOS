@@ -1,8 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import Header from "@/components/Header";
 
 import BackToHome from "@/components/BackToHome";
@@ -15,14 +18,52 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { RideChat } from "@/components/RideChat";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { 
   Car, Phone, MapPin, Clock, Shield, Share2, AlertTriangle, 
   User, CheckCircle2, Navigation, MessageCircle, Accessibility, Copy, ExternalLink,
-  DollarSign, Heart, CreditCard, Loader2
+  DollarSign, Heart, CreditCard, Loader2, Star
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Ride } from "@shared/schema";
 import { format } from "date-fns";
+
+const pickupIcon = new L.Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+const dropoffIcon = new L.Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+const driverIcon = new L.DivIcon({
+  html: `<div style="background:#3b82f6;border:2px solid #fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.3);">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-2-2.2-3.2C13 5.9 12 5 11 5H5.6c-.6 0-1.1.4-1.4.9L3 8.5C1.6 9.1 1 10.4 1 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>
+  </div>`,
+  className: "",
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+});
+
+function MapBoundsUpdater({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (bounds) {
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+    }
+  }, [map, bounds]);
+  return null;
+}
 
 interface DriverInfo {
   driver: {
@@ -397,6 +438,60 @@ export default function TrackRide() {
   const currentStep = getCurrentStep();
   const driver = driverInfo?.driver;
 
+  const pickupLatLng: [number, number] | null = ride.pickupLat && ride.pickupLng
+    ? [parseFloat(ride.pickupLat), parseFloat(ride.pickupLng)]
+    : null;
+  const dropoffLatLng: [number, number] | null = ride.dropoffLat && ride.dropoffLng
+    ? [parseFloat(ride.dropoffLat), parseFloat(ride.dropoffLng)]
+    : null;
+  const driverLatLng: [number, number] | null = trackingInfo?.driver?.currentLat && trackingInfo?.driver?.currentLng
+    ? [parseFloat(trackingInfo.driver.currentLat), parseFloat(trackingInfo.driver.currentLng)]
+    : null;
+
+  const mapBounds = useMemo(() => {
+    const points: [number, number][] = [];
+    if (pickupLatLng) points.push(pickupLatLng);
+    if (dropoffLatLng) points.push(dropoffLatLng);
+    if (driverLatLng) points.push(driverLatLng);
+    if (points.length >= 2) return L.latLngBounds(points);
+    return null;
+  }, [
+    pickupLatLng?.[0], pickupLatLng?.[1],
+    dropoffLatLng?.[0], dropoffLatLng?.[1],
+    driverLatLng?.[0], driverLatLng?.[1],
+  ]);
+
+  const routeLine: [number, number][] = useMemo(() => {
+    if (!driverLatLng) return [];
+    if (["accepted", "driver_enroute", "arrived"].includes(ride.status) && pickupLatLng) {
+      return [driverLatLng, pickupLatLng];
+    }
+    if (ride.status === "in_progress" && dropoffLatLng) {
+      return [driverLatLng, dropoffLatLng];
+    }
+    return [];
+  }, [driverLatLng, pickupLatLng, dropoffLatLng, ride.status]);
+
+  const etaMinutes = useMemo(() => {
+    if (["accepted", "driver_enroute"].includes(ride.status)) {
+      return trackingInfo?.tracking?.estimatedMinutesToPickup ?? null;
+    }
+    if (ride.status === "in_progress") {
+      return trackingInfo?.tracking?.estimatedMinutesToDropoff ?? null;
+    }
+    return null;
+  }, [ride.status, trackingInfo]);
+
+  const etaLabel = useMemo(() => {
+    if (["accepted", "driver_enroute"].includes(ride.status)) return "Arriving in";
+    if (ride.status === "in_progress") return "Dropping off in";
+    if (ride.status === "arrived") return "Driver has arrived";
+    return null;
+  }, [ride.status]);
+
+  const mapCenter: [number, number] = pickupLatLng || [40.7128, -74.006];
+  const showMap = pickupLatLng || dropoffLatLng;
+
   return (
     <div className="min-h-screen bg-background">
       <Header title="Track Ride" showBack />
@@ -411,6 +506,72 @@ export default function TrackRide() {
               {ride.status.replace("_", " ").toUpperCase()}
             </Badge>
           </div>
+
+          {etaLabel && (
+            <Card className="mb-6">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-center gap-3" data-testid="eta-banner">
+                  <Navigation className="w-6 h-6 text-primary animate-pulse" />
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">{etaLabel}</p>
+                    {etaMinutes !== null ? (
+                      <p className="text-3xl font-bold text-primary" data-testid="text-eta-minutes">
+                        {etaMinutes} min
+                      </p>
+                    ) : ride.status === "arrived" ? (
+                      <p className="text-xl font-bold text-green-600 dark:text-green-400" data-testid="text-driver-arrived">
+                        Your driver is here
+                      </p>
+                    ) : (
+                      <p className="text-lg font-semibold text-muted-foreground">Calculating...</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {showMap && (
+            <Card className="mb-6">
+              <CardContent className="p-0 overflow-hidden rounded-md">
+                <div style={{ height: "350px", width: "100%" }} data-testid="map-tracking">
+                  <MapContainer
+                    center={mapCenter}
+                    zoom={13}
+                    style={{ height: "100%", width: "100%" }}
+                    scrollWheelZoom={false}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    {mapBounds && <MapBoundsUpdater bounds={mapBounds} />}
+                    {pickupLatLng && (
+                      <Marker position={pickupLatLng} icon={pickupIcon}>
+                        <Popup>Pickup: {ride.pickupAddress}</Popup>
+                      </Marker>
+                    )}
+                    {dropoffLatLng && (
+                      <Marker position={dropoffLatLng} icon={dropoffIcon}>
+                        <Popup>Dropoff: {ride.dropoffAddress}</Popup>
+                      </Marker>
+                    )}
+                    {driverLatLng && (
+                      <Marker position={driverLatLng} icon={driverIcon}>
+                        <Popup>{driver?.fullName || "Driver"}</Popup>
+                      </Marker>
+                    )}
+                    {routeLine.length === 2 && (
+                      <Polyline
+                        positions={routeLine}
+                        pathOptions={{ color: "#3b82f6", weight: 4, dashArray: "8 8", opacity: 0.8 }}
+                      />
+                    )}
+                  </MapContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="mb-8 overflow-x-auto">
             <div className="flex items-center min-w-max">
@@ -445,110 +606,93 @@ export default function TrackRide() {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
-                <CardTitle className="text-base">Driver Information</CardTitle>
-                {driverInfo?.ride.verificationCode && (
-                  <Badge variant="outline" className="font-mono" data-testid="badge-verification-code">
-                    Code: {driverInfo.ride.verificationCode}
-                  </Badge>
-                )}
-              </CardHeader>
-              <CardContent>
-                {driverLoading ? (
-                  <p className="text-muted-foreground">Loading driver info...</p>
-                ) : driver ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-4">
-                      {driver.profilePhotoDoc ? (
-                        <img
-                          src={driver.profilePhotoDoc}
-                          alt={driver.fullName}
-                          className="w-16 h-16 rounded-full object-cover"
-                          data-testid="img-driver-photo"
-                        />
-                      ) : (
-                        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                          <User className="w-8 h-8 text-muted-foreground" />
-                        </div>
-                      )}
+          {driver && (
+            <Card className="mb-6" data-testid="card-driver-uber-style">
+              <CardContent className="p-5">
+                <div className="flex items-start gap-4">
+                  <Avatar className="w-20 h-20">
+                    {driver.profilePhotoDoc ? (
+                      <AvatarImage src={driver.profilePhotoDoc} alt={driver.fullName} data-testid="img-driver-photo" />
+                    ) : null}
+                    <AvatarFallback className="text-2xl">
+                      {driver.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <div>
-                        <h3 className="font-semibold" data-testid="text-driver-name">{driver.fullName}</h3>
-                        <a href={`tel:${driver.phone}`} className="text-sm text-primary flex items-center gap-1">
-                          <Phone className="w-3 h-3" />
-                          {driver.phone}
-                        </a>
+                        <h3 className="text-lg font-bold" data-testid="text-driver-name">{driver.fullName}</h3>
+                        <p className="text-sm text-muted-foreground" data-testid="text-vehicle-info">
+                          {[driver.vehicleColor, driver.vehicleYear, driver.vehicleMake, driver.vehicleModel].filter(Boolean).join(" ")}
+                        </p>
                       </div>
-                    </div>
-                    
-                    <div className="bg-muted/50 rounded-md p-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Car className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm" data-testid="text-vehicle-info">
-                          {driver.vehicleColor} {driver.vehicleYear} {driver.vehicleMake} {driver.vehicleModel}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" data-testid="badge-plate">{driver.vehiclePlate}</Badge>
-                        <Badge variant="outline">{driver.vehicleType}</Badge>
-                      </div>
-                      {(driver.wheelchairAccessible || driver.stretcherCapable) && (
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Accessibility className="w-4 h-4 text-muted-foreground" />
-                          {driver.wheelchairAccessible && <Badge variant="outline">Wheelchair Accessible</Badge>}
-                          {driver.stretcherCapable && <Badge variant="outline">Stretcher Capable</Badge>}
-                        </div>
+                      {driverInfo?.ride.verificationCode && (
+                        <Badge variant="outline" className="font-mono text-base px-3" data-testid="badge-verification-code">
+                          {driverInfo.ride.verificationCode}
+                        </Badge>
                       )}
                     </div>
-
-                    {trackingInfo?.tracking && (trackingInfo.tracking.distanceToPickup || trackingInfo.tracking.distanceToDropoff) && (
-                      <div className="bg-primary/10 rounded-md p-3 space-y-2">
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                          <Navigation className="w-4 h-4 text-primary" />
-                          <span className="text-primary">Live Location</span>
-                        </div>
-                        {["accepted", "driver_enroute"].includes(ride.status) && trackingInfo.tracking.distanceToPickup && (
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="text-sm text-muted-foreground">Distance to pickup:</span>
-                            <span className="font-semibold" data-testid="text-distance-pickup">
-                              {trackingInfo.tracking.distanceToPickup} mi
-                              {trackingInfo.tracking.estimatedMinutesToPickup && (
-                                <span className="text-muted-foreground font-normal"> ({trackingInfo.tracking.estimatedMinutesToPickup} min)</span>
-                              )}
-                            </span>
-                          </div>
-                        )}
-                        {ride.status === "in_progress" && trackingInfo.tracking.distanceToDropoff && (
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="text-sm text-muted-foreground">Distance to destination:</span>
-                            <span className="font-semibold" data-testid="text-distance-dropoff">
-                              {trackingInfo.tracking.distanceToDropoff} mi
-                              {trackingInfo.tracking.estimatedMinutesToDropoff && (
-                                <span className="text-muted-foreground font-normal"> ({trackingInfo.tracking.estimatedMinutesToDropoff} min)</span>
-                              )}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {driverInfo?.ride.estimatedArrivalTime && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Clock className="w-4 h-4" />
-                        <span>Scheduled ETA: {format(new Date(driverInfo.ride.estimatedArrivalTime), "h:mm a")}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3 mt-3 flex-wrap">
+                      <Badge variant="secondary" className="text-sm" data-testid="badge-plate">{driver.vehiclePlate}</Badge>
+                      <Badge variant="outline">{driver.vehicleType}</Badge>
+                      {driver.wheelchairAccessible && (
+                        <Badge variant="outline"><Accessibility className="w-3 h-3 mr-1" />Wheelchair</Badge>
+                      )}
+                      {driver.stretcherCapable && (
+                        <Badge variant="outline">Stretcher</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-3 flex-wrap">
+                      <a href={`tel:${driver.phone}`} data-testid="link-call-driver">
+                        <Button variant="outline" size="sm">
+                          <Phone className="w-4 h-4 mr-1" />
+                          Call Driver
+                        </Button>
+                      </a>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowChat(!showChat)}
+                        data-testid="button-toggle-chat"
+                      >
+                        <MessageCircle className="w-4 h-4 mr-1" />
+                        {showChat ? "Hide Chat" : "Message"}
+                      </Button>
+                    </div>
                   </div>
-                ) : (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <Car className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>Waiting for a driver to accept your ride...</p>
+                </div>
+                {trackingInfo?.tracking && (trackingInfo.tracking.distanceToPickup || trackingInfo.tracking.distanceToDropoff) && (
+                  <div className="mt-4 pt-4 border-t flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Navigation className="w-4 h-4 text-primary" />
+                      <span className="text-muted-foreground">Live Tracking</span>
+                    </div>
+                    {["accepted", "driver_enroute"].includes(ride.status) && trackingInfo.tracking.distanceToPickup && (
+                      <span className="font-semibold text-sm" data-testid="text-distance-pickup">
+                        {trackingInfo.tracking.distanceToPickup} mi to pickup
+                      </span>
+                    )}
+                    {ride.status === "in_progress" && trackingInfo.tracking.distanceToDropoff && (
+                      <span className="font-semibold text-sm" data-testid="text-distance-dropoff">
+                        {trackingInfo.tracking.distanceToDropoff} mi to destination
+                      </span>
+                    )}
                   </div>
                 )}
               </CardContent>
             </Card>
+          )}
 
+          {!driver && !driverLoading && (
+            <Card className="mb-6">
+              <CardContent className="py-8 text-center">
+                <Car className="w-12 h-12 mx-auto mb-2 opacity-50 text-muted-foreground" />
+                <p className="text-muted-foreground">Waiting for a driver to accept your ride...</p>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="grid md:grid-cols-2 gap-6">
             <Card>
               <CardHeader className="py-3">
                 <CardTitle className="text-base">Trip Details</CardTitle>
@@ -583,20 +727,44 @@ export default function TrackRide() {
                     <span className="text-sm text-muted-foreground">Estimated Fare</span>
                   </div>
                 )}
+                {ride.isRoundTrip && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">Round Trip</Badge>
+                    {ride.returnPickupTime && (
+                      <span className="text-sm text-muted-foreground">Return: {ride.returnPickupTime}</span>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
+
+            {driverInfo?.ride.estimatedArrivalTime && (
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-base">Schedule</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <span>Scheduled ETA: {format(new Date(driverInfo.ride.estimatedArrivalTime), "h:mm a")}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setShowChat(!showChat)}
-              disabled={!driver}
-              data-testid="button-toggle-chat"
-            >
-              <MessageCircle className="w-4 h-4 mr-2" />
-              {showChat ? "Hide Chat" : "Chat with Driver"}
-            </Button>
+            {!driver && (
+              <Button
+                variant="outline"
+                onClick={() => setShowChat(!showChat)}
+                disabled={!driver}
+                data-testid="button-toggle-chat-fallback"
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                {showChat ? "Hide Chat" : "Chat with Driver"}
+              </Button>
+            )}
 
             <Dialog open={shareDialogOpen} onOpenChange={(open) => {
               setShareDialogOpen(open);

@@ -22,6 +22,7 @@ import SharedTracking from "@/pages/shared-tracking";
 import DriverEarnings from "@/pages/driver-earnings";
 import DriverPayouts from "@/pages/driver-payouts";
 import ReportIncident from "@/pages/report-incident";
+import RideHistory from "@/pages/ride-history";
 
 function Router() {
   return (
@@ -58,6 +59,7 @@ function Router() {
           <AdminDrivers />
         </ProtectedRoute>
       </Route>
+      <Route path="/my-rides" component={RideHistory} />
       <Route path="/receipt/:id" component={TripReceipt} />
       <Route path="/report/:id" component={ReportIncident} />
       <Route path="/report" component={ReportIncident} />

@@ -150,6 +150,10 @@ export interface IStorage {
   // Admin: Driver Account Management
   updateDriverAccountStatus(driverId: number, status: string, reason?: string): Promise<DriverProfile | undefined>;
 
+  // Ride history
+  getRidesByPhone(phone: string): Promise<Ride[]>;
+  getRidesByPatientId(patientId: number): Promise<Ride[]>;
+
   // Driver Payouts
   getDriverPayouts(driverId: number): Promise<DriverPayout[]>;
   createDriverPayout(data: { driverId: number; amount: string; fee: string; netAmount: string; method: string; status: string }): Promise<DriverPayout>;
@@ -1041,6 +1045,18 @@ export class DatabaseStorage implements IStorage {
       .where(eq(driverProfiles.id, driverId))
       .returning();
     return updated;
+  }
+
+  async getRidesByPhone(phone: string): Promise<Ride[]> {
+    return db.select().from(rides)
+      .where(eq(rides.patientPhone, phone))
+      .orderBy(desc(rides.createdAt));
+  }
+
+  async getRidesByPatientId(patientId: number): Promise<Ride[]> {
+    return db.select().from(rides)
+      .where(eq(rides.patientId, patientId))
+      .orderBy(desc(rides.createdAt));
   }
 
   async updateDriverPayoutPreference(driverId: number, preference: string): Promise<DriverProfile | undefined> {

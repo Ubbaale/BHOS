@@ -106,6 +106,14 @@ const bookRideSchema = z.object({
   appointmentTime: z.string().min(1, "Appointment time is required"),
   mobilityNeeds: z.array(z.string()).optional(),
   notes: z.string().optional(),
+  medicalNotes: z.string().optional(),
+  isRoundTrip: z.boolean().default(false),
+  returnPickupTime: z.string().optional(),
+  estimatedWaitMinutes: z.string().optional(),
+  isRecurring: z.boolean().default(false),
+  recurringFrequency: z.enum(["daily", "weekly", "biweekly", "monthly"]).optional(),
+  recurringDays: z.array(z.string()).optional(),
+  recurringEndDate: z.string().optional(),
   paymentType: z.enum(["self_pay", "insurance"]).default("self_pay"),
   insuranceProvider: z.string().optional(),
   memberId: z.string().optional(),
@@ -532,6 +540,14 @@ export default function BookRide() {
       appointmentTime: "",
       mobilityNeeds: [],
       notes: "",
+      medicalNotes: "",
+      isRoundTrip: false,
+      returnPickupTime: "",
+      estimatedWaitMinutes: "",
+      isRecurring: false,
+      recurringFrequency: undefined,
+      recurringDays: [],
+      recurringEndDate: "",
       paymentType: "self_pay",
       insuranceProvider: "",
       memberId: "",
@@ -541,6 +557,9 @@ export default function BookRide() {
   });
 
   const bookedByOther = form.watch("bookedByOther");
+  const isRoundTrip = form.watch("isRoundTrip");
+  const isRecurring = form.watch("isRecurring");
+  const recurringFrequency = form.watch("recurringFrequency");
   const watchedPickupLat = form.watch("pickupLat");
   const watchedPickupLng = form.watch("pickupLng");
 
@@ -639,15 +658,24 @@ export default function BookRide() {
 
   const createRideMutation = useMutation({
     mutationFn: async (data: BookRideFormData) => {
+      const recurringSchedule = data.isRecurring ? {
+        frequency: data.recurringFrequency,
+        days: data.recurringDays,
+        endDate: data.recurringEndDate,
+      } : undefined;
       const cleanedData = {
         ...data,
         patientEmail: data.patientEmail || undefined,
         bookerEmail: data.bookerEmail || undefined,
+        medicalNotes: data.medicalNotes || undefined,
         appointmentTime: new Date(data.appointmentTime).toISOString(),
         mobilityNeeds: selectedNeeds,
         distanceMiles: fareEstimate?.distance.toFixed(2),
         estimatedFare: fareEstimate?.fare.toFixed(2),
         isEmergency: isEmergency && emergencyAcknowledged,
+        isRoundTrip: data.isRoundTrip,
+        returnPickupTime: data.isRoundTrip ? data.returnPickupTime : undefined,
+        recurringSchedule,
       };
       const response = await apiRequest("POST", "/api/rides", cleanedData);
       return response.json();
@@ -1504,6 +1532,214 @@ export default function BookRide() {
                         ))}
                       </div>
                     </div>
+
+                    <FormField
+                      control={form.control}
+                      name="medicalNotes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-1">
+                            <FileText className="w-4 h-4" /> Special Instructions for Driver
+                          </FormLabel>
+                          <FormControl>
+                            <textarea
+                              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              placeholder="e.g., Patient is hard of hearing, needs help to the door, has oxygen equipment, uses a walker..."
+                              {...field}
+                              data-testid="input-medical-notes"
+                            />
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">
+                            These notes will be shown to the driver to ensure proper care
+                          </p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="isRoundTrip"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
+                          <div className="space-y-0.5">
+                            <FormLabel className="text-sm font-medium flex items-center gap-2">
+                              <ArrowUpDown className="w-4 h-4 text-primary" />
+                              Round Trip (Wait & Return)
+                            </FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                              Driver waits during your appointment and brings you back
+                            </p>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              data-testid="switch-round-trip"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    {isRoundTrip && (
+                      <Card className="border-primary/20">
+                        <CardContent className="pt-4 space-y-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Clock className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-medium">Return Trip Details</span>
+                          </div>
+                          <FormField
+                            control={form.control}
+                            name="estimatedWaitMinutes"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Estimated Appointment Duration (minutes)</FormLabel>
+                                <FormControl>
+                                  <Input type="number" placeholder="30" {...field} data-testid="input-wait-minutes" />
+                                </FormControl>
+                                <p className="text-xs text-muted-foreground">
+                                  How long the driver should expect to wait
+                                </p>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="returnPickupTime"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Return Pickup Time (optional override)</FormLabel>
+                                <FormControl>
+                                  <Input type="datetime-local" {...field} data-testid="input-return-time" />
+                                </FormControl>
+                                <p className="text-xs text-muted-foreground">
+                                  Leave blank to auto-calculate from appointment time + wait duration
+                                </p>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <div className="bg-blue-50 dark:bg-blue-950/30 rounded-md p-3">
+                            <p className="text-xs text-blue-700 dark:text-blue-300">
+                              The return trip fare will be calculated separately. Your driver will wait at the facility and take you back to your original pickup location.
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    <FormField
+                      control={form.control}
+                      name="isRecurring"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
+                          <div className="space-y-0.5">
+                            <FormLabel className="text-sm font-medium flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-primary" />
+                              Make This a Recurring Ride
+                            </FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                              Schedule this ride to repeat automatically (dialysis, therapy, etc.)
+                            </p>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              data-testid="switch-recurring"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    {isRecurring && (
+                      <Card className="border-primary/20">
+                        <CardContent className="pt-4 space-y-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Calendar className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-medium">Recurring Schedule</span>
+                          </div>
+                          <FormField
+                            control={form.control}
+                            name="recurringFrequency"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Frequency</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger data-testid="select-recurring-frequency">
+                                      <SelectValue placeholder="How often?" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="daily">Every Day</SelectItem>
+                                    <SelectItem value="weekly">Every Week</SelectItem>
+                                    <SelectItem value="biweekly">Every 2 Weeks</SelectItem>
+                                    <SelectItem value="monthly">Every Month</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          {(recurringFrequency === "weekly" || recurringFrequency === "biweekly") && (
+                            <div>
+                              <FormLabel className="mb-2 block">Days of Week</FormLabel>
+                              <div className="flex flex-wrap gap-2">
+                                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => {
+                                  const days = form.watch("recurringDays") || [];
+                                  const isSelected = days.includes(day);
+                                  return (
+                                    <Button
+                                      key={day}
+                                      type="button"
+                                      variant={isSelected ? "default" : "outline"}
+                                      size="sm"
+                                      className="w-12"
+                                      onClick={() => {
+                                        const current = form.getValues("recurringDays") || [];
+                                        if (current.includes(day)) {
+                                          form.setValue("recurringDays", current.filter((d: string) => d !== day));
+                                        } else {
+                                          form.setValue("recurringDays", [...current, day]);
+                                        }
+                                      }}
+                                      data-testid={`button-day-${day.toLowerCase()}`}
+                                    >
+                                      {day}
+                                    </Button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          <FormField
+                            control={form.control}
+                            name="recurringEndDate"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>End Date</FormLabel>
+                                <FormControl>
+                                  <Input type="date" {...field} data-testid="input-recurring-end-date" />
+                                </FormControl>
+                                <p className="text-xs text-muted-foreground">
+                                  When should the recurring rides stop?
+                                </p>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <div className="bg-green-50 dark:bg-green-950/30 rounded-md p-3">
+                            <p className="text-xs text-green-700 dark:text-green-300">
+                              Recurring rides will be auto-scheduled and you'll receive reminders before each ride. You can cancel individual rides or the entire schedule anytime.
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     <div className="border-t pt-4">
                       <FormField

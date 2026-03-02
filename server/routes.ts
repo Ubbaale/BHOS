@@ -1922,6 +1922,38 @@ export async function registerRoutes(
     }
   });
 
+  // Ride history by phone number (public - patients look up their rides)
+  app.get("/api/rides/history", async (req, res) => {
+    try {
+      const phone = req.query.phone as string;
+      if (!phone) {
+        return res.status(400).json({ message: "Phone number is required" });
+      }
+      const rides = await storage.getRidesByPhone(phone);
+      res.json(rides);
+    } catch (error) {
+      console.error("Error fetching ride history:", error);
+      res.status(500).json({ message: "Failed to fetch ride history" });
+    }
+  });
+
+  // Ride history for authenticated users
+  app.get("/api/rides/my-rides", requireAuth, async (req, res) => {
+    try {
+      const allRides = await storage.getAllRides();
+      const userRides = allRides.filter(r => {
+        if (req.session.role === "driver" && req.session.driverId) {
+          return r.driverId === req.session.driverId;
+        }
+        return false;
+      });
+      res.json(userRides);
+    } catch (error) {
+      console.error("Error fetching my rides:", error);
+      res.status(500).json({ message: "Failed to fetch rides" });
+    }
+  });
+
   // NOTE: /api/rides/abandoned must come BEFORE /api/rides/:id to avoid "abandoned" being parsed as ID
   // Protected: Only admins can view abandoned rides
   app.get("/api/rides/abandoned", requireAdmin, async (req, res) => {

@@ -272,9 +272,25 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
           </span>
         </div>
 
-        {ride.notes && (
+        {ride.medicalNotes && (
+          <div className="text-sm mb-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md" data-testid={`medical-notes-${ride.id}`}>
+            <span className="font-medium text-amber-800 dark:text-amber-300 flex items-center gap-1 mb-1">
+              <span className="text-base">🏥</span> Patient Care Notes:
+            </span>
+            <span className="text-amber-700 dark:text-amber-400">{ride.medicalNotes}</span>
+          </div>
+        )}
+        {ride.notes && !ride.medicalNotes && (
           <div className="text-sm text-muted-foreground mb-3 p-2 bg-muted rounded-md">
             <span className="font-medium">Notes:</span> {ride.notes}
+          </div>
+        )}
+        {ride.isRoundTrip && (
+          <div className="text-sm mb-3 p-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md" data-testid={`round-trip-${ride.id}`}>
+            <span className="font-medium text-blue-700 dark:text-blue-300">↩ Round Trip</span>
+            {ride.returnPickupTime && (
+              <span className="text-blue-600 dark:text-blue-400 ml-2">Return: {ride.returnPickupTime}</span>
+            )}
           </div>
         )}
 
