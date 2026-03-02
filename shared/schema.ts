@@ -199,6 +199,7 @@ export const rides = pgTable("rides", {
   driverId: integer("driver_id").references(() => driverProfiles.id),
   patientName: text("patient_name").notNull(),
   patientPhone: text("patient_phone").notNull(),
+  patientEmail: text("patient_email"),
   // Booker info (for family member booking on behalf of patient)
   bookedByOther: boolean("booked_by_other").default(false),
   bookerName: text("booker_name"),
@@ -273,6 +274,7 @@ export const insertRideSchema = z.object({
   driverId: z.number().optional(),
   patientName: z.string().min(1),
   patientPhone: z.string().min(1),
+  patientEmail: z.string().email().optional(),
   // Booker info (for family member booking on behalf of patient)
   bookedByOther: z.boolean().optional().default(false),
   bookerName: z.string().optional(),

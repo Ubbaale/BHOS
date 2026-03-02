@@ -492,3 +492,125 @@ export async function sendTestEmail(toEmail: string) {
     return { success: false, message: error.message || 'Failed to send test email' };
   }
 }
+
+export async function sendRideBookedForPatientEmail(data: {
+  patientName: string;
+  patientEmail: string;
+  bookerName: string;
+  bookerRelation: string;
+  pickupAddress: string;
+  dropoffAddress: string;
+  appointmentTime: Date;
+  estimatedFare?: string;
+  rideId: number;
+}) {
+  try {
+    const { client, fromEmail } = getSendGridClient();
+
+    const appointmentDate = new Date(data.appointmentTime);
+    const formattedDate = appointmentDate.toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+    });
+    const formattedTime = appointmentDate.toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', hour12: true
+    });
+
+    const relationLabel: Record<string, string> = {
+      spouse: 'Your spouse',
+      child: 'Your child',
+      parent: 'Your parent',
+      caregiver: 'Your caregiver',
+      other: data.bookerName
+    };
+    const who = relationLabel[data.bookerRelation] || data.bookerName;
+
+    const msg = {
+      to: data.patientEmail,
+      from: fromEmail,
+      subject: `A Medical Ride Has Been Booked For You - CareHub`,
+      text: `
+Hi ${data.patientName},
+
+${who} (${data.bookerName}) has booked a medical ride for you through CareHub.
+
+Ride Details:
+Pickup: ${data.pickupAddress}
+Drop-off: ${data.dropoffAddress}
+Date: ${formattedDate}
+Time: ${formattedTime}
+${data.estimatedFare ? `Estimated Fare: $${data.estimatedFare}` : ''}
+
+A driver will be assigned to your ride and will contact you before pickup. You'll receive another notification once a driver accepts your ride.
+
+If you have any questions or need to cancel, please contact us at 774-581-9700 or reply to this email.
+
+Thank you,
+The CareHub Team
+      `.trim(),
+      html: `
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+  <div style="background: linear-gradient(135deg, #10b981, #0d9488); padding: 24px; border-radius: 12px 12px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">A Ride Has Been Booked For You</h1>
+  </div>
+  
+  <div style="padding: 24px; background: #ffffff; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
+    <p style="font-size: 16px; color: #374151;">Hi <strong>${data.patientName}</strong>,</p>
+    
+    <p style="font-size: 16px; color: #374151;">
+      <strong>${who}</strong> (${data.bookerName}) has booked a medical ride for you through CareHub.
+    </p>
+    
+    <div style="background: #f0fdf4; border: 1px solid #86efac; padding: 20px; border-radius: 8px; margin: 20px 0;">
+      <h3 style="margin-top: 0; color: #15803d; font-size: 16px;">Ride Details</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280; width: 100px;">Pickup</td>
+          <td style="padding: 8px 0; color: #374151; font-weight: bold;">${data.pickupAddress}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280;">Drop-off</td>
+          <td style="padding: 8px 0; color: #374151; font-weight: bold;">${data.dropoffAddress}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280;">Date</td>
+          <td style="padding: 8px 0; color: #374151; font-weight: bold;">${formattedDate}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280;">Time</td>
+          <td style="padding: 8px 0; color: #374151; font-weight: bold;">${formattedTime}</td>
+        </tr>
+        ${data.estimatedFare ? `
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280;">Est. Fare</td>
+          <td style="padding: 8px 0; color: #374151; font-weight: bold;">$${data.estimatedFare}</td>
+        </tr>
+        ` : ''}
+      </table>
+    </div>
+    
+    <p style="color: #6b7280; font-size: 14px;">
+      A driver will be assigned to your ride and will contact you before pickup. 
+      You'll receive another notification once a driver accepts your ride.
+    </p>
+    
+    <p style="color: #6b7280; font-size: 14px;">
+      If you have questions or need to cancel, call us at <strong>774-581-9700</strong>.
+    </p>
+    
+    <p style="margin-top: 24px; color: #374151;">Thank you,<br><strong>The CareHub Team</strong></p>
+  </div>
+</div>
+      `.trim()
+    };
+
+    await client.send(msg);
+    console.log('Ride booked notification sent to patient:', data.patientEmail);
+    return true;
+  } catch (error: any) {
+    console.error('Failed to send ride booked notification to patient:', error);
+    if (error?.response?.body) {
+      console.error('SendGrid error details:', JSON.stringify(error.response.body, null, 2));
+    }
+    return false;
+  }
+}

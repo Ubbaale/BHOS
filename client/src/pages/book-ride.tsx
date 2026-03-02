@@ -90,6 +90,7 @@ const dropoffIcon = new L.Icon({
 const bookRideSchema = z.object({
   patientName: z.string().min(1, "Name is required"),
   patientPhone: z.string().min(10, "Valid phone number is required"),
+  patientEmail: z.string().optional().transform(val => val === "" ? undefined : val).pipe(z.string().email().optional().or(z.literal("")).or(z.undefined())),
   // Booking for someone else
   bookedByOther: z.boolean().default(false),
   bookerName: z.string().optional(),
@@ -457,6 +458,7 @@ export default function BookRide() {
   const [emergencyAcknowledged, setEmergencyAcknowledged] = useState(false);
   const [phoneForAccountCheck, setPhoneForAccountCheck] = useState("");
   const [userDeviceLocation, setUserDeviceLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [distanceWarningDismissed, setDistanceWarningDismissed] = useState(false);
   
   const [showPaymentStep, setShowPaymentStep] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -515,6 +517,7 @@ export default function BookRide() {
     defaultValues: {
       patientName: "",
       patientPhone: "",
+      patientEmail: "",
       bookedByOther: false,
       bookerName: "",
       bookerPhone: "",
@@ -538,6 +541,24 @@ export default function BookRide() {
   });
 
   const bookedByOther = form.watch("bookedByOther");
+  const watchedPickupLat = form.watch("pickupLat");
+  const watchedPickupLng = form.watch("pickupLng");
+
+  const distanceFromPickupMiles = (() => {
+    if (!userDeviceLocation || !watchedPickupLat || !watchedPickupLng) return null;
+    const lat1 = userDeviceLocation.lat;
+    const lon1 = userDeviceLocation.lng;
+    const lat2 = parseFloat(watchedPickupLat);
+    const lon2 = parseFloat(watchedPickupLng);
+    if (isNaN(lat2) || isNaN(lon2)) return null;
+    const R = 3958.8;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  })();
+
+  const showDistanceWarning = distanceFromPickupMiles !== null && distanceFromPickupMiles > 50 && !distanceWarningDismissed;
 
   const paymentType = form.watch("paymentType");
   const patientPhone = form.watch("patientPhone");
@@ -618,14 +639,17 @@ export default function BookRide() {
 
   const createRideMutation = useMutation({
     mutationFn: async (data: BookRideFormData) => {
-      const response = await apiRequest("POST", "/api/rides", {
+      const cleanedData = {
         ...data,
+        patientEmail: data.patientEmail || undefined,
+        bookerEmail: data.bookerEmail || undefined,
         appointmentTime: new Date(data.appointmentTime).toISOString(),
         mobilityNeeds: selectedNeeds,
         distanceMiles: fareEstimate?.distance.toFixed(2),
         estimatedFare: fareEstimate?.fare.toFixed(2),
         isEmergency: isEmergency && emergencyAcknowledged,
-      });
+      };
+      const response = await apiRequest("POST", "/api/rides", cleanedData);
       return response.json();
     },
     onSuccess: (ride: Ride) => {
@@ -650,6 +674,7 @@ export default function BookRide() {
     setPickupPos([lat, lng]);
     form.setValue("pickupLat", lat.toString());
     form.setValue("pickupLng", lng.toString());
+    setDistanceWarningDismissed(false);
   };
 
   const handleDropoffChange = (lat: number, lng: number) => {
@@ -808,6 +833,8 @@ export default function BookRide() {
     try {
       const response = await apiRequest("POST", "/api/rides", {
         ...pendingFormData,
+        patientEmail: pendingFormData.patientEmail || undefined,
+        bookerEmail: pendingFormData.bookerEmail || undefined,
         appointmentTime: new Date(pendingFormData.appointmentTime).toISOString(),
         mobilityNeeds: selectedNeeds,
         distanceMiles: fareEstimate?.distance.toFixed(2),
@@ -1158,6 +1185,30 @@ export default function BookRide() {
             </div>
           </div>
 
+          {showDistanceWarning && (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4 mb-4 flex items-start gap-3" data-testid="distance-warning">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                  You're about {Math.round(distanceFromPickupMiles!)} miles from the pickup location
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                  The pickup point seems far from your current location. Please double-check that the address is correct, or toggle "Booking for a family member" if you're booking for someone else.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-amber-600 hover:text-amber-800 flex-shrink-0"
+                onClick={() => setDistanceWarningDismissed(true)}
+                data-testid="button-dismiss-distance-warning"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+
           <div className="rounded-xl overflow-hidden border shadow-sm mb-4" data-testid="map-container">
             <div className="relative">
               <div className="h-[280px] md:h-[350px]">
@@ -1391,86 +1442,31 @@ export default function BookRide() {
                               )}
                             />
                           </div>
+                          <FormField
+                            control={form.control}
+                            name="patientEmail"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="flex items-center gap-1">
+                                  Patient's Email
+                                  <Badge variant="secondary" className="text-[10px] ml-1 no-default-hover-elevate">Recommended</Badge>
+                                </FormLabel>
+                                <FormControl>
+                                  <Input type="email" placeholder="patient@email.com" {...field} data-testid="input-patient-email" />
+                                </FormControl>
+                                <p className="text-xs text-muted-foreground">
+                                  We'll email them that a ride has been booked on their behalf
+                                </p>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
                           <p className="text-xs text-muted-foreground">
                             You'll receive a tracking link after booking so you can monitor your loved one's ride in real-time.
                           </p>
                         </CardContent>
                       </Card>
                     )}
-
-                    <FormField
-                      control={form.control}
-                      name="pickupAddress"
-                      render={({ field }) => (
-                        <FormItem>
-                          <div className="flex items-center justify-between gap-2">
-                            <FormLabel>Pickup Address</FormLabel>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => useMyLocation("pickup")}
-                              disabled={isLocating}
-                              className="text-xs"
-                              data-testid="button-use-my-location"
-                            >
-                              <Navigation className="w-3 h-3 mr-1" />
-                              {isLocating ? "Locating..." : "Use My Location"}
-                            </Button>
-                          </div>
-                          <FormControl>
-                            <AddressAutocomplete
-                              onPlaceSelect={(address, lat, lng) => {
-                                field.onChange(address);
-                                handlePickupChange(lat, lng);
-                              }}
-                              placeholder="Start typing an address..."
-                              value={field.value}
-                              testId="input-pickup-address"
-                              userLocation={userDeviceLocation}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="dropoffAddress"
-                      render={({ field }) => (
-                        <FormItem>
-                          <div className="flex items-center justify-between gap-2">
-                            <FormLabel>Dropoff Address (Medical Facility)</FormLabel>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => useMyLocation("dropoff")}
-                              disabled={isLocatingDropoff}
-                              className="text-xs"
-                              data-testid="button-use-my-location-dropoff"
-                            >
-                              <Navigation className="w-3 h-3 mr-1" />
-                              {isLocatingDropoff ? "Locating..." : "Use My Location"}
-                            </Button>
-                          </div>
-                          <FormControl>
-                            <AddressAutocomplete
-                              onPlaceSelect={(address, lat, lng) => {
-                                field.onChange(address);
-                                handleDropoffChange(lat, lng);
-                              }}
-                              placeholder="Start typing an address..."
-                              value={field.value}
-                              testId="input-dropoff-address"
-                              userLocation={userDeviceLocation}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
 
                     <FormField
                       control={form.control}

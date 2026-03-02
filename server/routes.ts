@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema } from "@shared/schema";
 import { z } from "zod";
-import { sendIssueNotification, FileAttachment } from "./email";
+import { sendIssueNotification, sendRideBookedForPatientEmail, FileAttachment } from "./email";
 import { saveSubscription, removeSubscription, getVapidPublicKey, notifyDriversOfNewRide, notifyPatientOfRideUpdate } from "./push";
 import multer from "multer";
 import path from "path";
@@ -1010,6 +1010,22 @@ export async function registerRoutes(
         await notifyDriversOfNewRide(ride);
       } catch (e) {
         console.error("Failed to notify drivers:", e);
+      }
+
+      if (parsed.bookedByOther && parsed.patientEmail && parsed.bookerName) {
+        sendRideBookedForPatientEmail({
+          patientName: parsed.patientName,
+          patientEmail: parsed.patientEmail,
+          bookerName: parsed.bookerName,
+          bookerRelation: parsed.bookerRelation || 'other',
+          pickupAddress: parsed.pickupAddress,
+          dropoffAddress: parsed.dropoffAddress,
+          appointmentTime: new Date(parsed.appointmentTime),
+          estimatedFare: req.body.estimatedFare,
+          rideId: ride.id,
+        }).catch(err => {
+          console.error("Failed to send patient notification email:", err);
+        });
       }
 
       res.status(201).json({ ride });
@@ -2039,6 +2055,22 @@ export async function registerRoutes(
       notifyDriversOfNewRide(ride.pickupAddress, ride.appointmentTime).catch(err => {
         console.error("Failed to send push notification:", err);
       });
+
+      if (parsed.bookedByOther && parsed.patientEmail && parsed.bookerName) {
+        sendRideBookedForPatientEmail({
+          patientName: parsed.patientName,
+          patientEmail: parsed.patientEmail,
+          bookerName: parsed.bookerName,
+          bookerRelation: parsed.bookerRelation || 'other',
+          pickupAddress: parsed.pickupAddress,
+          dropoffAddress: parsed.dropoffAddress,
+          appointmentTime: new Date(parsed.appointmentTime),
+          estimatedFare: req.body.estimatedFare,
+          rideId: ride.id,
+        }).catch(err => {
+          console.error("Failed to send patient notification email:", err);
+        });
+      }
       
       // Return the unhashed token to patient (only time they can get it)
       res.status(201).json({ 

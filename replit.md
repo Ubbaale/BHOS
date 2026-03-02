@@ -25,6 +25,8 @@ Preferred communication style: Simple, everyday language.
     -   **Fare Calculation**: Distance-based pricing with configurable base fare and per-mile rates.
     -   **Safety**: Trip sharing, SOS button, verification codes, driver info display, ETA tracking.
     -   **Policy Handling**: 15-minute free cancellation window, capped surge pricing (1.25x for self-pay, none for insurance rides), tiered patient accounts based on balance, traffic delay reporting.
+    -   **Patient Email Notifications**: When a ride is booked on behalf of a patient (bookedByOther=true), an email is sent to the patient's email address notifying them of the ride details. Uses SendGrid.
+    -   **Distance Warning**: If the user's device is more than 50 miles from the selected pickup location, an amber warning banner is displayed suggesting they double-check the address or toggle "booking for someone else."
 -   **Driver Management**:
     -   **Onboarding**: Self-service application, admin review, KYC verification (document upload, admin dashboard).
     -   **Earnings**: Dashboard displaying net pay, tips, and 1099-NEC generation for tax purposes.
