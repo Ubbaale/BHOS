@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText, Navigation, AlertTriangle, Heart, Users, Loader2, ArrowLeft, UserCog } from "lucide-react";
+import { MapPin, Calendar, Clock, User, Phone, Car, Accessibility, ArrowRight, CheckCircle2, DollarSign, CreditCard, Shield, FileText, Navigation, AlertTriangle, Heart, Users, Loader2, ArrowLeft, UserCog, ArrowUpDown, Circle, LocateFixed, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -975,275 +975,400 @@ export default function BookRide() {
     );
   }
 
+  const swapLocations = () => {
+    const currentPickup = form.getValues("pickupAddress");
+    const currentPickupLat = form.getValues("pickupLat");
+    const currentPickupLng = form.getValues("pickupLng");
+    const currentDropoff = form.getValues("dropoffAddress");
+    const currentDropoffLat = form.getValues("dropoffLat");
+    const currentDropoffLng = form.getValues("dropoffLng");
+
+    form.setValue("pickupAddress", currentDropoff);
+    form.setValue("pickupLat", currentDropoffLat);
+    form.setValue("pickupLng", currentDropoffLng);
+    form.setValue("dropoffAddress", currentPickup);
+    form.setValue("dropoffLat", currentPickupLat);
+    form.setValue("dropoffLng", currentPickupLng);
+
+    const newPickup = dropoffPos;
+    const newDropoff = pickupPos;
+    setPickupPos(newPickup);
+    setDropoffPos(newDropoff);
+  };
+
+  const clearPickup = () => {
+    form.setValue("pickupAddress", "");
+    form.setValue("pickupLat", "");
+    form.setValue("pickupLng", "");
+    setPickupPos(null);
+  };
+
+  const clearDropoff = () => {
+    form.setValue("dropoffAddress", "");
+    form.setValue("dropoffLat", "");
+    form.setValue("dropoffLng", "");
+    setDropoffPos(null);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header title="Book a Ride" showBack />
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-6 pb-32 md:pb-8">
         <div className="mb-4">
           <BackToHome />
         </div>
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           <NotificationPrompt userType="user" />
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Book a Medical Ride</h1>
-            <p className="text-muted-foreground">
-              Schedule non-emergency medical transportation for your appointment.
+          <div className="mb-6">
+            <h1 className="text-2xl md:text-3xl font-bold mb-1">Where are you going?</h1>
+            <p className="text-sm text-muted-foreground">
+              Non-emergency medical transportation
             </p>
           </div>
 
-          {/* Mobile-only Quick Action Tiles */}
-          <div className="mb-6 md:hidden space-y-4">
-            {/* Book Ride Tile */}
-            <a href="https://carehubapp.com/book-ride">
-              <Card className="hover-elevate cursor-pointer border-2 border-emerald-500 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 dark:from-emerald-500/20 dark:to-teal-500/20" data-testid="tile-book-ride-mobile">
-                <CardContent className="p-4 flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-lg">
-                    <Car className="w-7 h-7 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-lg text-emerald-700 dark:text-emerald-400">Book a Ride</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Schedule Medical Transportation Below
-                    </p>
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
-                    <ArrowRight className="w-5 h-5 text-white" />
-                  </div>
-                </CardContent>
-              </Card>
-            </a>
+          <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
 
-            {/* Driver Portal Tile */}
-            <Link href="/driver">
-              <Card className="hover-elevate cursor-pointer border-2 border-blue-500 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 dark:from-blue-500/20 dark:to-indigo-500/20" data-testid="tile-driver-portal-mobile">
-                <CardContent className="p-4 flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg">
-                    <UserCog className="w-7 h-7 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-lg text-blue-700 dark:text-blue-400">Driver Portal</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Access dashboard & manage rides
-                    </p>
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                    <ArrowRight className="w-5 h-5 text-white" />
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+          <div className="bg-card rounded-xl border shadow-sm p-4 md:p-6 mb-4" data-testid="address-panel">
+            <div className="flex gap-3">
+              <div className="flex flex-col items-center pt-3 pb-1">
+                <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-600 flex-shrink-0" />
+                <div className="w-0.5 flex-1 bg-border my-1 min-h-[24px]" style={{ backgroundImage: 'repeating-linear-gradient(to bottom, hsl(var(--border)) 0px, hsl(var(--border)) 4px, transparent 4px, transparent 8px)' }} />
+                <div className="w-3 h-3 rounded-full bg-red-500 border-2 border-red-600 flex-shrink-0" />
+              </div>
+
+              <div className="flex-1 space-y-2 min-w-0">
+                <FormField
+                  control={form.control}
+                  name="pickupAddress"
+                  render={({ field }) => (
+                    <FormItem className="space-y-0">
+                      <div className="relative">
+                        <FormControl>
+                          <AddressAutocomplete
+                            onPlaceSelect={(address, lat, lng) => {
+                              field.onChange(address);
+                              handlePickupChange(lat, lng);
+                              setLocationMode("dropoff");
+                            }}
+                            placeholder="Pickup location"
+                            value={field.value}
+                            testId="input-pickup-address"
+                            userLocation={userDeviceLocation}
+                          />
+                        </FormControl>
+                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                          {field.value && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              onClick={clearPickup}
+                              data-testid="button-clear-pickup"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-primary"
+                            onClick={() => useMyLocation("pickup")}
+                            disabled={isLocating}
+                            data-testid="button-use-my-location"
+                          >
+                            {isLocating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LocateFixed className="w-3.5 h-3.5" />}
+                          </Button>
+                        </div>
+                      </div>
+                      <FormMessage className="text-xs mt-1" />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="dropoffAddress"
+                  render={({ field }) => (
+                    <FormItem className="space-y-0">
+                      <div className="relative">
+                        <FormControl>
+                          <AddressAutocomplete
+                            onPlaceSelect={(address, lat, lng) => {
+                              field.onChange(address);
+                              handleDropoffChange(lat, lng);
+                            }}
+                            placeholder="Dropoff — hospital, clinic, etc."
+                            value={field.value}
+                            testId="input-dropoff-address"
+                            userLocation={userDeviceLocation}
+                          />
+                        </FormControl>
+                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                          {field.value && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              onClick={clearDropoff}
+                              data-testid="button-clear-dropoff"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-primary"
+                            onClick={() => useMyLocation("dropoff")}
+                            disabled={isLocatingDropoff}
+                            data-testid="button-use-my-location-dropoff"
+                          >
+                            {isLocatingDropoff ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LocateFixed className="w-3.5 h-3.5" />}
+                          </Button>
+                        </div>
+                      </div>
+                      <FormMessage className="text-xs mt-1" />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="flex items-center pt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+                  onClick={swapLocations}
+                  data-testid="button-swap-locations"
+                >
+                  <ArrowUpDown className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+              <Navigation className="w-3 h-3" />
+              <span>Tap the crosshair icon to use your current location</span>
+            </div>
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-8">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="w-5 h-5" />
-                  Select Locations
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-2 mb-4 flex-wrap">
-                  <Button
-                    type="button"
-                    variant={locationMode === "pickup" ? "default" : "outline"}
-                    onClick={() => setLocationMode("pickup")}
-                    size="sm"
-                    data-testid="button-select-pickup"
-                  >
-                    <MapPin className="w-4 h-4 mr-1" />
-                    Set Pickup {pickupPos && <CheckCircle2 className="w-4 h-4 ml-1 text-green-300" />}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={locationMode === "dropoff" ? "default" : "outline"}
-                    onClick={() => setLocationMode("dropoff")}
-                    size="sm"
-                    data-testid="button-select-dropoff"
-                  >
-                    <MapPin className="w-4 h-4 mr-1" />
-                    Set Dropoff {dropoffPos && <CheckCircle2 className="w-4 h-4 ml-1 text-green-300" />}
-                  </Button>
-                </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Click on the map to set your {locationMode} location.
-                </p>
-                <div className="h-[400px] rounded-md overflow-hidden border">
-                  <MapContainer
-                    center={[39.8283, -98.5795]}
-                    zoom={4}
-                    style={{ height: "100%", width: "100%" }}
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <LocationPicker
-                      onPickupChange={handlePickupChange}
-                      onDropoffChange={handleDropoffChange}
-                      pickupPos={pickupPos}
-                      dropoffPos={dropoffPos}
-                      mode={locationMode}
-                    />
-                  </MapContainer>
-                </div>
-                <div className="mt-4 flex gap-4 text-sm flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-green-500 rounded-full" />
-                    <span>Pickup Location</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-red-500 rounded-full" />
-                    <span>Dropoff Location</span>
-                  </div>
-                </div>
+          <div className="rounded-xl overflow-hidden border shadow-sm mb-4" data-testid="map-container">
+            <div className="relative">
+              <div className="h-[280px] md:h-[350px]">
+                <MapContainer
+                  center={userDeviceLocation ? [userDeviceLocation.lat, userDeviceLocation.lng] : [39.8283, -98.5795]}
+                  zoom={userDeviceLocation ? 12 : 4}
+                  style={{ height: "100%", width: "100%" }}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <LocationPicker
+                    onPickupChange={(lat, lng) => {
+                      handlePickupChange(lat, lng);
+                      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+                        .then(r => r.json())
+                        .then(data => {
+                          if (data.display_name) form.setValue("pickupAddress", data.display_name);
+                        })
+                        .catch(() => {});
+                      setLocationMode("dropoff");
+                    }}
+                    onDropoffChange={(lat, lng) => {
+                      handleDropoffChange(lat, lng);
+                      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+                        .then(r => r.json())
+                        .then(data => {
+                          if (data.display_name) form.setValue("dropoffAddress", data.display_name);
+                        })
+                        .catch(() => {});
+                    }}
+                    pickupPos={pickupPos}
+                    dropoffPos={dropoffPos}
+                    mode={locationMode}
+                  />
+                </MapContainer>
+              </div>
+              <div className="absolute bottom-3 left-3 z-[400] flex gap-2">
+                <Button
+                  type="button"
+                  variant={locationMode === "pickup" ? "default" : "secondary"}
+                  onClick={() => setLocationMode("pickup")}
+                  size="sm"
+                  className="shadow-md text-xs h-8"
+                  data-testid="button-select-pickup"
+                >
+                  <div className={`w-2 h-2 rounded-full mr-1.5 ${locationMode === "pickup" ? "bg-green-300" : "bg-green-500"}`} />
+                  Pickup {pickupPos && <CheckCircle2 className="w-3 h-3 ml-1" />}
+                </Button>
+                <Button
+                  type="button"
+                  variant={locationMode === "dropoff" ? "default" : "secondary"}
+                  onClick={() => setLocationMode("dropoff")}
+                  size="sm"
+                  className="shadow-md text-xs h-8"
+                  data-testid="button-select-dropoff"
+                >
+                  <div className={`w-2 h-2 rounded-full mr-1.5 ${locationMode === "dropoff" ? "bg-red-300" : "bg-red-500"}`} />
+                  Dropoff {dropoffPos && <CheckCircle2 className="w-3 h-3 ml-1" />}
+                </Button>
+              </div>
+            </div>
+          </div>
 
-                {fareEstimate && (
-                  <div className="mt-4 p-4 bg-muted rounded-md" data-testid="fare-estimate">
-                    <div className="flex items-center gap-2 mb-2">
-                      <DollarSign className="w-5 h-5 text-primary" />
-                      <span className="font-semibold">Fare Estimate</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Distance:</span>
-                        <p className="font-medium" data-testid="text-distance">{fareEstimate.distance.toFixed(1)} miles</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Estimated Fare:</span>
-                        <p className="font-medium text-lg" data-testid="text-fare">${fareEstimate.fare.toFixed(2)}</p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Base fare: ${BASE_FARE.toFixed(2)} + ${PER_MILE_RATE.toFixed(2)}/mile. Minimum fare: ${MINIMUM_FARE.toFixed(2)}
-                    </p>
+          {fareEstimate && (
+            <div className="bg-card rounded-xl border shadow-sm p-4 mb-4" data-testid="fare-estimate">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Car className="w-5 h-5 text-primary" />
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Medical Transport</p>
+                    <p className="text-xs text-muted-foreground" data-testid="text-distance">{fareEstimate.distance.toFixed(1)} mi · Est. {Math.ceil(fareEstimate.distance * 2.5)} min</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-bold" data-testid="text-fare">${fareEstimate.fare.toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">estimated fare</p>
+                </div>
+              </div>
+              <div className="mt-2 pt-2 border-t flex items-center gap-4 text-xs text-muted-foreground">
+                <span>Base: ${BASE_FARE.toFixed(2)}</span>
+                <span>·</span>
+                <span>${PER_MILE_RATE.toFixed(2)}/mi</span>
+                <span>·</span>
+                <span>Min: ${MINIMUM_FARE.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Car className="w-5 h-5" />
-                  Ride Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="patientName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="flex items-center gap-1">
-                              <User className="w-4 h-4" /> Name
-                            </FormLabel>
-                            <FormControl>
-                              <Input placeholder="Full name" {...field} data-testid="input-patient-name" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="patientPhone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="flex items-center gap-1">
-                              <Phone className="w-4 h-4" /> Phone
-                            </FormLabel>
-                            <FormControl>
-                              <Input placeholder="(555) 123-4567" {...field} data-testid="input-patient-phone" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    {/* Booking for someone else toggle */}
+          <Card className="rounded-xl shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Car className="w-5 h-5" />
+                Ride Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="bookedByOther"
+                      name="patientName"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
-                          <div className="space-y-0.5">
-                            <FormLabel className="text-sm font-medium flex items-center gap-2">
-                              <Heart className="w-4 h-4 text-primary" />
-                              Booking for a family member or loved one?
-                            </FormLabel>
-                            <p className="text-xs text-muted-foreground">
-                              You can book a ride on behalf of someone else and track their journey
-                            </p>
-                          </div>
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-1">
+                            <User className="w-4 h-4" /> Patient Name
+                          </FormLabel>
                           <FormControl>
-                            <Switch
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                              data-testid="switch-booked-by-other"
-                            />
+                            <Input placeholder="Full name" {...field} data-testid="input-patient-name" />
                           </FormControl>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
+                    <FormField
+                      control={form.control}
+                      name="patientPhone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-1">
+                            <Phone className="w-4 h-4" /> Phone
+                          </FormLabel>
+                          <FormControl>
+                            <Input placeholder="(555) 123-4567" {...field} data-testid="input-patient-phone" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-                    {/* Booker information fields - shown when booking for someone else */}
-                    {bookedByOther && (
-                      <Card className="border-primary/20">
-                        <CardContent className="pt-4 space-y-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Users className="w-4 h-4 text-primary" />
-                            <span className="text-sm font-medium">Your Information (Person Booking)</span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <FormField
-                              control={form.control}
-                              name="bookerName"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Your Name</FormLabel>
-                                  <FormControl>
-                                    <Input placeholder="Your full name" {...field} data-testid="input-booker-name" />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name="bookerPhone"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Your Phone</FormLabel>
-                                  <FormControl>
-                                    <Input placeholder="(555) 123-4567" {...field} data-testid="input-booker-phone" />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <FormField
-                              control={form.control}
-                              name="bookerEmail"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Your Email (for updates)</FormLabel>
-                                  <FormControl>
-                                    <Input type="email" placeholder="your@email.com" {...field} data-testid="input-booker-email" />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name="bookerRelation"
+                  <FormField
+                    control={form.control}
+                    name="bookedByOther"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-sm font-medium flex items-center gap-2">
+                            <Heart className="w-4 h-4 text-primary" />
+                            Booking for a family member or loved one?
+                          </FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            You can book a ride on behalf of someone else and track their journey
+                          </p>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            data-testid="switch-booked-by-other"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  {bookedByOther && (
+                    <Card className="border-primary/20">
+                      <CardContent className="pt-4 space-y-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Users className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-medium">Your Information (Person Booking)</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <FormField
+                            control={form.control}
+                            name="bookerName"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Your Name</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Your full name" {...field} data-testid="input-booker-name" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="bookerPhone"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Your Phone</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="(555) 123-4567" {...field} data-testid="input-booker-phone" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <FormField
+                            control={form.control}
+                            name="bookerEmail"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Your Email (for updates)</FormLabel>
+                                <FormControl>
+                                  <Input type="email" placeholder="your@email.com" {...field} data-testid="input-booker-email" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="bookerRelation"
                               render={({ field }) => (
                                 <FormItem>
                                   <FormLabel>Relationship to Patient</FormLabel>
@@ -1614,11 +1739,12 @@ export default function BookRide() {
                         </>
                       )}
                     </Button>
-                  </form>
-                </Form>
+                </div>
               </CardContent>
             </Card>
-          </div>
+
+          </form>
+          </Form>
         </div>
       </main>
       <Footer />
