@@ -378,6 +378,15 @@ export default function JobMap() {
                           <ExternalLink className="w-3 h-3" /> External Listing
                         </p>
                       )}
+                      <a
+                        href={`https://app.carehubapp.com/#/login?ref=job&jobId=${job.id}&title=${encodeURIComponent(job.title)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block mt-2 text-xs font-medium text-white bg-primary px-3 py-1 rounded hover:opacity-90"
+                        data-testid={`link-apply-popup-${job.id}`}
+                      >
+                        Apply in App
+                      </a>
                     </div>
                   </Popup>
                 </Marker>
@@ -553,8 +562,18 @@ export default function JobMap() {
                           ))}
                         </div>
 
-                        <Button className="w-full" data-testid={`button-apply-${job.id}`}>
-                          Apply Now
+                        <Button
+                          className="w-full"
+                          data-testid={`button-apply-${job.id}`}
+                          asChild
+                        >
+                          <a
+                            href={`https://app.carehubapp.com/#/login?ref=job&jobId=${job.id}&title=${encodeURIComponent(job.title)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Apply Now
+                          </a>
                         </Button>
                       </CardContent>
                     </Card>
