@@ -34,6 +34,8 @@ Preferred communication style: Simple, everyday language.
     -   **Post-Ride Rating**: Star rating (1-5) with optional comment after ride completion; updates driver average rating; shown on tracking page and ride history.
     -   **Live Tracking Map**: Embedded Leaflet map on tracking page showing pickup (green), dropoff (red), and driver (blue car) markers with route lines and ETA countdown.
     -   **Enhanced Driver Card**: Uber-style driver info display with large avatar, vehicle details, license plate, verification code, and integrated call/message buttons.
+    -   **Surge Zone Map**: Driver dashboard shows color-coded demand zones on map (red=very high, orange=high, yellow=moderate). Surge banner displays when multiplier >1x. Route lines connect pickup/dropoff markers on map. `GET /api/surge/zones` returns clustered demand zones with multiplier, label, and radius.
+    -   **Ride Request Direction**: Each ride card shows trip direction (compass heading N/NE/E/etc.), distance, per-mile rate, and surge indicator. Direction arrow rotates to show trip heading.
 -   **Driver Management**:
     -   **Onboarding**: Self-service application, admin review, KYC verification (document upload, admin dashboard).
     -   **Earnings**: Dashboard displaying net pay, tips, and 1099-NEC generation for tax purposes.

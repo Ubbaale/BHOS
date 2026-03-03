@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { format, formatDistanceToNow } from "date-fns";
@@ -20,7 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet, Star, AlertTriangle, History, ShieldCheck, ShieldAlert } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet, Star, AlertTriangle, History, ShieldCheck, ShieldAlert, Flame, ArrowUpRight, Route, Zap } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { openNavigation } from "@/lib/navigation";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -64,6 +64,33 @@ const statusLabels: Record<string, string> = {
   completed: "Completed",
   cancelled: "Cancelled",
 };
+
+function getDirectionLabel(fromLat: number, fromLng: number, toLat: number, toLng: number): string {
+  const dLat = toLat - fromLat;
+  const dLng = toLng - fromLng;
+  const angle = Math.atan2(dLng, dLat) * (180 / Math.PI);
+  if (angle >= -22.5 && angle < 22.5) return "N";
+  if (angle >= 22.5 && angle < 67.5) return "NE";
+  if (angle >= 67.5 && angle < 112.5) return "E";
+  if (angle >= 112.5 && angle < 157.5) return "SE";
+  if (angle >= 157.5 || angle < -157.5) return "S";
+  if (angle >= -157.5 && angle < -112.5) return "SW";
+  if (angle >= -112.5 && angle < -67.5) return "W";
+  return "NW";
+}
+
+function getDirectionRotation(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
+  const dLat = toLat - fromLat;
+  const dLng = toLng - fromLng;
+  return Math.atan2(dLng, dLat) * (180 / Math.PI);
+}
+
+function getSurgeColor(multiplier: number): string {
+  if (multiplier >= 1.25) return "#ef4444";
+  if (multiplier >= 1.15) return "#f97316";
+  if (multiplier >= 1.10) return "#eab308";
+  return "#22c55e";
+}
 
 interface RideCardProps {
   ride: Ride & { distanceToPickup?: string | null; estimatedMinutesToPickup?: number | null };
@@ -204,8 +231,16 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
             {ride.status === "requested" && (ride.distanceToPickup || ride.estimatedFare) && (
               <div className="flex flex-col items-end gap-1">
                 {ride.estimatedFare && (
-                  <div className="text-sm font-bold text-green-600 dark:text-green-400" data-testid="text-fare">
-                    ${ride.estimatedFare}
+                  <div className="flex items-center gap-1" data-testid="text-fare">
+                    <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                      ${parseFloat(ride.estimatedFare).toFixed(2)}
+                    </span>
+                    {ride.surgeMultiplier && parseFloat(ride.surgeMultiplier) > 1 && (
+                      <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs no-default-hover-elevate">
+                        <Zap className="w-3 h-3 mr-0.5" />
+                        {ride.surgeMultiplier}x
+                      </Badge>
+                    )}
                   </div>
                 )}
                 {ride.distanceToPickup && (
@@ -238,6 +273,35 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
           </div>
         </div>
 
+        {ride.status === "requested" && ride.distanceMiles && (
+          <div className="flex items-center gap-3 mb-3 p-2 bg-muted/50 rounded-md" data-testid={`trip-direction-${ride.id}`}>
+            <div className="flex items-center gap-1.5">
+              <Route className="w-4 h-4 text-blue-500" />
+              <span className="text-sm font-semibold">{parseFloat(ride.distanceMiles).toFixed(1)} mi trip</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <ArrowUpRight
+                className="w-4 h-4 text-primary"
+                style={{ transform: `rotate(${getDirectionRotation(parseFloat(ride.pickupLat), parseFloat(ride.pickupLng), parseFloat(ride.dropoffLat), parseFloat(ride.dropoffLng)) - 45}deg)` }}
+              />
+              <span className="text-xs text-muted-foreground">
+                Heading {getDirectionLabel(parseFloat(ride.pickupLat), parseFloat(ride.pickupLng), parseFloat(ride.dropoffLat), parseFloat(ride.dropoffLng))}
+              </span>
+            </div>
+            {ride.estimatedFare && (
+              <div className="ml-auto flex items-center gap-1 text-sm">
+                <DollarSign className="w-3 h-3" />
+                <span className="font-semibold text-green-600 dark:text-green-400">{parseFloat(ride.estimatedFare).toFixed(2)}</span>
+                {ride.distanceMiles && (
+                  <span className="text-xs text-muted-foreground">
+                    (${(parseFloat(ride.estimatedFare) / parseFloat(ride.distanceMiles)).toFixed(2)}/mi)
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3 flex-wrap">
           <span className="flex items-center gap-1">
             <Clock className="w-4 h-4" />
@@ -249,13 +313,13 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
               {ride.mobilityNeeds.join(", ")}
             </span>
           )}
-          {ride.distanceMiles && (
+          {ride.distanceMiles && ride.status !== "requested" && (
             <span className="flex items-center gap-1">
               <Navigation className="w-4 h-4" />
               {parseFloat(ride.distanceMiles).toFixed(1)} mi
             </span>
           )}
-          {ride.estimatedFare && (
+          {ride.estimatedFare && ride.status !== "requested" && (
             <span className="flex items-center gap-1 font-semibold text-foreground">
               <DollarSign className="w-4 h-4" />
               ${parseFloat(ride.estimatedFare).toFixed(2)}
@@ -452,6 +516,26 @@ export default function DriverDashboard() {
   const { data: documentAlerts } = useQuery<{ alerts: DocumentAlert[]; backgroundCheckStatus: string }>({
     queryKey: [`/api/drivers/${currentDriverId}/document-alerts`],
     enabled: !!currentDriverId,
+  });
+
+  interface SurgeZone {
+    lat: number;
+    lng: number;
+    demandCount: number;
+    multiplier: number;
+    label: string;
+    radius: number;
+  }
+  interface SurgeZoneData {
+    zones: SurgeZone[];
+    globalMultiplier: string;
+    totalDemand: number;
+    availableDrivers: number;
+    scheduledSurge: { reason: string; multiplier: string } | null;
+  }
+  const { data: surgeData } = useQuery<SurgeZoneData>({
+    queryKey: ["/api/surge/zones"],
+    refetchInterval: 30000,
   });
 
   const updateLocationMutation = useMutation({
@@ -968,6 +1052,43 @@ export default function DriverDashboard() {
           )}
 
           {(!currentDriver || (currentDriver.applicationStatus === "approved" && currentDriver.kycStatus === "approved")) && (
+          <>
+          {surgeData && parseFloat(surgeData.globalMultiplier) > 1 && (
+            <Card className="mb-6 border-orange-300 dark:border-orange-700 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20" data-testid="surge-banner">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-orange-100 dark:bg-orange-900/40 rounded-full">
+                      <Flame className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-orange-800 dark:text-orange-300">
+                        Surge Active — {surgeData.globalMultiplier}x Multiplier
+                      </p>
+                      <p className="text-xs text-orange-600 dark:text-orange-400">
+                        {surgeData.totalDemand} active request{surgeData.totalDemand !== 1 ? "s" : ""} · {surgeData.availableDrivers} driver{surgeData.availableDrivers !== 1 ? "s" : ""} available
+                        {surgeData.scheduledSurge && ` · ${surgeData.scheduledSurge.reason || "Scheduled surge"}`}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge className="ml-auto bg-orange-500 text-white no-default-hover-elevate">
+                    Earn more on rides!
+                  </Badge>
+                </div>
+                {surgeData.zones.length > 0 && (
+                  <div className="mt-3 flex gap-2 flex-wrap">
+                    {surgeData.zones.filter(z => z.multiplier > 1).map((zone, i) => (
+                      <Badge key={i} variant="outline" className="text-xs border-orange-300 text-orange-700 dark:text-orange-400 no-default-hover-elevate">
+                        <Zap className="w-3 h-3 mr-1" />
+                        {zone.label} ({zone.multiplier}x) · {zone.demandCount} ride{zone.demandCount !== 1 ? "s" : ""}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               <Tabs defaultValue="available" className="w-full">
@@ -1065,10 +1186,16 @@ export default function DriverDashboard() {
                   <CardTitle className="flex items-center gap-2">
                     <MapPin className="w-5 h-5" />
                     Ride Map
+                    {surgeData && surgeData.zones.some(z => z.multiplier > 1) && (
+                      <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs no-default-hover-elevate">
+                        <Flame className="w-3 h-3 mr-1" />
+                        Surge zones active
+                      </Badge>
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[400px] rounded-md overflow-hidden border">
+                  <div className="h-[400px] rounded-md overflow-hidden border" data-testid="driver-ride-map">
                     <MapContainer
                       center={[39.8283, -98.5795]}
                       zoom={4}
@@ -1078,34 +1205,72 @@ export default function DriverDashboard() {
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                       />
+                      {surgeData && surgeData.zones.map((zone, i) => (
+                        <Circle
+                          key={`surge-${i}`}
+                          center={[zone.lat, zone.lng]}
+                          radius={zone.radius}
+                          pathOptions={{
+                            color: getSurgeColor(zone.multiplier),
+                            fillColor: getSurgeColor(zone.multiplier),
+                            fillOpacity: 0.15,
+                            weight: 2,
+                            dashArray: zone.multiplier >= 1.15 ? undefined : "5 5",
+                          }}
+                        >
+                          <Popup>
+                            <div className="p-1 text-center">
+                              <p className="font-bold text-lg">{zone.multiplier}x</p>
+                              <p className="font-semibold">{zone.label}</p>
+                              <p className="text-sm text-gray-600">{zone.demandCount} active ride{zone.demandCount !== 1 ? "s" : ""}</p>
+                            </div>
+                          </Popup>
+                        </Circle>
+                      ))}
                       {activeRides
                         .filter((r) => r.status !== "completed" && r.status !== "cancelled")
-                        .flatMap((ride) => [
-                          <Marker
-                            key={`pickup-${ride.id}`}
-                            position={[parseFloat(ride.pickupLat), parseFloat(ride.pickupLng)]}
-                            icon={pickupIcon}
-                          >
-                            <Popup>
-                              <div className="p-1">
-                                <p className="font-semibold">Pickup: {ride.patientName}</p>
-                                <p className="text-sm">{ride.pickupAddress}</p>
-                              </div>
-                            </Popup>
-                          </Marker>,
-                          <Marker
-                            key={`dropoff-${ride.id}`}
-                            position={[parseFloat(ride.dropoffLat), parseFloat(ride.dropoffLng)]}
-                            icon={dropoffIcon}
-                          >
-                            <Popup>
-                              <div className="p-1">
-                                <p className="font-semibold">Dropoff: {ride.patientName}</p>
-                                <p className="text-sm">{ride.dropoffAddress}</p>
-                              </div>
-                            </Popup>
-                          </Marker>
-                        ])}
+                        .flatMap((ride) => {
+                          const pickupPos: [number, number] = [parseFloat(ride.pickupLat), parseFloat(ride.pickupLng)];
+                          const dropoffPos: [number, number] = [parseFloat(ride.dropoffLat), parseFloat(ride.dropoffLng)];
+                          return [
+                            <Polyline
+                              key={`route-${ride.id}`}
+                              positions={[pickupPos, dropoffPos]}
+                              pathOptions={{
+                                color: ride.status === "requested" ? "#3b82f6" : "#8b5cf6",
+                                weight: 2,
+                                opacity: 0.6,
+                                dashArray: "6 4",
+                              }}
+                            />,
+                            <Marker
+                              key={`pickup-${ride.id}`}
+                              position={pickupPos}
+                              icon={pickupIcon}
+                            >
+                              <Popup>
+                                <div className="p-1">
+                                  <p className="font-semibold">Pickup: {ride.patientName}</p>
+                                  <p className="text-sm">{ride.pickupAddress}</p>
+                                  {ride.estimatedFare && <p className="text-sm font-bold text-green-600">${parseFloat(ride.estimatedFare).toFixed(2)}</p>}
+                                  {ride.distanceMiles && <p className="text-xs text-gray-500">{parseFloat(ride.distanceMiles).toFixed(1)} mi trip</p>}
+                                </div>
+                              </Popup>
+                            </Marker>,
+                            <Marker
+                              key={`dropoff-${ride.id}`}
+                              position={dropoffPos}
+                              icon={dropoffIcon}
+                            >
+                              <Popup>
+                                <div className="p-1">
+                                  <p className="font-semibold">Dropoff: {ride.patientName}</p>
+                                  <p className="text-sm">{ride.dropoffAddress}</p>
+                                </div>
+                              </Popup>
+                            </Marker>,
+                          ];
+                        })}
                     </MapContainer>
                   </div>
                   <div className="mt-4 flex gap-4 text-sm flex-wrap">
@@ -1117,11 +1282,22 @@ export default function DriverDashboard() {
                       <div className="w-4 h-4 bg-red-500 rounded-full" />
                       <span>Dropoff</span>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full border-2 border-dashed border-blue-500" />
+                      <span>Trip route</span>
+                    </div>
+                    {surgeData && surgeData.zones.some(z => z.multiplier > 1) && (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-orange-400/30 border border-orange-400" />
+                        <span>Surge zone</span>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
             </div>
           </div>
+          </>
           )}
         </div>
       </main>

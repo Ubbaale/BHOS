@@ -2668,6 +2668,85 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/surge/zones", async (_req, res) => {
+    try {
+      const activeRides = await storage.getActiveRides();
+      const requestedRides = activeRides.filter(r => r.status === "requested");
+      const inProgressRides = activeRides.filter(r => ["in_progress", "driver_enroute", "arrived"].includes(r.status));
+      const allDemandRides = [...requestedRides, ...inProgressRides];
+      const availableDrivers = await storage.getAvailableDrivers();
+
+      const zones: { lat: number; lng: number; demandCount: number; multiplier: number; label: string; radius: number }[] = [];
+
+      if (allDemandRides.length > 0) {
+        const clusters: { lat: number; lng: number; rides: typeof allDemandRides }[] = [];
+        const CLUSTER_RADIUS = 0.15;
+
+        for (const ride of allDemandRides) {
+          const lat = parseFloat(ride.pickupLat);
+          const lng = parseFloat(ride.pickupLng);
+          if (isNaN(lat) || isNaN(lng)) continue;
+
+          let added = false;
+          for (const cluster of clusters) {
+            const dist = Math.sqrt(Math.pow(cluster.lat - lat, 2) + Math.pow(cluster.lng - lng, 2));
+            if (dist < CLUSTER_RADIUS) {
+              cluster.rides.push(ride);
+              cluster.lat = (cluster.lat * (cluster.rides.length - 1) + lat) / cluster.rides.length;
+              cluster.lng = (cluster.lng * (cluster.rides.length - 1) + lng) / cluster.rides.length;
+              added = true;
+              break;
+            }
+          }
+          if (!added) {
+            clusters.push({ lat, lng, rides: [ride] });
+          }
+        }
+
+        for (const cluster of clusters) {
+          const count = cluster.rides.length;
+          let multiplier = 1.0;
+          if (count >= 5) multiplier = 1.25;
+          else if (count >= 3) multiplier = 1.15;
+          else if (count >= 2) multiplier = 1.10;
+
+          if (availableDrivers.length === 0 && count > 0) {
+            multiplier = 1.25;
+          }
+
+          zones.push({
+            lat: cluster.lat,
+            lng: cluster.lng,
+            demandCount: count,
+            multiplier: Math.min(1.25, multiplier),
+            label: count >= 5 ? "Very High Demand" : count >= 3 ? "High Demand" : count >= 2 ? "Moderate Demand" : "Active",
+            radius: Math.min(5000, 1500 + count * 800),
+          });
+        }
+      }
+
+      const now = new Date();
+      const scheduledSurge = await storage.getActiveSurgePricing(now.getDay(), now.getHours());
+
+      res.json({
+        zones,
+        globalMultiplier: Math.min(1.25, Math.max(
+          scheduledSurge ? parseFloat(scheduledSurge.multiplier || "1.0") : 1.0,
+          allDemandRides.length > 0 && availableDrivers.length === 0 ? 1.25 :
+          allDemandRides.length / Math.max(1, availableDrivers.length) > 2 ? 1.25 :
+          allDemandRides.length / Math.max(1, availableDrivers.length) > 1.5 ? 1.15 :
+          allDemandRides.length / Math.max(1, availableDrivers.length) > 1 ? 1.10 : 1.0
+        )).toFixed(2),
+        totalDemand: allDemandRides.length,
+        availableDrivers: availableDrivers.length,
+        scheduledSurge: scheduledSurge ? { reason: scheduledSurge.reason, multiplier: scheduledSurge.multiplier } : null,
+      });
+    } catch (error) {
+      console.error("Error calculating surge zones:", error);
+      res.status(500).json({ message: "Failed to calculate surge zones" });
+    }
+  });
+
   // Complete ride with final fare calculation
   // Protected: Only authenticated drivers can complete rides
   app.post("/api/rides/:id/complete", requireDriver, async (req, res) => {
