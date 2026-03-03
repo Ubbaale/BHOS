@@ -110,6 +110,7 @@ const bookRideSchema = z.object({
   isRoundTrip: z.boolean().default(false),
   returnPickupTime: z.string().optional(),
   estimatedWaitMinutes: z.string().optional(),
+  requiredVehicleType: z.string().optional(),
   isRecurring: z.boolean().default(false),
   recurringFrequency: z.enum(["daily", "weekly", "biweekly", "monthly"]).optional(),
   recurringDays: z.array(z.string()).optional(),
@@ -544,6 +545,7 @@ export default function BookRide() {
       isRoundTrip: false,
       returnPickupTime: "",
       estimatedWaitMinutes: "",
+      requiredVehicleType: "",
       isRecurring: false,
       recurringFrequency: undefined,
       recurringDays: [],
@@ -675,6 +677,7 @@ export default function BookRide() {
         isEmergency: isEmergency && emergencyAcknowledged,
         isRoundTrip: data.isRoundTrip,
         returnPickupTime: data.isRoundTrip ? data.returnPickupTime : undefined,
+        requiredVehicleType: data.requiredVehicleType && data.requiredVehicleType !== "any" ? data.requiredVehicleType : undefined,
         recurringSchedule,
       };
       const response = await apiRequest("POST", "/api/rides", cleanedData);
@@ -868,6 +871,7 @@ export default function BookRide() {
         distanceMiles: fareEstimate?.distance.toFixed(2),
         estimatedFare: fareEstimate?.fare.toFixed(2),
         isEmergency: isEmergency && emergencyAcknowledged,
+        requiredVehicleType: pendingFormData.requiredVehicleType && pendingFormData.requiredVehicleType !== "any" ? pendingFormData.requiredVehicleType : undefined,
         stripePaymentIntentId: paymentIntentId,
         paidAmount: fareEstimate?.fare.toFixed(2),
         paymentStatus: "paid",
@@ -1532,6 +1536,37 @@ export default function BookRide() {
                         ))}
                       </div>
                     </div>
+
+                    <FormField
+                      control={form.control}
+                      name="requiredVehicleType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-1">
+                            <Car className="w-4 h-4" /> Vehicle Type
+                          </FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-vehicle-type">
+                                <SelectValue placeholder="Any vehicle (default)" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="any">Any Vehicle</SelectItem>
+                              <SelectItem value="sedan">Sedan</SelectItem>
+                              <SelectItem value="suv">SUV</SelectItem>
+                              <SelectItem value="wheelchair_van">Wheelchair Van</SelectItem>
+                              <SelectItem value="stretcher_van">Stretcher Van</SelectItem>
+                              <SelectItem value="minivan">Minivan</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Select a specific vehicle type if needed for accessibility or comfort
+                          </p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
                     <FormField
                       control={form.control}

@@ -100,6 +100,42 @@ interface RideCardProps {
   navigationPreference?: string;
 }
 
+function WaitTimer({ startedAt }: { startedAt: string | Date }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const start = new Date(startedAt).getTime();
+    const tick = () => setElapsed(Math.floor((Date.now() - start) / 1000));
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [startedAt]);
+
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const isBillable = mins >= 15;
+
+  return (
+    <div className={`flex items-center gap-2 text-sm font-mono ${isBillable ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+      <Clock className="w-4 h-4" />
+      <span>{String(mins).padStart(2, "0")}:{String(secs).padStart(2, "0")}</span>
+      {isBillable && (
+        <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 no-default-hover-elevate">
+          Billable ({mins - 15}+ min)
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+const vehicleTypeLabels: Record<string, string> = {
+  sedan: "Sedan",
+  suv: "SUV",
+  wheelchair_van: "Wheelchair Van",
+  stretcher_van: "Stretcher Van",
+  minivan: "Minivan",
+};
+
 function RideCard({ ride, driverId, onAction, isNew = false, navigationPreference = "default" }: RideCardProps) {
   const { toast } = useToast();
   const [showChat, setShowChat] = useState(false);
@@ -176,6 +212,41 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
         description: `Final fare: $${breakdown.finalFare}. Your earnings: $${data.ride.driverEarnings}` 
       });
       setShowCompleteDialog(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/rides"] });
+      onAction();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const startWaitMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/rides/${ride.id}/wait-start`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Wait Started", description: "Timer started. First 15 minutes are free." });
+      queryClient.invalidateQueries({ queryKey: ["/api/rides"] });
+      onAction();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const endWaitMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/rides/${ride.id}/wait-end`);
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      const waitMins = data?.waitTimeMinutes || 0;
+      const billable = Math.max(0, waitMins - 15);
+      toast({
+        title: "Patient Ready",
+        description: `Wait time: ${waitMins} min${billable > 0 ? ` ($${(billable * 0.50).toFixed(2)} will be added to fare)` : " (within free grace period)"}`,
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/rides"] });
       onAction();
     },
@@ -313,6 +384,12 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
               {ride.mobilityNeeds.join(", ")}
             </span>
           )}
+          {ride.requiredVehicleType && (
+            <Badge variant="outline" className="text-xs no-default-hover-elevate" data-testid={`badge-vehicle-type-${ride.id}`}>
+              <Car className="w-3 h-3 mr-1" />
+              {vehicleTypeLabels[ride.requiredVehicleType] || ride.requiredVehicleType}
+            </Badge>
+          )}
           {ride.distanceMiles && ride.status !== "requested" && (
             <span className="flex items-center gap-1">
               <Navigation className="w-4 h-4" />
@@ -336,6 +413,32 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
             )}
           </span>
         </div>
+
+        {isMyRide && ride.waitStartedAt && !ride.waitEndedAt && (
+          <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md" data-testid={`wait-indicator-${ride.id}`}>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="font-medium text-amber-800 dark:text-amber-300 flex items-center gap-1 text-sm">
+                <Clock className="w-4 h-4" />
+                Waiting at appointment
+              </span>
+              <WaitTimer startedAt={ride.waitStartedAt} />
+            </div>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              First 15 min free, then $0.50/min
+            </p>
+          </div>
+        )}
+
+        {isMyRide && ride.waitEndedAt && ride.waitTimeMinutes != null && (
+          <div className="mb-3 p-2 bg-muted rounded-md text-sm" data-testid={`wait-completed-${ride.id}`}>
+            <span className="font-medium">Wait completed:</span> {ride.waitTimeMinutes} min
+            {ride.waitTimeMinutes > 15 && (
+              <span className="text-orange-600 dark:text-orange-400 ml-1">
+                (+${((ride.waitTimeMinutes - 15) * 0.50).toFixed(2)} charge)
+              </span>
+            )}
+          </div>
+        )}
 
         {ride.medicalNotes && (
           <div className="text-sm mb-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md" data-testid={`medical-notes-${ride.id}`}>
@@ -369,6 +472,30 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
             >
               <nextAction.icon className="w-4 h-4 mr-2" />
               {isPending ? "Processing..." : nextAction.label}
+            </Button>
+          )}
+
+          {isMyRide && (ride.status === "arrived" || ride.status === "in_progress") && !ride.waitStartedAt && (
+            <Button
+              variant="outline"
+              onClick={() => startWaitMutation.mutate()}
+              disabled={startWaitMutation.isPending}
+              data-testid={`button-start-wait-${ride.id}`}
+            >
+              <Clock className="w-4 h-4 mr-2" />
+              {startWaitMutation.isPending ? "Starting..." : "Start Wait"}
+            </Button>
+          )}
+
+          {isMyRide && ride.waitStartedAt && !ride.waitEndedAt && (
+            <Button
+              variant="outline"
+              onClick={() => endWaitMutation.mutate()}
+              disabled={endWaitMutation.isPending}
+              data-testid={`button-patient-ready-${ride.id}`}
+            >
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+              {endWaitMutation.isPending ? "Ending..." : "Patient Ready"}
             </Button>
           )}
           
@@ -438,10 +565,26 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
                     <span>Tolls:</span>
                     <span>${parseFloat(actualTolls || "0").toFixed(2)}</span>
                   </div>
+                  {(ride.waitTimeMinutes || 0) > 0 && (
+                    <div className="flex justify-between">
+                      <span>Wait time ({ride.waitTimeMinutes} min{(ride.waitTimeMinutes || 0) <= 15 ? ", within grace" : ""}):</span>
+                      <span>
+                        {(ride.waitTimeMinutes || 0) > 15
+                          ? `$${(((ride.waitTimeMinutes || 0) - 15) * 0.50).toFixed(2)}`
+                          : "$0.00"}
+                      </span>
+                    </div>
+                  )}
+                  {ride.waitStartedAt && !ride.waitEndedAt && (
+                    <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                      <span>Wait in progress:</span>
+                      <span>TBD</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-medium text-foreground border-t pt-1 mt-1">
                     <span>Est. Total:</span>
                     <span>
-                      ${Math.max(22, (20 + parseFloat(ride.distanceMiles || "0") * 2.50) * parseFloat(ride.surgeMultiplier || "1") + parseFloat(actualTolls || "0")).toFixed(2)}
+                      ${Math.max(22, (20 + parseFloat(ride.distanceMiles || "0") * 2.50) * parseFloat(ride.surgeMultiplier || "1") + parseFloat(actualTolls || "0") + Math.max(0, (ride.waitTimeMinutes || 0) - 15) * 0.50).toFixed(2)}
                     </span>
                   </div>
                 </div>

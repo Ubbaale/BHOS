@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Phone, Car, Truck, ChevronLeft } from "lucide-react";
+import { Menu, X, Phone, Car, Truck, ChevronLeft, Building2, Heart } from "lucide-react";
 import logoImg from "@assets/Logocare-Picsart-BackgroundRemover_1767809315800.jpg";
 import JobPostingForm from "./JobPostingForm";
 import { usePlatform } from "@/hooks/use-platform";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export default function Header({ title, showBack }: { title?: string; showBack?: boolean }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [location, setLocation] = useLocation();
   const { showMobileUI, isIOS } = usePlatform();
+  const { isAuthenticated, user } = useAuth();
 
   const navLinks = [
     { name: "Services", href: "#services", isAnchor: true },
@@ -104,6 +106,26 @@ export default function Header({ title, showBack }: { title?: string; showBack?:
               <Truck className="w-4 h-4" />
               Driver Portal
             </Link>
+            {isAuthenticated && (
+              <Link
+                href="/caregiver"
+                className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                data-testid="link-nav-family"
+              >
+                <Heart className="w-4 h-4" />
+                Family Portal
+              </Link>
+            )}
+            {isAuthenticated && (
+              <Link
+                href="/facility"
+                className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                data-testid="link-nav-facility"
+              >
+                <Building2 className="w-4 h-4" />
+                Facility Portal
+              </Link>
+            )}
           </nav>
 
           <div className="hidden md:flex items-center gap-4">
@@ -172,6 +194,28 @@ export default function Header({ title, showBack }: { title?: string; showBack?:
                 <Truck className="w-4 h-4" />
                 Driver Portal
               </Link>
+              {isAuthenticated && (
+                <Link
+                  href="/caregiver"
+                  className="flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground active:bg-accent rounded-lg transition-colors touch-feedback"
+                  onClick={() => setMobileMenuOpen(false)}
+                  data-testid="link-mobile-family"
+                >
+                  <Heart className="w-4 h-4" />
+                  Family Portal
+                </Link>
+              )}
+              {isAuthenticated && (
+                <Link
+                  href="/facility"
+                  className="flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground active:bg-accent rounded-lg transition-colors touch-feedback"
+                  onClick={() => setMobileMenuOpen(false)}
+                  data-testid="link-mobile-facility"
+                >
+                  <Building2 className="w-4 h-4" />
+                  Facility Portal
+                </Link>
+              )}
               <div className="pt-3 mt-1 border-t flex flex-col gap-2">
                 <a
                   href="tel:774-581-9700"

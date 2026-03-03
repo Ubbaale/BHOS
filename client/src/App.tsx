@@ -27,6 +27,10 @@ import DriverTripHistory from "@/pages/driver-trip-history";
 import ICAgreement from "@/pages/ic-agreement";
 import TermsOfService from "@/pages/terms-of-service";
 import PrivacyPolicy from "@/pages/privacy-policy";
+import CaregiverDashboard from "@/pages/caregiver-dashboard";
+import CaregiverBookRide from "@/pages/caregiver-book-ride";
+import FacilityDashboard from "@/pages/facility-dashboard";
+import FacilityBookRide from "@/pages/facility-book-ride";
 
 function Router() {
   return (
@@ -73,6 +77,10 @@ function Router() {
           <AdminDrivers />
         </ProtectedRoute>
       </Route>
+      <Route path="/facility" component={FacilityDashboard} />
+      <Route path="/facility/book-ride" component={FacilityBookRide} />
+      <Route path="/caregiver" component={CaregiverDashboard} />
+      <Route path="/caregiver/book-ride/:patientId" component={CaregiverBookRide} />
       <Route path="/my-rides" component={RideHistory} />
       <Route path="/receipt/:id" component={TripReceipt} />
       <Route path="/report/:id" component={ReportIncident} />

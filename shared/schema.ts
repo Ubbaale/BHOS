@@ -279,6 +279,14 @@ export const rides = pgTable("rides", {
   // Journey monitoring
   lastActivityAt: timestamp("last_activity_at").defaultNow(),
   isAbandonedWarning: boolean("is_abandoned_warning").default(false),
+  // Wait time at appointment
+  waitStartedAt: timestamp("wait_started_at"),
+  waitEndedAt: timestamp("wait_ended_at"),
+  waitTimeMinutes: integer("wait_time_minutes"),
+  // Vehicle type requirement
+  requiredVehicleType: text("required_vehicle_type"),
+  // Facility reference
+  facilityId: integer("facility_id"),
   // Secure tracking token for patient access (expires when ride completes/cancels)
   trackingToken: text("tracking_token"),
   trackingTokenExpiresAt: timestamp("tracking_token_expires_at"),
@@ -318,6 +326,8 @@ export const insertRideSchema = z.object({
   memberId: z.string().optional(),
   groupNumber: z.string().optional(),
   priorAuthNumber: z.string().optional(),
+  requiredVehicleType: z.enum(["sedan", "suv", "wheelchair_van", "stretcher_van", "minivan"]).optional(),
+  facilityId: z.number().optional(),
 });
 export type InsertRide = z.infer<typeof insertRideSchema>;
 export type Ride = typeof rides.$inferSelect;
@@ -629,3 +639,71 @@ export const legalAgreements = pgTable("legal_agreements", {
 });
 
 export type LegalAgreement = typeof legalAgreements.$inferSelect;
+
+export const facilities = pgTable("facilities", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  address: text("address").notNull(),
+  lat: numeric("lat"),
+  lng: numeric("lng"),
+  phone: text("phone"),
+  email: text("email"),
+  facilityType: text("facility_type").notNull().default("hospital"),
+  contactPerson: text("contact_person"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFacilitySchema = z.object({
+  name: z.string().min(1),
+  address: z.string().min(1),
+  lat: z.string().optional(),
+  lng: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().email().optional(),
+  facilityType: z.enum(["hospital", "clinic", "rehab", "nursing_home", "pharmacy", "lab", "imaging"]).default("hospital"),
+  contactPerson: z.string().optional(),
+});
+export type InsertFacility = z.infer<typeof insertFacilitySchema>;
+export type Facility = typeof facilities.$inferSelect;
+
+export const facilityStaff = pgTable("facility_staff", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  facilityId: integer("facility_id").references(() => facilities.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  role: text("role").notNull().default("front_desk"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFacilityStaffSchema = z.object({
+  facilityId: z.number(),
+  userId: z.string(),
+  role: z.enum(["admin", "coordinator", "front_desk"]).default("front_desk"),
+});
+export type InsertFacilityStaff = z.infer<typeof insertFacilityStaffSchema>;
+export type FacilityStaff = typeof facilityStaff.$inferSelect;
+
+export const caregiverPatients = pgTable("caregiver_patients", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  caregiverId: varchar("caregiver_id").references(() => users.id).notNull(),
+  patientName: text("patient_name").notNull(),
+  patientPhone: text("patient_phone").notNull(),
+  patientEmail: text("patient_email"),
+  relationship: text("relationship").notNull().default("caregiver"),
+  mobilityNeeds: text("mobility_needs").array().default([]),
+  medicalNotes: text("medical_notes"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCaregiverPatientSchema = z.object({
+  patientName: z.string().min(1),
+  patientPhone: z.string().min(1),
+  patientEmail: z.string().email().optional(),
+  relationship: z.enum(["spouse", "child", "parent", "sibling", "caregiver", "other"]).default("caregiver"),
+  mobilityNeeds: z.array(z.string()).optional().default([]),
+  medicalNotes: z.string().optional(),
+});
+export type InsertCaregiverPatient = z.infer<typeof insertCaregiverPatientSchema>;
+export type CaregiverPatient = typeof caregiverPatients.$inferSelect;

@@ -13,10 +13,14 @@ import {
   type PatientAccount, type SurgePricing, type AnnualEarnings,
   type IncidentReport, type InsertIncidentReport,
   type DriverPayout,
-  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing, annualEarnings, contractorAgreements, incidentReports, driverPayouts
+  type Facility, type InsertFacility,
+  type FacilityStaff, type InsertFacilityStaff,
+  type CaregiverPatient, type InsertCaregiverPatient,
+  users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing, annualEarnings, contractorAgreements, incidentReports, driverPayouts,
+  facilities, facilityStaff, caregiverPatients
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, ne, and, lt, isNull } from "drizzle-orm";
+import { eq, desc, ne, and, lt, isNull, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -162,6 +166,30 @@ export interface IStorage {
   updateDriverStripeConnect(driverId: number, accountId: string): Promise<DriverProfile | undefined>;
   updateDriverStripeConnectOnboarded(driverId: number, onboarded: boolean): Promise<DriverProfile | undefined>;
   updateDriverPayoutPreference(driverId: number, preference: string): Promise<DriverProfile | undefined>;
+
+  // Facilities
+  createFacility(facility: InsertFacility): Promise<Facility>;
+  getFacility(id: number): Promise<Facility | undefined>;
+  getFacilities(): Promise<Facility[]>;
+
+  // Facility Staff
+  createFacilityStaff(staff: InsertFacilityStaff): Promise<FacilityStaff>;
+  getFacilityStaff(facilityId: number): Promise<FacilityStaff[]>;
+  getStaffByUserId(userId: string): Promise<(FacilityStaff & { facility?: Facility }) | undefined>;
+
+  // Caregiver Patients
+  addCaregiverPatient(caregiverId: string, patient: InsertCaregiverPatient): Promise<CaregiverPatient>;
+  getCaregiverPatients(caregiverId: string): Promise<CaregiverPatient[]>;
+  getCaregiverPatient(id: number): Promise<CaregiverPatient | undefined>;
+  updateCaregiverPatient(id: number, data: Partial<InsertCaregiverPatient>): Promise<CaregiverPatient | undefined>;
+  removeCaregiverPatient(id: number): Promise<void>;
+
+  // Ride wait time
+  startRideWait(rideId: number): Promise<Ride | undefined>;
+  endRideWait(rideId: number): Promise<Ride | undefined>;
+
+  // Rides by facility
+  getRidesByFacility(facilityId: number): Promise<Ride[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1080,6 +1108,89 @@ export class DatabaseStorage implements IStorage {
       .where(eq(driverProfiles.id, driverId))
       .returning();
     return updated;
+  }
+
+  async createFacility(facility: InsertFacility): Promise<Facility> {
+    const [created] = await db.insert(facilities).values(facility).returning();
+    return created;
+  }
+
+  async getFacility(id: number): Promise<Facility | undefined> {
+    const [facility] = await db.select().from(facilities).where(eq(facilities.id, id));
+    return facility;
+  }
+
+  async getFacilities(): Promise<Facility[]> {
+    return db.select().from(facilities).where(eq(facilities.isActive, true)).orderBy(desc(facilities.createdAt));
+  }
+
+  async createFacilityStaff(staff: InsertFacilityStaff): Promise<FacilityStaff> {
+    const [created] = await db.insert(facilityStaff).values(staff).returning();
+    return created;
+  }
+
+  async getFacilityStaff(facilityId: number): Promise<FacilityStaff[]> {
+    return db.select().from(facilityStaff)
+      .where(and(eq(facilityStaff.facilityId, facilityId), eq(facilityStaff.isActive, true)));
+  }
+
+  async getStaffByUserId(userId: string): Promise<(FacilityStaff & { facility?: Facility }) | undefined> {
+    const [staff] = await db.select().from(facilityStaff)
+      .where(and(eq(facilityStaff.userId, userId), eq(facilityStaff.isActive, true)));
+    if (!staff) return undefined;
+    const facility = await this.getFacility(staff.facilityId);
+    return { ...staff, facility: facility || undefined };
+  }
+
+  async addCaregiverPatient(caregiverId: string, patient: InsertCaregiverPatient): Promise<CaregiverPatient> {
+    const [created] = await db.insert(caregiverPatients).values({ ...patient, caregiverId }).returning();
+    return created;
+  }
+
+  async getCaregiverPatients(caregiverId: string): Promise<CaregiverPatient[]> {
+    return db.select().from(caregiverPatients)
+      .where(and(eq(caregiverPatients.caregiverId, caregiverId), eq(caregiverPatients.isActive, true)))
+      .orderBy(desc(caregiverPatients.createdAt));
+  }
+
+  async getCaregiverPatient(id: number): Promise<CaregiverPatient | undefined> {
+    const [patient] = await db.select().from(caregiverPatients).where(eq(caregiverPatients.id, id));
+    return patient;
+  }
+
+  async updateCaregiverPatient(id: number, data: Partial<InsertCaregiverPatient>): Promise<CaregiverPatient | undefined> {
+    const [updated] = await db.update(caregiverPatients).set(data).where(eq(caregiverPatients.id, id)).returning();
+    return updated;
+  }
+
+  async removeCaregiverPatient(id: number): Promise<void> {
+    await db.update(caregiverPatients).set({ isActive: false }).where(eq(caregiverPatients.id, id));
+  }
+
+  async startRideWait(rideId: number): Promise<Ride | undefined> {
+    const [updated] = await db.update(rides)
+      .set({ waitStartedAt: new Date() })
+      .where(eq(rides.id, rideId))
+      .returning();
+    return updated;
+  }
+
+  async endRideWait(rideId: number): Promise<Ride | undefined> {
+    const ride = await this.getRide(rideId);
+    if (!ride || !ride.waitStartedAt) return ride;
+    const waitMs = new Date().getTime() - new Date(ride.waitStartedAt).getTime();
+    const waitMinutes = Math.ceil(waitMs / 60000);
+    const [updated] = await db.update(rides)
+      .set({ waitEndedAt: new Date(), waitTimeMinutes: waitMinutes })
+      .where(eq(rides.id, rideId))
+      .returning();
+    return updated;
+  }
+
+  async getRidesByFacility(facilityId: number): Promise<Ride[]> {
+    return db.select().from(rides)
+      .where(eq(rides.facilityId, facilityId))
+      .orderBy(desc(rides.createdAt));
   }
 }
 

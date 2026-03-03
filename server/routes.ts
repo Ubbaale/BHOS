@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -2188,7 +2188,11 @@ export async function registerRoutes(
         const tolls = parseFloat(existingRide.actualTolls || existingRide.estimatedTolls || "0");
         const rawFare = baseFare + (distance * perMile);
         const fareWithSurge = rawFare * surge;
-        const finalFare = Math.max(22, fareWithSurge + tolls);
+        // Wait time charges: $0.50/min after 15 min grace
+        const waitMin = existingRide.waitTimeMinutes || 0;
+        const billableWait = Math.max(0, waitMin - 15);
+        const waitCharge = billableWait * 0.50;
+        const finalFare = Math.max(22, fareWithSurge + tolls + waitCharge);
         
         const ride = await storage.completeRide(id, finalFare.toFixed(2), tolls.toString(), distance.toFixed(2));
         
@@ -2770,7 +2774,12 @@ export async function registerRoutes(
       const surge = parseFloat(ride.surgeMultiplier || "1");
       const tolls = actualTolls || parseFloat(ride.actualTolls || ride.estimatedTolls || "0");
       
-      let finalFare = (baseFare + (distance * perMile)) * surge + tolls;
+      // Wait time charges: $0.50/min after 15 min free grace
+      const waitMinutes = ride.waitTimeMinutes || 0;
+      const billableWaitMinutes = Math.max(0, waitMinutes - 15);
+      const waitTimeCharge = billableWaitMinutes * 0.50;
+
+      let finalFare = (baseFare + (distance * perMile)) * surge + tolls + waitTimeCharge;
       finalFare = Math.max(finalFare, 22); // Minimum fare
       
       const completedRide = await storage.completeRide(rideId, finalFare.toFixed(2), tolls.toString(), distance.toString());
@@ -2778,7 +2787,7 @@ export async function registerRoutes(
       await storage.createRideEvent({
         rideId,
         status: "completed",
-        note: `Trip completed. Final fare: $${finalFare.toFixed(2)}`
+        note: `Trip completed. Final fare: $${finalFare.toFixed(2)}${waitTimeCharge > 0 ? ` (includes $${waitTimeCharge.toFixed(2)} wait time)` : ''}`
       });
 
       // Update driver stats
@@ -2796,6 +2805,9 @@ export async function registerRoutes(
           perMileRate: perMile,
           surgeMultiplier: surge,
           tolls,
+          waitTimeMinutes: waitMinutes,
+          billableWaitMinutes,
+          waitTimeCharge,
           finalFare: finalFare.toFixed(2),
         }
       });
@@ -5175,6 +5187,334 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
         message: "Failed to process refund",
         error: error.message 
       });
+    }
+  });
+
+  // ==========================================
+  // Facility Management Routes
+  // ==========================================
+
+  app.post("/api/admin/facilities", requireAdmin, async (req, res) => {
+    try {
+      const parsed = insertFacilitySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid facility data", errors: parsed.error.errors });
+      }
+      const facility = await storage.createFacility(parsed.data);
+      res.status(201).json(facility);
+    } catch (error) {
+      console.error("Error creating facility:", error);
+      res.status(500).json({ message: "Failed to create facility" });
+    }
+  });
+
+  app.get("/api/facilities", async (_req, res) => {
+    try {
+      const allFacilities = await storage.getFacilities();
+      res.json(allFacilities);
+    } catch (error) {
+      console.error("Error fetching facilities:", error);
+      res.status(500).json({ message: "Failed to fetch facilities" });
+    }
+  });
+
+  app.post("/api/admin/facilities/:id/staff", requireAdmin, async (req, res) => {
+    try {
+      const facilityId = parseInt(req.params.id);
+      const facility = await storage.getFacility(facilityId);
+      if (!facility) {
+        return res.status(404).json({ message: "Facility not found" });
+      }
+      const parsed = insertFacilityStaffSchema.safeParse({ ...req.body, facilityId });
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid staff data", errors: parsed.error.errors });
+      }
+      const staff = await storage.createFacilityStaff(parsed.data);
+      res.status(201).json(staff);
+    } catch (error) {
+      console.error("Error adding facility staff:", error);
+      res.status(500).json({ message: "Failed to add facility staff" });
+    }
+  });
+
+  const requireFacilityStaff = async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    const staff = await storage.getStaffByUserId(req.session.userId);
+    if (!staff) {
+      return res.status(403).json({ message: "Facility staff access required" });
+    }
+    (req as any).facilityStaff = staff;
+    next();
+  };
+
+  app.get("/api/facility/dashboard", requireFacilityStaff, async (req, res) => {
+    try {
+      const staff = (req as any).facilityStaff;
+      const facilityRides = await storage.getRidesByFacility(staff.facilityId);
+      res.json({ facility: staff.facility, rides: facilityRides, staff });
+    } catch (error) {
+      console.error("Error fetching facility dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch facility dashboard" });
+    }
+  });
+
+  app.get("/api/facility/staff-check", requireAuth, async (req, res) => {
+    try {
+      const staff = await storage.getStaffByUserId(req.session.userId!);
+      res.json({ isFacilityStaff: !!staff, staff: staff || null });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to check facility staff status" });
+    }
+  });
+
+  app.post("/api/facility/book-ride", requireFacilityStaff, async (req, res) => {
+    try {
+      const staff = (req as any).facilityStaff;
+      const facility = staff.facility;
+
+      const parsed = insertRideSchema.safeParse({
+        ...req.body,
+        facilityId: facility.id,
+        bookedByOther: true,
+        bookerName: `${facility.name} Staff`,
+        bookerPhone: facility.phone || "",
+        bookerEmail: facility.email || "",
+        bookerRelation: "caregiver",
+      });
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid ride data", errors: parsed.error.errors });
+      }
+
+      const verificationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const trackingToken = crypto.randomBytes(32).toString('hex');
+      const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const ride = await storage.createRide({
+        ...parsed.data,
+        trackingToken,
+        trackingTokenExpiresAt: tokenExpiry,
+      });
+
+      await storage.setRideVerificationCode(ride.id, verificationCode);
+
+      await storage.createRideEvent({
+        rideId: ride.id,
+        status: "requested",
+        note: `Ride booked by ${facility.name} (facility staff)`,
+      });
+
+      broadcastRideUpdate("new_ride", ride);
+
+      res.status(201).json(ride);
+    } catch (error) {
+      console.error("Error booking facility ride:", error);
+      res.status(500).json({ message: "Failed to book ride" });
+    }
+  });
+
+  // ==========================================
+  // Caregiver Portal Routes
+  // ==========================================
+
+  app.get("/api/caregiver/patients", requireAuth, async (req, res) => {
+    try {
+      const patients = await storage.getCaregiverPatients(req.session.userId!);
+      res.json(patients);
+    } catch (error) {
+      console.error("Error fetching caregiver patients:", error);
+      res.status(500).json({ message: "Failed to fetch patients" });
+    }
+  });
+
+  app.post("/api/caregiver/patients", requireAuth, async (req, res) => {
+    try {
+      const parsed = insertCaregiverPatientSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid patient data", errors: parsed.error.errors });
+      }
+      const patient = await storage.addCaregiverPatient(req.session.userId!, parsed.data);
+      res.status(201).json(patient);
+    } catch (error) {
+      console.error("Error adding caregiver patient:", error);
+      res.status(500).json({ message: "Failed to add patient" });
+    }
+  });
+
+  app.put("/api/caregiver/patients/:id", requireAuth, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.id);
+      const existing = await storage.getCaregiverPatient(patientId);
+      if (!existing || existing.caregiverId !== req.session.userId) {
+        return res.status(404).json({ message: "Patient not found" });
+      }
+      const parsed = insertCaregiverPatientSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid update data", errors: parsed.error.errors });
+      }
+      const updated = await storage.updateCaregiverPatient(patientId, parsed.data);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating caregiver patient:", error);
+      res.status(500).json({ message: "Failed to update patient" });
+    }
+  });
+
+  app.delete("/api/caregiver/patients/:id", requireAuth, async (req, res) => {
+    try {
+      const patientId = parseInt(req.params.id);
+      const existing = await storage.getCaregiverPatient(patientId);
+      if (!existing || existing.caregiverId !== req.session.userId) {
+        return res.status(404).json({ message: "Patient not found" });
+      }
+      await storage.removeCaregiverPatient(patientId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing caregiver patient:", error);
+      res.status(500).json({ message: "Failed to remove patient" });
+    }
+  });
+
+  app.get("/api/caregiver/dashboard", requireAuth, async (req, res) => {
+    try {
+      const patients = await storage.getCaregiverPatients(req.session.userId!);
+      const patientPhones = patients.map(p => p.patientPhone);
+      let allRides: any[] = [];
+      for (const phone of patientPhones) {
+        const rides = await storage.getRidesByPhone(phone);
+        allRides = allRides.concat(rides);
+      }
+      allRides.sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+      res.json({ patients, rides: allRides });
+    } catch (error) {
+      console.error("Error fetching caregiver dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch dashboard" });
+    }
+  });
+
+  app.post("/api/caregiver/book-ride", requireAuth, async (req, res) => {
+    try {
+      const { patientId: caregiverPatientId, ...rideData } = req.body;
+
+      let patientInfo: any = {};
+      if (caregiverPatientId) {
+        const patient = await storage.getCaregiverPatient(parseInt(caregiverPatientId));
+        if (!patient || patient.caregiverId !== req.session.userId) {
+          return res.status(404).json({ message: "Patient not found" });
+        }
+        patientInfo = {
+          patientName: patient.patientName,
+          patientPhone: patient.patientPhone,
+          patientEmail: patient.patientEmail || undefined,
+          mobilityNeeds: patient.mobilityNeeds || [],
+          medicalNotes: patient.medicalNotes || undefined,
+        };
+      }
+
+      const user = await storage.getUser(req.session.userId!);
+      const driverProfile = user ? await storage.getDriverByUserId(user.id) : null;
+      const parsed = insertRideSchema.safeParse({
+        ...patientInfo,
+        ...rideData,
+        bookedByOther: true,
+        bookerName: user?.username || "Caregiver",
+        bookerPhone: driverProfile?.phone || patientInfo.patientPhone || "",
+        bookerEmail: driverProfile?.email || patientInfo.patientEmail || "",
+        bookerRelation: "caregiver",
+      });
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid ride data", errors: parsed.error.errors });
+      }
+
+      const verificationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const trackingToken = crypto.randomBytes(32).toString('hex');
+      const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const ride = await storage.createRide({
+        ...parsed.data,
+        trackingToken,
+        trackingTokenExpiresAt: tokenExpiry,
+      });
+
+      await storage.setRideVerificationCode(ride.id, verificationCode);
+
+      await storage.createRideEvent({
+        rideId: ride.id,
+        status: "requested",
+        note: `Ride booked by caregiver for ${parsed.data.patientName}`,
+      });
+
+      broadcastRideUpdate("new_ride", ride);
+
+      res.status(201).json(ride);
+    } catch (error) {
+      console.error("Error booking caregiver ride:", error);
+      res.status(500).json({ message: "Failed to book ride" });
+    }
+  });
+
+  // ==========================================
+  // Wait Time Routes
+  // ==========================================
+
+  app.post("/api/rides/:id/wait-start", requireDriver, async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      const driverProfile = await storage.getDriverByUserId(req.session.userId!);
+      if (!driverProfile || ride.driverId !== driverProfile.id) {
+        return res.status(403).json({ message: "Not authorized for this ride" });
+      }
+      if (ride.waitStartedAt) {
+        return res.status(400).json({ message: "Wait already started" });
+      }
+      const updated = await storage.startRideWait(rideId);
+      await storage.createRideEvent({
+        rideId,
+        status: ride.status,
+        note: "Driver started waiting at appointment location",
+      });
+      broadcastRideUpdate("status_change", updated);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error starting wait:", error);
+      res.status(500).json({ message: "Failed to start wait" });
+    }
+  });
+
+  app.post("/api/rides/:id/wait-end", requireDriver, async (req, res) => {
+    try {
+      const rideId = parseInt(req.params.id);
+      const ride = await storage.getRide(rideId);
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+      const driverProfile = await storage.getDriverByUserId(req.session.userId!);
+      if (!driverProfile || ride.driverId !== driverProfile.id) {
+        return res.status(403).json({ message: "Not authorized for this ride" });
+      }
+      if (!ride.waitStartedAt) {
+        return res.status(400).json({ message: "Wait not started" });
+      }
+      if (ride.waitEndedAt) {
+        return res.status(400).json({ message: "Wait already ended" });
+      }
+      const updated = await storage.endRideWait(rideId);
+      const waitMinutes = updated?.waitTimeMinutes || 0;
+      await storage.createRideEvent({
+        rideId,
+        status: ride.status,
+        note: `Patient ready. Wait time: ${waitMinutes} minutes`,
+      });
+      broadcastRideUpdate("status_change", updated);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error ending wait:", error);
+      res.status(500).json({ message: "Failed to end wait" });
     }
   });
 

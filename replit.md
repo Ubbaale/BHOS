@@ -22,7 +22,9 @@ Preferred communication style: Simple, everyday language.
     -   **Marketplace Model**: Patients post requests to a driver pool, drivers claim jobs.
     -   **Ride Workflow**: Supports statuses from `Requested` to `Completed`, with navigation integration (Google Maps, Waze, Apple Maps).
     -   **Real-time**: WebSocket-based updates, notifications, and in-app chat between drivers and patients.
-    -   **Fare Calculation**: Distance-based pricing with configurable base fare and per-mile rates.
+    -   **Wait Time at Appointment**: Drivers can mark "Start Wait" / "Patient Ready" on active rides. Wait time tracked in minutes. $0.50/min charge after 15-min free grace period. Shown in fare breakdown on ride completion.
+    -   **Vehicle Type Matching**: Riders can request specific vehicle types (Sedan, SUV, Wheelchair Van, Stretcher Van, Minivan). Shown as badges on ride cards. Drivers see required vehicle type prominently.
+    -   **Fare Calculation**: Distance-based pricing with configurable base fare and per-mile rates. Includes wait time charges.
     -   **Safety**: Trip sharing, SOS button, verification codes, driver info display, ETA tracking.
     -   **Policy Handling**: 15-minute free cancellation window, capped surge pricing (1.25x for self-pay, none for insurance rides), tiered patient accounts based on balance, traffic delay reporting.
     -   **Patient Email Notifications**: When a ride is booked on behalf of a patient (bookedByOther=true), an email is sent to the patient's email address notifying them of the ride details. Uses SendGrid.
@@ -36,6 +38,23 @@ Preferred communication style: Simple, everyday language.
     -   **Enhanced Driver Card**: Uber-style driver info display with large avatar, vehicle details, license plate, verification code, and integrated call/message buttons.
     -   **Surge Zone Map**: Driver dashboard shows color-coded demand zones on map (red=very high, orange=high, yellow=moderate). Surge banner displays when multiplier >1x. Route lines connect pickup/dropoff markers on map. `GET /api/surge/zones` returns clustered demand zones with multiplier, label, and radius.
     -   **Ride Request Direction**: Each ride card shows trip direction (compass heading N/NE/E/etc.), distance, per-mile rate, and surge indicator. Direction arrow rotates to show trip heading.
+-   **Caregiver/Family Portal** (`/caregiver`):
+    -   Dashboard to manage rides for loved ones with "My Patients" section.
+    -   Add/edit/remove patients with name, phone, email, relationship, mobility needs, medical notes.
+    -   Quick "Book Ride" button on each patient card links to streamlined booking at `/caregiver/book-ride/:patientId`.
+    -   Patient info auto-fills in booking form; auto-sets `bookedByOther=true`.
+    -   Summary stats: total rides, active rides, upcoming rides.
+    -   Recent rides list across all managed patients.
+    -   API: `GET/POST/PUT/DELETE /api/caregiver/patients`, `GET /api/caregiver/dashboard`, `POST /api/caregiver/book-ride`.
+-   **Facility Discharge Coordination** (`/facility`):
+    -   Hospital/clinic staff portal for booking patient transport.
+    -   Dashboard shows facility info, quick stats (active/completed/waiting), ride tables with tabs.
+    -   Two transport presets: "Discharge Transport" (facility→home) and "Appointment Transport" (home→facility).
+    -   Facility address auto-fills based on staff's assigned facility.
+    -   Supports vehicle type selection, mobility needs checkboxes, wait-at-appointment toggle.
+    -   Admin creates facilities via `POST /api/admin/facilities` and assigns staff via `POST /api/admin/facilities/:id/staff`.
+    -   API: `GET /api/facilities`, `GET /api/facility/dashboard`, `POST /api/facility/book-ride`, `GET /api/facility/staff-check`.
+    -   Tables: `facilities`, `facility_staff`, `caregiver_patients`.
 -   **Driver Management**:
     -   **Onboarding**: Self-service application, admin review, KYC verification (document upload, admin dashboard).
     -   **Earnings**: Dashboard displaying net pay, tips, and 1099-NEC generation for tax purposes.

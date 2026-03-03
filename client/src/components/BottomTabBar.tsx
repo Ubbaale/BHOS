@@ -1,5 +1,5 @@
 import { useLocation, Link } from "wouter";
-import { Home, Car, Briefcase, AlertTriangle, User, ClipboardList } from "lucide-react";
+import { Home, Car, Briefcase, AlertTriangle, User, ClipboardList, Heart } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { usePlatform } from "@/hooks/use-platform";
 import { cn } from "@/lib/utils";
@@ -8,7 +8,7 @@ const tabs = [
   { icon: Home, label: "Home", path: "/", testId: "tab-home" },
   { icon: Car, label: "Book Ride", path: "/book-ride", testId: "tab-book-ride" },
   { icon: ClipboardList, label: "My Rides", path: "/my-rides", testId: "tab-my-rides" },
-  { icon: Briefcase, label: "Jobs", path: "/", hash: "#jobs", testId: "tab-jobs" },
+  { icon: Heart, label: "Family", path: "/caregiver", testId: "tab-family" },
   { icon: User, label: "Account", path: "/driver/login", testId: "tab-account" },
 ];
 
