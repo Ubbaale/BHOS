@@ -191,9 +191,22 @@ Features:
 - Book rides instantly or schedule in advance
 - Real-time driver tracking and ETAs
 - Secure in-app messaging with your driver
-- Wheelchair and mobility assistance options
+- Wheelchair, stretcher, and mobility assistance options
+- Vehicle type selection (Sedan, SUV, Wheelchair Van, Stretcher Van, Minivan)
 - Insurance billing support
 - 24/7 customer support
+
+Caregiver/Family Portal:
+- Manage rides for loved ones from one dashboard
+- Add and track multiple patients
+- Quick booking with pre-filled patient info
+- View ride history across all managed patients
+
+Facility Discharge Coordination:
+- Hospital and clinic staff can book patient transport
+- Discharge and appointment transport presets
+- Facility address auto-fills for fast booking
+- Track all facility rides in one place
 
 For Healthcare Workers:
 - Find healthcare staffing opportunities
@@ -204,6 +217,8 @@ For Drivers:
 - Accept ride requests in your area
 - Navigate with integrated maps
 - Track your earnings and tips
+- Wait time tracking at appointments
+- Surge zone demand map
 
 Download Carehub today for reliable medical transportation!
 

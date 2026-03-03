@@ -2,8 +2,8 @@
   "appId": "com.carehubapp.app",
   "appName": "Carehub",
   "appSubtitle": "Medical Transport & Healthcare",
-  "version": "1.1.0",
-  "buildNumber": 2,
+  "version": "1.2.0",
+  "buildNumber": 3,
   
   "ios": {
     "bundleId": "com.carehubapp.app",
@@ -30,29 +30,29 @@
       "name": "Carehub - Medical Transport",
       "subtitle": "NEMT Rides Made Easy",
       "shortDescription": "Book medical rides instantly. NEMT transportation made easy.",
-      "fullDescription": "Carehub connects patients with reliable non-emergency medical transportation (NEMT) services. Whether you need a ride to a doctor's appointment, dialysis treatment, or physical therapy session, Carehub makes booking easy and stress-free.\n\nFeatures:\n• Book rides instantly or schedule in advance\n• Real-time driver tracking and ETAs\n• Secure in-app messaging with your driver\n• Wheelchair and mobility assistance options\n• Insurance billing support\n• 24/7 customer support\n\nFor Healthcare Workers:\n• Find healthcare staffing opportunities\n• Apply for positions at top facilities\n• Manage your schedule and availability\n\nFor Drivers:\n• Accept ride requests in your area\n• Navigate with integrated maps\n• Track your earnings and tips\n\nDownload Carehub today for reliable medical transportation!",
-      "keywords": "medical transport,NEMT,healthcare ride,doctor appointment,medical taxi,wheelchair transport,dialysis transport,healthcare staffing",
-      "whatsNew": "Version 1.1.0 Updates:\n• New mobile-optimized quick action tiles for easier navigation\n• Enhanced Book a Ride interface with prominent scheduling options\n• Improved Driver Portal access from mobile devices\n• Production domain support for carehubapp.com\n• Enhanced security with updated CORS and CSP headers\n• Better mobile responsiveness throughout the app"
+      "fullDescription": "Carehub connects patients with reliable non-emergency medical transportation (NEMT) services. Whether you need a ride to a doctor's appointment, dialysis treatment, or physical therapy session, Carehub makes booking easy and stress-free.\n\nFeatures:\n• Book rides instantly or schedule in advance\n• Real-time driver tracking and ETAs\n• Secure in-app messaging with your driver\n• Wheelchair, stretcher, and mobility assistance options\n• Vehicle type selection (Sedan, SUV, Wheelchair Van, Stretcher Van, Minivan)\n• Insurance billing support\n• 24/7 customer support\n\nNEW - Caregiver/Family Portal:\n• Manage rides for loved ones from one dashboard\n• Add and track multiple patients\n• Quick booking with pre-filled patient info\n• View ride history across all managed patients\n\nNEW - Facility Discharge Coordination:\n• Hospital and clinic staff can book patient transport\n• Discharge and appointment transport presets\n• Facility address auto-fills for fast booking\n• Track all facility rides in one place\n\nFor Healthcare Workers:\n• Find healthcare staffing opportunities\n• Apply for positions at top facilities\n• Manage your schedule and availability\n\nFor Drivers:\n• Accept ride requests in your area\n• Navigate with integrated maps\n• Track your earnings and tips\n• Wait time tracking at appointments\n• Surge zone demand map\n\nDownload Carehub today for reliable medical transportation!",
+      "keywords": "medical transport,NEMT,healthcare ride,doctor appointment,medical taxi,wheelchair transport,dialysis transport,healthcare staffing,caregiver,discharge,hospital transport",
+      "whatsNew": "Version 1.2.0 Updates:\n• NEW Caregiver/Family Portal - Manage rides for loved ones from one dashboard\n• NEW Facility Discharge Coordination - Hospital staff can book patient transport\n• Vehicle type selection - Choose Sedan, SUV, Wheelchair Van, Stretcher Van, or Minivan\n• Wait time tracking at appointments ($0.50/min after 15-min free grace)\n• Surge zone map for drivers with color-coded demand zones\n• Enhanced driver dashboard with compliance enforcement\n• Legal compliance - Terms of Service, IC Agreement with digital signatures\n• Audit logging for sensitive healthcare actions\n• Improved security with ride ownership verification"
     }
   },
   
   "screenshots": {
     "iphone6_7": {
       "size": "1290x2796",
-      "count": 6,
-      "required": ["home", "booking", "tracking", "chat", "driver", "profile"]
+      "count": 8,
+      "required": ["home", "booking", "tracking", "chat", "driver", "caregiver", "facility", "profile"]
     },
     "iphone6_5": {
       "size": "1284x2778",
-      "count": 6
+      "count": 8
     },
     "iphone5_5": {
       "size": "1242x2208",
-      "count": 6
+      "count": 8
     },
     "ipadPro12_9": {
       "size": "2048x2732",
-      "count": 6
+      "count": 8
     },
     "android_phone": {
       "size": "1080x1920",
