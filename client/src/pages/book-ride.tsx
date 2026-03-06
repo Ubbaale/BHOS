@@ -1801,21 +1801,21 @@ export default function BookRide() {
                               >
                                 <Label
                                   htmlFor="self_pay"
-                                  className={`flex items-center gap-3 rounded-lg border-2 p-3.5 cursor-pointer transition-colors active:bg-accent/50 ${
+                                  className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
                                     field.value === "self_pay"
                                       ? "border-primary bg-primary/5"
                                       : "border-border hover:bg-accent/30"
                                   }`}
                                 >
                                   <RadioGroupItem value="self_pay" id="self_pay" data-testid="radio-self-pay" />
-                                  <span className="font-medium select-none">Self Pay</span>
+                                  <span className="text-sm font-medium select-none">Self Pay</span>
                                 </Label>
                                 <Label
                                   htmlFor="insurance"
-                                  className="flex items-center gap-3 rounded-lg border-2 border-border p-3.5 cursor-not-allowed opacity-50"
+                                  className="flex items-center gap-3 rounded-lg border border-border p-3 cursor-not-allowed opacity-50"
                                 >
                                   <RadioGroupItem value="insurance" id="insurance" data-testid="radio-insurance" disabled />
-                                  <span className="text-muted-foreground select-none">Insurance <span className="text-xs italic">(Coming Soon)</span></span>
+                                  <span className="text-sm text-muted-foreground select-none">Insurance <span className="text-xs italic">(Coming Soon)</span></span>
                                 </Label>
                               </RadioGroup>
                             </FormControl>

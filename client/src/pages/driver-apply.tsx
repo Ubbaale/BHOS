@@ -344,7 +344,7 @@ export default function DriverApply() {
                         render={({ field }) => (
                           <FormItem>
                             <label
-                              className={`flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors active:bg-accent/50 ${
+                              className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
                                 field.value ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
                               }`}
                             >
@@ -375,7 +375,7 @@ export default function DriverApply() {
                         render={({ field }) => (
                           <FormItem>
                             <label
-                              className={`flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors active:bg-accent/50 ${
+                              className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
                                 field.value ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
                               }`}
                             >
@@ -408,7 +408,7 @@ export default function DriverApply() {
                     render={({ field }) => (
                       <FormItem>
                         <label
-                          className={`flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors active:bg-accent/50 ${
+                          className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
                             field.value === true ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
                           }`}
                         >

@@ -121,7 +121,7 @@ export default function ICAgreement() {
 
             <label
               htmlFor="acknowledge"
-              className={`flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors active:bg-accent/50 ${
+              className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
                 acknowledged ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
               }`}
             >
