@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -638,33 +637,27 @@ export default function CaregiverBookRide() {
                     <Accessibility className="w-4 h-4" />
                     Mobility Needs
                   </Label>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="flex flex-wrap gap-2">
                     {mobilityOptions.map((option) => (
-                      <label
+                      <button
                         key={option.id}
-                        htmlFor={`ride-mobility-${option.id}`}
-                        className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer transition-all duration-150 active:scale-[0.98] ${
+                        type="button"
+                        onClick={() => {
+                          setSelectedNeeds((prev) =>
+                            prev.includes(option.id)
+                              ? prev.filter((n) => n !== option.id)
+                              : [...prev, option.id]
+                          );
+                        }}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-150 active:scale-[0.96] ${
                           selectedNeeds.includes(option.id)
-                            ? "border-primary bg-primary/5 shadow-sm"
-                            : "border-border hover:border-gray-300 hover:bg-accent/20"
+                            ? "bg-black text-white dark:bg-white dark:text-black"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                         }`}
+                        data-testid={`checkbox-ride-mobility-${option.id}`}
                       >
-                        <Checkbox
-                          id={`ride-mobility-${option.id}`}
-                          checked={selectedNeeds.includes(option.id)}
-                          onCheckedChange={(checked) => {
-                            setSelectedNeeds((prev) =>
-                              checked
-                                ? [...prev, option.id]
-                                : prev.filter((n) => n !== option.id)
-                            );
-                          }}
-                          data-testid={`checkbox-ride-mobility-${option.id}`}
-                        />
-                        <span className="text-sm select-none">
-                          {option.label}
-                        </span>
-                      </label>
+                        {option.label}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -673,14 +666,13 @@ export default function CaregiverBookRide() {
                   control={form.control}
                   name="waitAtAppointment"
                   render={({ field }) => (
-                    <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3">
-                      <div>
-                        <FormLabel className="flex items-center gap-2 mb-1">
-                          <Clock className="w-4 h-4" />
-                          Driver Should Wait
+                    <FormItem className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+                      <div className="pr-4">
+                        <FormLabel className="text-sm font-medium">
+                          Driver should wait
                         </FormLabel>
                         <FormDescription className="text-xs">
-                          Driver will wait at the appointment location for the patient
+                          Driver waits at the appointment for the patient
                         </FormDescription>
                       </div>
                       <FormControl>
@@ -746,7 +738,7 @@ export default function CaregiverBookRide() {
 
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full h-12 rounded-full bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 text-base font-semibold"
                   disabled={bookRideMutation.isPending}
                   data-testid="button-submit-booking"
                 >

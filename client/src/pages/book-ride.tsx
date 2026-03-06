@@ -1416,14 +1416,13 @@ export default function BookRide() {
                     control={form.control}
                     name="bookedByOther"
                     render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
-                        <div className="space-y-0.5">
-                          <FormLabel className="text-sm font-medium flex items-center gap-2">
-                            <Heart className="w-4 h-4 text-primary" />
-                            Booking for a family member or loved one?
+                      <FormItem className="flex flex-row items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+                        <div className="space-y-0.5 pr-4">
+                          <FormLabel className="text-sm font-medium">
+                            Booking for someone else
                           </FormLabel>
                           <p className="text-xs text-muted-foreground">
-                            You can book a ride on behalf of someone else and track their journey
+                            Book on behalf of a family member or loved one
                           </p>
                         </div>
                         <FormControl>
@@ -1554,30 +1553,27 @@ export default function BookRide() {
                     />
 
                     <div>
-                      <FormLabel className="flex items-center gap-1 mb-3">
-                        <Accessibility className="w-4 h-4" /> Mobility Needs
+                      <FormLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 block">
+                        Mobility Needs
                       </FormLabel>
-                      <div className="grid grid-cols-2 gap-1.5">
+                      <div className="flex flex-wrap gap-2">
                         {mobilityOptions.map((option) => (
-                          <label
+                          <button
                             key={option.id}
-                            htmlFor={option.id}
-                            className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer transition-all duration-150 active:scale-[0.98] ${
+                            type="button"
+                            onClick={() => toggleMobilityNeed(option.id)}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-150 active:scale-[0.96] ${
                               selectedNeeds.includes(option.id)
-                                ? "border-primary bg-primary/5 shadow-sm"
-                                : "border-border hover:border-gray-300 hover:bg-accent/20"
+                                ? "bg-black text-white dark:bg-white dark:text-black"
+                                : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                             }`}
+                            data-testid={`checkbox-${option.id}`}
                           >
-                            <Checkbox
-                              id={option.id}
-                              checked={selectedNeeds.includes(option.id)}
-                              onCheckedChange={() => toggleMobilityNeed(option.id)}
-                              data-testid={`checkbox-${option.id}`}
-                            />
-                            <span className="text-sm select-none">
-                              {option.label}
-                            </span>
-                          </label>
+                            {selectedNeeds.includes(option.id) && (
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            )}
+                            {option.label}
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -1641,14 +1637,13 @@ export default function BookRide() {
                       control={form.control}
                       name="isRoundTrip"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
-                          <div className="space-y-0.5">
-                            <FormLabel className="text-sm font-medium flex items-center gap-2">
-                              <ArrowUpDown className="w-4 h-4 text-primary" />
-                              Round Trip (Wait & Return)
+                        <FormItem className="flex flex-row items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+                          <div className="space-y-0.5 pr-4">
+                            <FormLabel className="text-sm font-medium">
+                              Round trip
                             </FormLabel>
                             <p className="text-xs text-muted-foreground">
-                              Driver waits during your appointment and brings you back
+                              Driver waits and brings you back
                             </p>
                           </div>
                           <FormControl>
@@ -1714,14 +1709,13 @@ export default function BookRide() {
                       control={form.control}
                       name="isRecurring"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
-                          <div className="space-y-0.5">
-                            <FormLabel className="text-sm font-medium flex items-center gap-2">
-                              <Calendar className="w-4 h-4 text-primary" />
-                              Make This a Recurring Ride
+                        <FormItem className="flex flex-row items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+                          <div className="space-y-0.5 pr-4">
+                            <FormLabel className="text-sm font-medium">
+                              Recurring ride
                             </FormLabel>
                             <p className="text-xs text-muted-foreground">
-                              Schedule this ride to repeat automatically (dialysis, therapy, etc.)
+                              Auto-schedule for dialysis, therapy, etc.
                             </p>
                           </div>
                           <FormControl>
@@ -1834,25 +1828,27 @@ export default function BookRide() {
                               <RadioGroup
                                 onValueChange={field.onChange}
                                 defaultValue={field.value}
-                                className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                                className="flex gap-2"
                               >
                                 <Label
                                   htmlFor="self_pay"
-                                  className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
+                                  className={`flex items-center gap-2 rounded-full px-4 py-2 cursor-pointer transition-all duration-150 active:scale-[0.96] ${
                                     field.value === "self_pay"
-                                      ? "border-primary bg-primary/5"
-                                      : "border-border hover:bg-accent/30"
+                                      ? "bg-black text-white dark:bg-white dark:text-black"
+                                      : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300"
                                   }`}
                                 >
-                                  <RadioGroupItem value="self_pay" id="self_pay" data-testid="radio-self-pay" />
+                                  <RadioGroupItem value="self_pay" id="self_pay" data-testid="radio-self-pay" className="sr-only" />
+                                  <CreditCard className="w-3.5 h-3.5" />
                                   <span className="text-sm font-medium select-none">Self Pay</span>
                                 </Label>
                                 <Label
                                   htmlFor="insurance"
-                                  className="flex items-center gap-3 rounded-lg border border-border p-3 cursor-not-allowed opacity-50"
+                                  className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-gray-800 px-4 py-2 cursor-not-allowed opacity-40"
                                 >
-                                  <RadioGroupItem value="insurance" id="insurance" data-testid="radio-insurance" disabled />
-                                  <span className="text-sm text-muted-foreground select-none">Insurance <span className="text-xs italic">(Coming Soon)</span></span>
+                                  <RadioGroupItem value="insurance" id="insurance" data-testid="radio-insurance" disabled className="sr-only" />
+                                  <Shield className="w-3.5 h-3.5 text-gray-400" />
+                                  <span className="text-sm text-gray-400 select-none">Insurance</span>
                                 </Label>
                               </RadioGroup>
                             </FormControl>
@@ -2049,7 +2045,7 @@ export default function BookRide() {
 
                     <Button
                       type="submit"
-                      className="w-full"
+                      className="w-full h-12 rounded-full bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 text-base font-semibold"
                       disabled={createRideMutation.isPending || createPaymentIntentMutation.isPending || !canProceedWithBooking}
                       data-testid="button-submit-ride"
                     >

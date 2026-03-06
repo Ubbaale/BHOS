@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -673,33 +672,27 @@ export default function FacilityBookRide() {
                     <Accessibility className="w-4 h-4" />
                     Mobility Needs
                   </Label>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="flex flex-wrap gap-2">
                     {mobilityOptions.map((option) => (
-                      <label
+                      <button
                         key={option.id}
-                        htmlFor={`mobility-${option.id}`}
-                        className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer transition-all duration-150 active:scale-[0.98] ${
+                        type="button"
+                        onClick={() => {
+                          setSelectedNeeds((prev) =>
+                            prev.includes(option.id)
+                              ? prev.filter((n) => n !== option.id)
+                              : [...prev, option.id]
+                          );
+                        }}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-150 active:scale-[0.96] ${
                           selectedNeeds.includes(option.id)
-                            ? "border-primary bg-primary/5 shadow-sm"
-                            : "border-border hover:border-gray-300 hover:bg-accent/20"
+                            ? "bg-black text-white dark:bg-white dark:text-black"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                         }`}
+                        data-testid={`checkbox-mobility-${option.id}`}
                       >
-                        <Checkbox
-                          id={`mobility-${option.id}`}
-                          checked={selectedNeeds.includes(option.id)}
-                          onCheckedChange={(checked) => {
-                            setSelectedNeeds((prev) =>
-                              checked
-                                ? [...prev, option.id]
-                                : prev.filter((n) => n !== option.id)
-                            );
-                          }}
-                          data-testid={`checkbox-mobility-${option.id}`}
-                        />
-                        <span className="text-sm select-none">
-                          {option.label}
-                        </span>
-                      </label>
+                        {option.label}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -709,9 +702,9 @@ export default function FacilityBookRide() {
                     control={form.control}
                     name="waitAtAppointment"
                     render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
-                        <div className="space-y-0.5">
-                          <FormLabel className="text-sm">Wait at Appointment</FormLabel>
+                      <FormItem className="flex flex-row items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+                        <div className="space-y-0.5 pr-4">
+                          <FormLabel className="text-sm font-medium">Wait at appointment</FormLabel>
                           <p className="text-xs text-muted-foreground">
                             Driver waits while patient is at their appointment
                           </p>
@@ -792,7 +785,7 @@ export default function FacilityBookRide() {
               <Button
                 type="submit"
                 disabled={bookRideMutation.isPending}
-                className="flex-1"
+                className="flex-1 h-12 rounded-full bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 text-base font-semibold"
                 data-testid="button-submit-booking"
               >
                 {bookRideMutation.isPending ? (
