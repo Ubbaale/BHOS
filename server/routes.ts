@@ -5518,5 +5518,131 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
+  // ==================== Toll Zone Routes ====================
+  
+  app.get("/api/toll-zones", async (_req, res) => {
+    try {
+      const zones = await storage.getTollZones();
+      res.json(zones);
+    } catch (error) {
+      console.error("Error fetching toll zones:", error);
+      res.status(500).json({ message: "Failed to fetch toll zones" });
+    }
+  });
+
+  app.post("/api/toll-zones/estimate", async (req, res) => {
+    try {
+      const { pickupLat, pickupLng, dropoffLat, dropoffLng } = req.body;
+      
+      const pLat = parseFloat(pickupLat);
+      const pLng = parseFloat(pickupLng);
+      const dLat = parseFloat(dropoffLat);
+      const dLng = parseFloat(dropoffLng);
+
+      if (isNaN(pLat) || isNaN(pLng) || isNaN(dLat) || isNaN(dLng)) {
+        return res.status(400).json({ message: "Valid numeric coordinates are required" });
+      }
+      if (pLat < -90 || pLat > 90 || dLat < -90 || dLat > 90 || pLng < -180 || pLng > 180 || dLng < -180 || dLng > 180) {
+        return res.status(400).json({ message: "Coordinates out of valid range" });
+      }
+
+      const zones = await storage.getTollZones();
+      const matchedZones: Array<{ name: string; amount: number }> = [];
+      let totalTolls = 0;
+
+      for (const zone of zones) {
+        const zLat = parseFloat(zone.lat);
+        const zLng = parseFloat(zone.lng);
+        const radius = parseFloat(zone.radiusMiles);
+        const amount = parseFloat(zone.tollAmount);
+
+        if (isPointNearSegment(pLat, pLng, dLat, dLng, zLat, zLng, radius)) {
+          matchedZones.push({ name: zone.name, amount });
+          totalTolls += amount;
+        }
+      }
+
+      res.json({
+        estimatedTolls: totalTolls.toFixed(2),
+        tollZones: matchedZones,
+        hasTolls: matchedZones.length > 0,
+      });
+    } catch (error) {
+      console.error("Error estimating tolls:", error);
+      res.status(500).json({ message: "Failed to estimate tolls" });
+    }
+  });
+
+  // Seed toll zones on startup
+  seedTollZonesData().catch(err => console.error("Failed to seed toll zones:", err));
+
   return httpServer;
+}
+
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 3959;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function isPointNearSegment(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number,
+  pLat: number, pLng: number,
+  radiusMiles: number
+): boolean {
+  const d1 = haversineDistance(lat1, lng1, pLat, pLng);
+  const d2 = haversineDistance(lat2, lng2, pLat, pLng);
+  if (d1 <= radiusMiles || d2 <= radiusMiles) return true;
+
+  const segLen = haversineDistance(lat1, lng1, lat2, lng2);
+  if (segLen === 0) return false;
+
+  const numSamples = Math.max(10, Math.ceil(segLen / 5));
+  for (let i = 1; i < numSamples; i++) {
+    const t = i / numSamples;
+    const sLat = lat1 + t * (lat2 - lat1);
+    const sLng = lng1 + t * (lng2 - lng1);
+    const dist = haversineDistance(sLat, sLng, pLat, pLng);
+    if (dist <= radiusMiles) return true;
+  }
+  return false;
+}
+
+async function seedTollZonesData() {
+  const { storage } = await import("./storage");
+  const zones = [
+    { name: "George Washington Bridge", tollAmount: "16.00", lat: "40.8517", lng: "-73.9527", radiusMiles: "2" },
+    { name: "Lincoln Tunnel", tollAmount: "16.00", lat: "40.7628", lng: "-74.0142", radiusMiles: "2" },
+    { name: "Holland Tunnel", tollAmount: "16.00", lat: "40.7267", lng: "-74.0111", radiusMiles: "2" },
+    { name: "Verrazzano-Narrows Bridge", tollAmount: "6.88", lat: "40.6066", lng: "-74.0447", radiusMiles: "2" },
+    { name: "Bayonne Bridge", tollAmount: "16.00", lat: "40.6426", lng: "-74.1418", radiusMiles: "2" },
+    { name: "Goethals Bridge", tollAmount: "16.00", lat: "40.6381", lng: "-74.1956", radiusMiles: "2" },
+    { name: "Robert F. Kennedy Bridge (Triborough)", tollAmount: "6.88", lat: "40.7808", lng: "-73.9218", radiusMiles: "2" },
+    { name: "Throgs Neck Bridge", tollAmount: "6.88", lat: "40.8054", lng: "-73.7934", radiusMiles: "2" },
+    { name: "Whitestone Bridge", tollAmount: "6.88", lat: "40.8010", lng: "-73.8283", radiusMiles: "2" },
+    { name: "NJ Turnpike (Full Length)", tollAmount: "13.85", lat: "40.2788", lng: "-74.5590", radiusMiles: "8" },
+    { name: "Golden Gate Bridge", tollAmount: "8.75", lat: "37.8199", lng: "-122.4783", radiusMiles: "2" },
+    { name: "Bay Bridge (SF-Oakland)", tollAmount: "7.00", lat: "37.7983", lng: "-122.3778", radiusMiles: "3" },
+    { name: "Chicago Skyway", tollAmount: "6.00", lat: "41.6833", lng: "-87.5569", radiusMiles: "3" },
+    { name: "Illinois Tollway (I-90)", tollAmount: "4.80", lat: "42.0411", lng: "-87.9700", radiusMiles: "5" },
+    { name: "Indiana Toll Road", tollAmount: "10.00", lat: "41.6500", lng: "-86.2500", radiusMiles: "8" },
+    { name: "Pennsylvania Turnpike (Full)", tollAmount: "56.70", lat: "40.2732", lng: "-76.8867", radiusMiles: "10" },
+    { name: "Florida Turnpike (Central)", tollAmount: "12.50", lat: "28.0523", lng: "-81.5226", radiusMiles: "10" },
+    { name: "Dulles Toll Road (VA)", tollAmount: "3.25", lat: "38.9548", lng: "-77.4467", radiusMiles: "5" },
+    { name: "Chesapeake Bay Bridge-Tunnel", tollAmount: "18.00", lat: "37.0388", lng: "-76.0867", radiusMiles: "5" },
+    { name: "Mass Pike (I-90 MA)", tollAmount: "8.20", lat: "42.3485", lng: "-71.9019", radiusMiles: "8" },
+    { name: "TX SH 130 (Austin)", tollAmount: "7.50", lat: "30.3800", lng: "-97.5600", radiusMiles: "6" },
+    { name: "Dallas North Tollway", tollAmount: "5.00", lat: "33.0000", lng: "-96.8200", radiusMiles: "5" },
+    { name: "Sam Houston Tollway (Houston)", tollAmount: "3.50", lat: "29.7800", lng: "-95.5500", radiusMiles: "6" },
+    { name: "MD Express Toll (I-95)", tollAmount: "12.00", lat: "39.3474", lng: "-76.3825", radiusMiles: "4" },
+    { name: "Delaware Memorial Bridge", tollAmount: "5.00", lat: "39.6916", lng: "-75.5148", radiusMiles: "2" },
+  ];
+  await storage.seedTollZones(zones);
+  console.log("Toll zones seeded successfully");
 }

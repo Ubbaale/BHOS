@@ -460,7 +460,7 @@ export default function BookRide() {
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookedRide, setBookedRide] = useState<(Ride & { trackingToken?: string | null }) | null>(null);
-  const [fareEstimate, setFareEstimate] = useState<{ distance: number; fare: number } | null>(null);
+  const [fareEstimate, setFareEstimate] = useState<{ distance: number; fare: number; tolls: number; tollZones: Array<{ name: string; amount: number }> } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [accountStatus, setAccountStatus] = useState<PatientAccountStatus | null>(null);
   const [isEmergency, setIsEmergency] = useState(false);
@@ -514,8 +514,31 @@ export default function BookRide() {
   useEffect(() => {
     if (pickupPos && dropoffPos) {
       const distance = calculateDistance(pickupPos[0], pickupPos[1], dropoffPos[0], dropoffPos[1]);
-      const fare = calculateFare(distance);
-      setFareEstimate({ distance, fare });
+      const baseFare = calculateFare(distance);
+      
+      fetch("/api/toll-zones/estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pickupLat: pickupPos[0],
+          pickupLng: pickupPos[1],
+          dropoffLat: dropoffPos[0],
+          dropoffLng: dropoffPos[1],
+        }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          const tolls = parseFloat(data.estimatedTolls || "0");
+          setFareEstimate({
+            distance,
+            fare: baseFare + tolls,
+            tolls,
+            tollZones: data.tollZones || [],
+          });
+        })
+        .catch(() => {
+          setFareEstimate({ distance, fare: baseFare, tolls: 0, tollZones: [] });
+        });
     } else {
       setFareEstimate(null);
     }
@@ -674,6 +697,7 @@ export default function BookRide() {
         mobilityNeeds: selectedNeeds,
         distanceMiles: fareEstimate?.distance.toFixed(2),
         estimatedFare: fareEstimate?.fare.toFixed(2),
+        estimatedTolls: fareEstimate?.tolls?.toFixed(2) || "0",
         isEmergency: isEmergency && emergencyAcknowledged,
         isRoundTrip: data.isRoundTrip,
         returnPickupTime: data.isRoundTrip ? data.returnPickupTime : undefined,
@@ -870,6 +894,7 @@ export default function BookRide() {
         mobilityNeeds: selectedNeeds,
         distanceMiles: fareEstimate?.distance.toFixed(2),
         estimatedFare: fareEstimate?.fare.toFixed(2),
+        estimatedTolls: fareEstimate?.tolls?.toFixed(2) || "0",
         isEmergency: isEmergency && emergencyAcknowledged,
         requiredVehicleType: pendingFormData.requiredVehicleType && pendingFormData.requiredVehicleType !== "any" ? pendingFormData.requiredVehicleType : undefined,
         stripePaymentIntentId: paymentIntentId,
@@ -1323,13 +1348,25 @@ export default function BookRide() {
                   <p className="text-xs text-muted-foreground">estimated fare</p>
                 </div>
               </div>
-              <div className="mt-2 pt-2 border-t flex items-center gap-4 text-xs text-muted-foreground">
+              <div className="mt-2 pt-2 border-t flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                 <span>Base: ${BASE_FARE.toFixed(2)}</span>
                 <span>·</span>
                 <span>${PER_MILE_RATE.toFixed(2)}/mi</span>
+                {fareEstimate.tolls > 0 && (
+                  <>
+                    <span>·</span>
+                    <span className="text-orange-600 dark:text-orange-400" data-testid="text-tolls">Tolls: ${fareEstimate.tolls.toFixed(2)}</span>
+                  </>
+                )}
                 <span>·</span>
                 <span>Min: ${MINIMUM_FARE.toFixed(2)}</span>
               </div>
+              {fareEstimate.tollZones.length > 0 && (
+                <div className="mt-1.5 text-xs text-muted-foreground" data-testid="toll-zones-list">
+                  <span className="text-orange-600 dark:text-orange-400">Toll zones on route:</span>{" "}
+                  {fareEstimate.tollZones.map(z => `${z.name} ($${z.amount.toFixed(2)})`).join(", ")}
+                </div>
+              )}
             </div>
           )}
 

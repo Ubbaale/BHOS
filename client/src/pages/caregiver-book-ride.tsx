@@ -203,7 +203,7 @@ export default function CaregiverBookRide() {
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [dropoffCoords, setDropoffCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [fareEstimate, setFareEstimate] = useState<{ distance: number; fare: number } | null>(null);
+  const [fareEstimate, setFareEstimate] = useState<{ distance: number; fare: number; tolls: number; tollZones: Array<{ name: string; amount: number }> } | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookedRide, setBoostedRide] = useState<Ride | null>(null);
   const [isLocatingPickup, setIsLocatingPickup] = useState(false);
@@ -229,7 +229,26 @@ export default function CaregiverBookRide() {
         dropoffCoords.lat,
         dropoffCoords.lng
       );
-      setFareEstimate({ distance, fare: calculateFare(distance) });
+      const baseFare = calculateFare(distance);
+      
+      fetch("/api/toll-zones/estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pickupLat: pickupCoords.lat,
+          pickupLng: pickupCoords.lng,
+          dropoffLat: dropoffCoords.lat,
+          dropoffLng: dropoffCoords.lng,
+        }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          const tolls = parseFloat(data.estimatedTolls || "0");
+          setFareEstimate({ distance, fare: baseFare + tolls, tolls, tollZones: data.tollZones || [] });
+        })
+        .catch(() => {
+          setFareEstimate({ distance, fare: baseFare, tolls: 0, tollZones: [] });
+        });
     } else {
       setFareEstimate(null);
     }
@@ -267,6 +286,7 @@ export default function CaregiverBookRide() {
         requiredVehicleType: data.requiredVehicleType || undefined,
         distanceMiles: fareEstimate?.distance.toFixed(2),
         estimatedFare: fareEstimate?.fare.toFixed(2),
+        estimatedTolls: fareEstimate?.tolls?.toFixed(2) || "0",
       });
       return response.json();
     },
@@ -701,11 +721,25 @@ export default function CaregiverBookRide() {
                         <span className="font-medium" data-testid="text-fare-distance">
                           {fareEstimate.distance.toFixed(1)} miles
                         </span>
+                        {fareEstimate.tolls > 0 && (
+                          <>
+                            <span className="text-muted-foreground">Tolls:</span>
+                            <span className="font-medium text-orange-600 dark:text-orange-400" data-testid="text-fare-tolls">
+                              ${fareEstimate.tolls.toFixed(2)}
+                            </span>
+                          </>
+                        )}
                         <span className="text-muted-foreground">Estimated Fare:</span>
                         <span className="font-bold text-lg" data-testid="text-fare-amount">
                           ${fareEstimate.fare.toFixed(2)}
                         </span>
                       </div>
+                      {fareEstimate.tollZones.length > 0 && (
+                        <p className="mt-2 text-xs text-muted-foreground" data-testid="toll-zones-list">
+                          <span className="text-orange-600 dark:text-orange-400">Toll zones:</span>{" "}
+                          {fareEstimate.tollZones.map(z => `${z.name} ($${z.amount.toFixed(2)})`).join(", ")}
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 )}

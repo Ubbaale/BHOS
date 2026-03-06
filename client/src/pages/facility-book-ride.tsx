@@ -211,6 +211,7 @@ export default function FacilityBookRide() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
   const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [fareEstimate, setFareEstimate] = useState<{ distance: number; fare: number; tolls: number; tollZones: Array<{ name: string; amount: number }> } | null>(null);
 
   const { data: staffCheck, isLoading: staffCheckLoading } = useQuery<FacilityStaffCheck>({
     queryKey: ["/api/facility/staff-check"],
@@ -271,6 +272,48 @@ export default function FacilityBookRide() {
     }
   }, [transportType, facility]);
 
+  const pickupLat = form.watch("pickupLat");
+  const pickupLng = form.watch("pickupLng");
+  const dropoffLat = form.watch("dropoffLat");
+  const dropoffLng = form.watch("dropoffLng");
+
+  useEffect(() => {
+    const pLat = parseFloat(pickupLat);
+    const pLng = parseFloat(pickupLng);
+    const dLat = parseFloat(dropoffLat);
+    const dLng = parseFloat(dropoffLng);
+    
+    if (!isNaN(pLat) && !isNaN(pLng) && !isNaN(dLat) && !isNaN(dLng) &&
+        pLat !== 0 && pLng !== 0 && dLat !== 0 && dLng !== 0) {
+      const R = 3959;
+      const dLatR = (dLat - pLat) * Math.PI / 180;
+      const dLngR = (dLng - pLng) * Math.PI / 180;
+      const a = Math.sin(dLatR/2) * Math.sin(dLatR/2) +
+        Math.cos(pLat * Math.PI / 180) * Math.cos(dLat * Math.PI / 180) *
+        Math.sin(dLngR/2) * Math.sin(dLngR/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+
+      const baseFare = Math.max(22, 20 + distance * 2.50);
+
+      fetch("/api/toll-zones/estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pickupLat: pLat, pickupLng: pLng, dropoffLat: dLat, dropoffLng: dLng }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          const tolls = parseFloat(data.estimatedTolls || "0");
+          setFareEstimate({ distance, fare: baseFare + tolls, tolls, tollZones: data.tollZones || [] });
+        })
+        .catch(() => {
+          setFareEstimate({ distance, fare: baseFare, tolls: 0, tollZones: [] });
+        });
+    } else {
+      setFareEstimate(null);
+    }
+  }, [pickupLat, pickupLng, dropoffLat, dropoffLng]);
+
   const bookRideMutation = useMutation({
     mutationFn: async (data: FacilityBookRideFormData) => {
       const response = await apiRequest("POST", "/api/facility/book-ride", {
@@ -287,6 +330,9 @@ export default function FacilityBookRide() {
         mobilityNeeds: data.mobilityNeeds,
         notes: data.notes,
         requiredVehicleType: data.requiredVehicleType || undefined,
+        distanceMiles: fareEstimate?.distance.toFixed(2),
+        estimatedFare: fareEstimate?.fare.toFixed(2),
+        estimatedTolls: fareEstimate?.tolls?.toFixed(2) || "0",
       });
       return response.json();
     },
@@ -702,6 +748,35 @@ export default function FacilityBookRide() {
                 />
               </CardContent>
             </Card>
+
+            {fareEstimate && (
+              <Card data-testid="fare-estimate">
+                <CardContent className="p-4">
+                  <h3 className="font-semibold mb-2 flex items-center gap-2">
+                    <Car className="w-4 h-4" />
+                    Fare Estimate
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <span className="text-muted-foreground">Distance:</span>
+                    <span className="font-medium" data-testid="text-fare-distance">{fareEstimate.distance.toFixed(1)} miles</span>
+                    {fareEstimate.tolls > 0 && (
+                      <>
+                        <span className="text-muted-foreground">Tolls:</span>
+                        <span className="font-medium text-orange-600 dark:text-orange-400" data-testid="text-fare-tolls">${fareEstimate.tolls.toFixed(2)}</span>
+                      </>
+                    )}
+                    <span className="text-muted-foreground">Estimated Fare:</span>
+                    <span className="font-bold text-lg" data-testid="text-fare-amount">${fareEstimate.fare.toFixed(2)}</span>
+                  </div>
+                  {fareEstimate.tollZones.length > 0 && (
+                    <p className="mt-2 text-xs text-muted-foreground" data-testid="toll-zones-list">
+                      <span className="text-orange-600 dark:text-orange-400">Toll zones:</span>{" "}
+                      {fareEstimate.tollZones.map(z => `${z.name} ($${z.amount.toFixed(2)})`).join(", ")}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <div className="flex gap-3">
               <Button

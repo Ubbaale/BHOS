@@ -16,8 +16,9 @@ import {
   type Facility, type InsertFacility,
   type FacilityStaff, type InsertFacilityStaff,
   type CaregiverPatient, type InsertCaregiverPatient,
+  type TollZone,
   users, jobs, tickets, rides, rideEvents, driverProfiles, patientProfiles, nativePushTokens, rideMessages, tripShares, rideRatings, patientAccounts, surgePricing, annualEarnings, contractorAgreements, incidentReports, driverPayouts,
-  facilities, facilityStaff, caregiverPatients
+  facilities, facilityStaff, caregiverPatients, tollZones
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ne, and, lt, isNull, inArray } from "drizzle-orm";
@@ -190,6 +191,10 @@ export interface IStorage {
 
   // Rides by facility
   getRidesByFacility(facilityId: number): Promise<Ride[]>;
+
+  // Toll zones
+  getTollZones(): Promise<TollZone[]>;
+  seedTollZones(zones: Array<{ name: string; tollAmount: string; lat: string; lng: string; radiusMiles: string }>): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1191,6 +1196,18 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(rides)
       .where(eq(rides.facilityId, facilityId))
       .orderBy(desc(rides.createdAt));
+  }
+
+  async getTollZones(): Promise<TollZone[]> {
+    return db.select().from(tollZones).where(eq(tollZones.isActive, true));
+  }
+
+  async seedTollZones(zones: Array<{ name: string; tollAmount: string; lat: string; lng: string; radiusMiles: string }>): Promise<void> {
+    const existing = await db.select().from(tollZones);
+    if (existing.length > 0) return;
+    for (const zone of zones) {
+      await db.insert(tollZones).values(zone);
+    }
   }
 }
 
