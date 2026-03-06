@@ -673,15 +673,15 @@ export default function FacilityBookRide() {
                     <Accessibility className="w-4 h-4" />
                     Mobility Needs
                   </Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {mobilityOptions.map((option) => (
                       <label
                         key={option.id}
                         htmlFor={`mobility-${option.id}`}
-                        className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
+                        className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer transition-all duration-150 active:scale-[0.98] ${
                           selectedNeeds.includes(option.id)
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:bg-accent/30"
+                            ? "border-primary bg-primary/5 shadow-sm"
+                            : "border-border hover:border-gray-300 hover:bg-accent/20"
                         }`}
                       >
                         <Checkbox
@@ -696,7 +696,7 @@ export default function FacilityBookRide() {
                           }}
                           data-testid={`checkbox-mobility-${option.id}`}
                         />
-                        <span className="text-sm font-medium select-none">
+                        <span className="text-sm select-none">
                           {option.label}
                         </span>
                       </label>
