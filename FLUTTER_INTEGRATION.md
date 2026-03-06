@@ -30,13 +30,35 @@ Content-Type: application/json
 }
 ```
 
-Response:
+Response (Uber-style envelope):
 ```json
 {
-  "accessToken": "eyJhbG...",
-  "refreshToken": "eyJhbG...",
-  "expiresIn": 900,
-  "user": { "id": "uuid", "username": "user@email.com", "role": "user" }
+  "status": "success",
+  "data": {
+    "accessToken": "eyJhbG...",
+    "refreshToken": "eyJhbG...",
+    "expiresIn": 900,
+    "user": { "id": "uuid", "username": "user@email.com", "role": "user" }
+  },
+  "meta": {
+    "timestamp": "2026-03-06T15:00:00.000Z",
+    "version": "2.0"
+  }
+}
+```
+
+Error response:
+```json
+{
+  "status": "error",
+  "error": {
+    "message": "Username (email) and password are required",
+    "code": "MISSING_CREDENTIALS"
+  },
+  "meta": {
+    "timestamp": "2026-03-06T15:00:00.000Z",
+    "version": "2.0"
+  }
 }
 ```
 
@@ -53,7 +75,7 @@ Content-Type: application/json
 }
 ```
 
-Response includes `accessToken`, `refreshToken`, `user`, and `driver` (if driver account).
+Response `data` includes `accessToken`, `refreshToken`, `user`, and `driver` (if driver account).
 
 ### Refresh Token
 

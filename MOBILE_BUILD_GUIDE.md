@@ -254,6 +254,13 @@ support@carehubapp.com
 
 ## Push Notifications Setup
 
+Push notifications use Uber-style rich payloads with contextual action buttons:
+- **Ride accepted**: Shows driver name, vehicle info, license plate + "Track driver" / "Contact" buttons
+- **Driver en route**: Shows ETA + "Track" / "Contact" buttons
+- **Driver arrived**: Shows vehicle description + "Contact driver" button
+- **Trip completed**: Shows fare + "Rate ride" / "View receipt" buttons
+- **New ride request** (drivers): Shows pickup, distance, fare + "View details" button
+
 ### iOS (APNs)
 1. In Apple Developer Portal, create APNs key
 2. Download the .p8 file
