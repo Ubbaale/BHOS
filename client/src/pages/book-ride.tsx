@@ -1520,19 +1520,27 @@ export default function BookRide() {
                       <FormLabel className="flex items-center gap-1 mb-3">
                         <Accessibility className="w-4 h-4" /> Mobility Needs
                       </FormLabel>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {mobilityOptions.map((option) => (
-                          <div key={option.id} className="flex items-center gap-2">
+                          <label
+                            key={option.id}
+                            htmlFor={option.id}
+                            className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
+                              selectedNeeds.includes(option.id)
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:bg-accent/30"
+                            }`}
+                          >
                             <Checkbox
                               id={option.id}
                               checked={selectedNeeds.includes(option.id)}
                               onCheckedChange={() => toggleMobilityNeed(option.id)}
                               data-testid={`checkbox-${option.id}`}
                             />
-                            <label htmlFor={option.id} className="text-sm cursor-pointer">
+                            <span className="text-sm font-medium select-none">
                               {option.label}
-                            </label>
-                          </div>
+                            </span>
+                          </label>
                         ))}
                       </div>
                     </div>
@@ -1789,16 +1797,26 @@ export default function BookRide() {
                               <RadioGroup
                                 onValueChange={field.onChange}
                                 defaultValue={field.value}
-                                className="flex gap-4"
+                                className="grid grid-cols-1 sm:grid-cols-2 gap-3"
                               >
-                                <div className="flex items-center gap-2">
+                                <Label
+                                  htmlFor="self_pay"
+                                  className={`flex items-center gap-3 rounded-lg border-2 p-3.5 cursor-pointer transition-colors active:bg-accent/50 ${
+                                    field.value === "self_pay"
+                                      ? "border-primary bg-primary/5"
+                                      : "border-border hover:bg-accent/30"
+                                  }`}
+                                >
                                   <RadioGroupItem value="self_pay" id="self_pay" data-testid="radio-self-pay" />
-                                  <Label htmlFor="self_pay" className="cursor-pointer">Self Pay</Label>
-                                </div>
-                                <div className="flex items-center gap-2 opacity-50">
+                                  <span className="font-medium select-none">Self Pay</span>
+                                </Label>
+                                <Label
+                                  htmlFor="insurance"
+                                  className="flex items-center gap-3 rounded-lg border-2 border-border p-3.5 cursor-not-allowed opacity-50"
+                                >
                                   <RadioGroupItem value="insurance" id="insurance" data-testid="radio-insurance" disabled />
-                                  <Label htmlFor="insurance" className="cursor-not-allowed text-muted-foreground">Insurance <span className="text-xs italic">(Coming Soon)</span></Label>
-                                </div>
+                                  <span className="text-muted-foreground select-none">Insurance <span className="text-xs italic">(Coming Soon)</span></span>
+                                </Label>
                               </RadioGroup>
                             </FormControl>
                             <FormMessage />
@@ -1938,7 +1956,12 @@ export default function BookRide() {
                               <li>Other time-sensitive medical care</li>
                             </ul>
                             
-                            <div className="flex items-start gap-2 mt-3">
+                            <label
+                              htmlFor="emergency-checkbox"
+                              className={`flex items-start gap-3 mt-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
+                                isEmergency ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
+                              }`}
+                            >
                               <Checkbox
                                 id="emergency-checkbox"
                                 checked={isEmergency}
@@ -1947,11 +1970,12 @@ export default function BookRide() {
                                   if (!checked) setEmergencyAcknowledged(false);
                                 }}
                                 data-testid="checkbox-emergency"
+                                className="mt-0.5"
                               />
-                              <Label htmlFor="emergency-checkbox" className="text-sm font-medium leading-tight cursor-pointer">
+                              <span className="text-sm font-medium leading-tight select-none">
                                 This is a medical emergency requiring immediate transport
-                              </Label>
-                            </div>
+                              </span>
+                            </label>
 
                             {isEmergency && (
                               <div className="mt-3 p-3 bg-background/50 rounded-md border">
@@ -1962,17 +1986,23 @@ export default function BookRide() {
                                   Misuse of the emergency booking feature may result in account suspension. 
                                   Emergency overrides are logged and reviewed. By proceeding, you confirm this is a genuine medical emergency.
                                 </p>
-                                <div className="flex items-start gap-2">
+                                <label
+                                  htmlFor="emergency-acknowledge"
+                                  className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
+                                    emergencyAcknowledged ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
+                                  }`}
+                                >
                                   <Checkbox
                                     id="emergency-acknowledge"
                                     checked={emergencyAcknowledged}
                                     onCheckedChange={(checked) => setEmergencyAcknowledged(checked === true)}
                                     data-testid="checkbox-emergency-acknowledge"
+                                    className="mt-0.5"
                                   />
-                                  <Label htmlFor="emergency-acknowledge" className="text-sm leading-tight cursor-pointer">
+                                  <span className="text-sm leading-tight select-none">
                                     I understand and confirm this is a genuine medical emergency. I acknowledge that misuse may result in account suspension.
-                                  </Label>
-                                </div>
+                                  </span>
+                                </label>
                               </div>
                             )}
                           </div>

@@ -268,9 +268,17 @@ function PatientFormDialog({
 
             <div className="space-y-2">
               <Label>Mobility Needs</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {mobilityOptions.map((option) => (
-                  <div key={option.id} className="flex items-center gap-2">
+                  <label
+                    key={option.id}
+                    htmlFor={`mobility-${option.id}`}
+                    className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
+                      selectedNeeds.includes(option.id)
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-accent/30"
+                    }`}
+                  >
                     <Checkbox
                       id={`mobility-${option.id}`}
                       checked={selectedNeeds.includes(option.id)}
@@ -283,10 +291,10 @@ function PatientFormDialog({
                       }}
                       data-testid={`checkbox-mobility-${option.id}`}
                     />
-                    <Label htmlFor={`mobility-${option.id}`} className="text-sm">
+                    <span className="text-sm font-medium select-none">
                       {option.label}
-                    </Label>
-                  </div>
+                    </span>
+                  </label>
                 ))}
               </div>
             </div>

@@ -119,17 +119,23 @@ export default function ICAgreement() {
               </p>
             </div>
 
-            <div className="flex items-start gap-3">
+            <label
+              htmlFor="acknowledge"
+              className={`flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors active:bg-accent/50 ${
+                acknowledged ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
+              }`}
+            >
               <Checkbox
                 id="acknowledge"
                 checked={acknowledged}
                 onCheckedChange={(checked) => setAcknowledged(checked === true)}
                 data-testid="checkbox-acknowledge"
+                className="mt-0.5"
               />
-              <Label htmlFor="acknowledge" className="text-sm leading-relaxed cursor-pointer">
+              <span className="text-sm leading-relaxed select-none">
                 I acknowledge that I am signing this agreement electronically and that my electronic signature has the same legal effect as a handwritten signature
-              </Label>
-            </div>
+              </span>
+            </label>
 
             <Button
               className="w-full"

@@ -618,9 +618,17 @@ export default function CaregiverBookRide() {
                     <Accessibility className="w-4 h-4" />
                     Mobility Needs
                   </Label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {mobilityOptions.map((option) => (
-                      <div key={option.id} className="flex items-center gap-2">
+                      <label
+                        key={option.id}
+                        htmlFor={`ride-mobility-${option.id}`}
+                        className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors active:bg-accent/50 ${
+                          selectedNeeds.includes(option.id)
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:bg-accent/30"
+                        }`}
+                      >
                         <Checkbox
                           id={`ride-mobility-${option.id}`}
                           checked={selectedNeeds.includes(option.id)}
@@ -633,10 +641,10 @@ export default function CaregiverBookRide() {
                           }}
                           data-testid={`checkbox-ride-mobility-${option.id}`}
                         />
-                        <Label htmlFor={`ride-mobility-${option.id}`} className="text-sm">
+                        <span className="text-sm font-medium select-none">
                           {option.label}
-                        </Label>
-                      </div>
+                        </span>
+                      </label>
                     ))}
                   </div>
                 </div>

@@ -569,17 +569,23 @@ export default function DriverEarnings() {
               </div>
             </div>
 
-            <div className="flex items-start gap-2 p-3 bg-muted rounded-md">
+            <label
+              htmlFor="agreement"
+              className={`flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors active:bg-accent/50 ${
+                contractorForm.agreementAccepted ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
+              }`}
+            >
               <Checkbox 
                 id="agreement" 
                 checked={contractorForm.agreementAccepted}
                 onCheckedChange={(checked) => setContractorForm(prev => ({ ...prev, agreementAccepted: checked === true }))}
                 data-testid="checkbox-agreement"
+                className="mt-0.5"
               />
-              <Label htmlFor="agreement" className="text-sm leading-relaxed">
+              <span className="text-sm leading-relaxed select-none">
                 I confirm that I am an independent contractor, not an employee. I understand I am responsible for my own taxes, including self-employment tax. I agree to the Carehub Independent Contractor Agreement.
-              </Label>
-            </div>
+              </span>
+            </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowContractorForm(false)}>

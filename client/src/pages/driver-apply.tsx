@@ -342,22 +342,29 @@ export default function DriverApply() {
                         control={form.control}
                         name="wheelchairAccessible"
                         render={({ field }) => (
-                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                                data-testid="checkbox-wheelchair"
-                              />
-                            </FormControl>
-                            <div className="space-y-1 leading-none">
-                              <FormLabel className="cursor-pointer">
-                                Wheelchair Accessible
-                              </FormLabel>
-                              <FormDescription>
-                                Vehicle has wheelchair ramp or lift
-                              </FormDescription>
-                            </div>
+                          <FormItem>
+                            <label
+                              className={`flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors active:bg-accent/50 ${
+                                field.value ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
+                              }`}
+                            >
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                  data-testid="checkbox-wheelchair"
+                                  className="mt-0.5"
+                                />
+                              </FormControl>
+                              <div className="space-y-1 leading-none">
+                                <FormLabel className="cursor-pointer">
+                                  Wheelchair Accessible
+                                </FormLabel>
+                                <FormDescription>
+                                  Vehicle has wheelchair ramp or lift
+                                </FormDescription>
+                              </div>
+                            </label>
                           </FormItem>
                         )}
                       />
@@ -366,22 +373,29 @@ export default function DriverApply() {
                         control={form.control}
                         name="stretcherCapable"
                         render={({ field }) => (
-                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                                data-testid="checkbox-stretcher"
-                              />
-                            </FormControl>
-                            <div className="space-y-1 leading-none">
-                              <FormLabel className="cursor-pointer">
-                                Stretcher Capable
-                              </FormLabel>
-                              <FormDescription>
-                                Vehicle can transport stretcher patients
-                              </FormDescription>
-                            </div>
+                          <FormItem>
+                            <label
+                              className={`flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors active:bg-accent/50 ${
+                                field.value ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
+                              }`}
+                            >
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                  data-testid="checkbox-stretcher"
+                                  className="mt-0.5"
+                                />
+                              </FormControl>
+                              <div className="space-y-1 leading-none">
+                                <FormLabel className="cursor-pointer">
+                                  Stretcher Capable
+                                </FormLabel>
+                                <FormDescription>
+                                  Vehicle can transport stretcher patients
+                                </FormDescription>
+                              </div>
+                            </label>
                           </FormItem>
                         )}
                       />
@@ -392,16 +406,22 @@ export default function DriverApply() {
                     control={form.control}
                     name="tosAccepted"
                     render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value === true}
-                            onCheckedChange={field.onChange}
-                            data-testid="checkbox-tos-accept"
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel className="cursor-pointer text-sm">
+                      <FormItem>
+                        <label
+                          className={`flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors active:bg-accent/50 ${
+                            field.value === true ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
+                          }`}
+                        >
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value === true}
+                              onCheckedChange={field.onChange}
+                              data-testid="checkbox-tos-accept"
+                              className="mt-0.5"
+                            />
+                          </FormControl>
+                          <div className="space-y-1 leading-none">
+                            <FormLabel className="cursor-pointer text-sm">
                             I agree to the{" "}
                             <a href="/terms" target="_blank" className="text-primary underline" data-testid="link-terms-of-service">
                               Terms of Service
@@ -413,6 +433,7 @@ export default function DriverApply() {
                           </FormLabel>
                           <FormMessage />
                         </div>
+                        </label>
                       </FormItem>
                     )}
                   />

@@ -299,24 +299,44 @@ export default function ReportIncident() {
                       <RadioGroup
                         onValueChange={field.onChange}
                         defaultValue={field.value}
-                        className="flex flex-wrap gap-4"
+                        className="grid grid-cols-2 sm:grid-cols-4 gap-2"
                       >
-                        <div className="flex items-center space-x-2">
+                        <Label
+                          htmlFor="low"
+                          className={`flex items-center gap-3 rounded-lg border-2 p-3 cursor-pointer transition-colors active:bg-accent/50 ${
+                            field.value === "low" ? "border-green-500 bg-green-50 dark:bg-green-950/20" : "border-border hover:bg-accent/30"
+                          }`}
+                        >
                           <RadioGroupItem value="low" id="low" data-testid="radio-severity-low" />
-                          <Label htmlFor="low" className="cursor-pointer text-green-600">Low</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
+                          <span className="font-medium text-green-600 select-none">Low</span>
+                        </Label>
+                        <Label
+                          htmlFor="medium"
+                          className={`flex items-center gap-3 rounded-lg border-2 p-3 cursor-pointer transition-colors active:bg-accent/50 ${
+                            field.value === "medium" ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20" : "border-border hover:bg-accent/30"
+                          }`}
+                        >
                           <RadioGroupItem value="medium" id="medium" data-testid="radio-severity-medium" />
-                          <Label htmlFor="medium" className="cursor-pointer text-yellow-600">Medium</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
+                          <span className="font-medium text-yellow-600 select-none">Medium</span>
+                        </Label>
+                        <Label
+                          htmlFor="high"
+                          className={`flex items-center gap-3 rounded-lg border-2 p-3 cursor-pointer transition-colors active:bg-accent/50 ${
+                            field.value === "high" ? "border-orange-500 bg-orange-50 dark:bg-orange-950/20" : "border-border hover:bg-accent/30"
+                          }`}
+                        >
                           <RadioGroupItem value="high" id="high" data-testid="radio-severity-high" />
-                          <Label htmlFor="high" className="cursor-pointer text-orange-600">High</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
+                          <span className="font-medium text-orange-600 select-none">High</span>
+                        </Label>
+                        <Label
+                          htmlFor="critical"
+                          className={`flex items-center gap-3 rounded-lg border-2 p-3 cursor-pointer transition-colors active:bg-accent/50 ${
+                            field.value === "critical" ? "border-red-500 bg-red-50 dark:bg-red-950/20" : "border-border hover:bg-accent/30"
+                          }`}
+                        >
                           <RadioGroupItem value="critical" id="critical" data-testid="radio-severity-critical" />
-                          <Label htmlFor="critical" className="cursor-pointer text-red-600">Critical</Label>
-                        </div>
+                          <span className="font-medium text-red-600 select-none">Critical</span>
+                        </Label>
                       </RadioGroup>
                     </FormControl>
                     <FormMessage />
