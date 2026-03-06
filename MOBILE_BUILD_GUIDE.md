@@ -193,6 +193,7 @@ Features:
 - Secure in-app messaging with your driver
 - Wheelchair, stretcher, and mobility assistance options
 - Vehicle type selection (Sedan, SUV, Wheelchair Van, Stretcher Van, Minivan)
+- Automatic toll estimation — see toll charges before booking
 - Insurance billing support
 - 24/7 customer support
 

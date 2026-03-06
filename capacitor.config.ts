@@ -4,7 +4,7 @@ const config: CapacitorConfig = {
   appId: 'com.carehubapp.app',
   appName: 'Carehub',
   webDir: 'dist/public',
-  // Version 1.2.0 - Updated March 2026
+  // Version 1.3.0 (Build 4) - Toll zone estimation, UI refinements - March 2026
   server: {
     androidScheme: 'https',
     iosScheme: 'https',
