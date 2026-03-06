@@ -42,11 +42,29 @@ export async function removeSubscription(endpoint: string): Promise<void> {
   await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
 }
 
+interface RichNotificationPayload {
+  title: string;
+  body: string;
+  url?: string;
+  icon?: string;
+  badge?: string;
+  image?: string;
+  tag?: string;
+  renotify?: boolean;
+  silent?: boolean;
+  requireInteraction?: boolean;
+  actions?: Array<{ action: string; title: string; icon?: string }>;
+  data?: Record<string, any>;
+  category?: string;
+  timestamp?: number;
+}
+
 export async function sendPushNotification(
   title: string,
   body: string,
   url?: string,
-  targetUserType?: string
+  targetUserType?: string,
+  options?: Partial<RichNotificationPayload>
 ): Promise<void> {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
     console.log("VAPID keys not configured, skipping push notification");
@@ -63,7 +81,20 @@ export async function sendPushNotification(
     title,
     body,
     url: url || "/",
-    icon: "/icon-192.png",
+    icon: options?.icon || "/icon-192.png",
+    badge: options?.badge || "/icon-192.png",
+    image: options?.image,
+    tag: options?.tag,
+    renotify: options?.renotify ?? true,
+    silent: options?.silent ?? false,
+    requireInteraction: options?.requireInteraction ?? false,
+    actions: options?.actions || [],
+    data: {
+      url: url || "/",
+      category: options?.category || "general",
+      timestamp: options?.timestamp || Date.now(),
+      ...options?.data,
+    },
   });
 
   const sendPromises = filteredSubs.map(async (sub) => {
@@ -92,7 +123,15 @@ export async function sendPushNotification(
 
 export async function notifyDriversOfNewRide(
   pickupAddress: string,
-  appointmentTime: Date
+  appointmentTime: Date,
+  rideDetails?: {
+    rideId?: number;
+    dropoffAddress?: string;
+    distanceMiles?: number;
+    estimatedFare?: number;
+    vehicleType?: string;
+    mobilityNeeds?: string[];
+  }
 ): Promise<void> {
   const formattedTime = appointmentTime.toLocaleString("en-US", {
     month: "short",
@@ -100,34 +139,162 @@ export async function notifyDriversOfNewRide(
     hour: "numeric",
     minute: "2-digit",
   });
+
+  const distanceText = rideDetails?.distanceMiles 
+    ? ` · ${rideDetails.distanceMiles.toFixed(1)} mi` 
+    : "";
+  const fareText = rideDetails?.estimatedFare 
+    ? ` · $${rideDetails.estimatedFare.toFixed(2)}` 
+    : "";
   
   await sendPushNotification(
-    "New Ride Request",
-    `Pickup: ${pickupAddress} at ${formattedTime}`,
-    "/driver",
-    "driver"
+    "New ride request",
+    `${pickupAddress}${distanceText}${fareText}\n${formattedTime}`,
+    rideDetails?.rideId ? `/driver?ride=${rideDetails.rideId}` : "/driver",
+    "driver",
+    {
+      tag: `ride-request-${rideDetails?.rideId || Date.now()}`,
+      renotify: true,
+      requireInteraction: true,
+      category: "ride_request",
+      actions: [
+        { action: "view", title: "View details" },
+        { action: "dismiss", title: "Dismiss" },
+      ],
+      data: {
+        type: "ride_request",
+        rideId: rideDetails?.rideId,
+        pickupAddress,
+        dropoffAddress: rideDetails?.dropoffAddress,
+        distanceMiles: rideDetails?.distanceMiles,
+        estimatedFare: rideDetails?.estimatedFare,
+        vehicleType: rideDetails?.vehicleType,
+        appointmentTime: appointmentTime.toISOString(),
+      },
+    }
   );
+}
+
+interface RideNotificationContext {
+  rideId?: number;
+  driverName?: string;
+  driverPhone?: string;
+  vehicleInfo?: string;
+  licensePlate?: string;
+  eta?: number;
+  pickupAddress?: string;
+  dropoffAddress?: string;
+  fare?: number;
+  rating?: number;
+  driverPhoto?: string;
 }
 
 export async function notifyPatientOfRideUpdate(
   status: string,
-  driverName?: string
+  driverName?: string,
+  context?: RideNotificationContext
 ): Promise<void> {
-  const statusMessages: Record<string, string> = {
-    accepted: `Your ride has been accepted${driverName ? ` by ${driverName}` : ""}`,
-    driver_enroute: "Your driver is on the way",
-    arrived: "Your driver has arrived at the pickup location",
-    in_progress: "Your ride is in progress",
-    completed: "Your ride has been completed. Thank you!",
-    cancelled: "Your ride has been cancelled",
+  const notifications: Record<string, { title: string; body: string; actions: Array<{ action: string; title: string }>; requireInteraction: boolean; category: string }> = {
+    accepted: {
+      title: `${context?.driverName || driverName || "Your driver"} is assigned`,
+      body: context?.vehicleInfo 
+        ? `${context.vehicleInfo}${context.licensePlate ? ` · ${context.licensePlate}` : ""}\nOn the way to pick you up`
+        : "Your driver has been assigned and will head to your pickup location.",
+      actions: [
+        { action: "track", title: "Track driver" },
+        { action: "contact", title: "Contact" },
+      ],
+      requireInteraction: true,
+      category: "ride_accepted",
+    },
+    driver_enroute: {
+      title: "Driver on the way",
+      body: context?.eta 
+        ? `${context.driverName || "Your driver"} is ${context.eta} min away`
+        : `${context?.driverName || "Your driver"} is heading to your pickup`,
+      actions: [
+        { action: "track", title: "Track" },
+        { action: "contact", title: "Contact" },
+      ],
+      requireInteraction: false,
+      category: "ride_enroute",
+    },
+    arrived: {
+      title: "Driver has arrived",
+      body: context?.vehicleInfo 
+        ? `Look for ${context.vehicleInfo}${context.licensePlate ? ` · ${context.licensePlate}` : ""}`
+        : `${context?.driverName || "Your driver"} is waiting at the pickup`,
+      actions: [
+        { action: "contact", title: "Contact driver" },
+      ],
+      requireInteraction: true,
+      category: "ride_arrived",
+    },
+    in_progress: {
+      title: "Ride in progress",
+      body: context?.dropoffAddress 
+        ? `Heading to ${context.dropoffAddress}`
+        : "You're on your way to your destination",
+      actions: [
+        { action: "track", title: "View trip" },
+      ],
+      requireInteraction: false,
+      category: "ride_active",
+    },
+    completed: {
+      title: "Trip completed",
+      body: context?.fare 
+        ? `$${context.fare.toFixed(2)} · ${context.dropoffAddress || "Destination reached"}\nRate your ride`
+        : "You've arrived. Rate your experience.",
+      actions: [
+        { action: "rate", title: "Rate ride" },
+        { action: "receipt", title: "View receipt" },
+      ],
+      requireInteraction: true,
+      category: "ride_completed",
+    },
+    cancelled: {
+      title: "Ride cancelled",
+      body: "Your ride has been cancelled. You can book a new ride anytime.",
+      actions: [
+        { action: "rebook", title: "Book again" },
+      ],
+      requireInteraction: false,
+      category: "ride_cancelled",
+    },
   };
 
-  const message = statusMessages[status] || `Ride status updated: ${status}`;
-  
+  const notif = notifications[status] || {
+    title: "Ride update",
+    body: `Status: ${status}`,
+    actions: [],
+    requireInteraction: false,
+    category: "ride_update",
+  };
+
+  const rideUrl = context?.rideId ? `/my-rides?ride=${context.rideId}` : "/my-rides";
+
   await sendPushNotification(
-    "Ride Update",
-    message,
-    "/book-ride",
-    "user"
+    notif.title,
+    notif.body,
+    rideUrl,
+    "user",
+    {
+      tag: `ride-${context?.rideId || "update"}-${status}`,
+      renotify: true,
+      requireInteraction: notif.requireInteraction,
+      category: notif.category,
+      actions: notif.actions,
+      data: {
+        type: "ride_update",
+        status,
+        rideId: context?.rideId,
+        driverName: context?.driverName || driverName,
+        driverPhone: context?.driverPhone,
+        vehicleInfo: context?.vehicleInfo,
+        licensePlate: context?.licensePlate,
+        fare: context?.fare,
+      },
+    }
   );
 }

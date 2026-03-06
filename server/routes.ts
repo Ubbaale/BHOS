@@ -64,19 +64,46 @@ function verifyToken(token: string, type: 'access' | 'refresh'): JwtPayload | nu
 function mobileAuthMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Authorization token required' });
+    return mobileError(res, 401, "Authorization token required", "AUTH_REQUIRED");
   }
   
   const token = authHeader.substring(7);
   const payload = verifyToken(token, 'access');
   
   if (!payload) {
-    return res.status(401).json({ message: 'Invalid or expired token' });
+    return mobileError(res, 401, "Invalid or expired token", "TOKEN_INVALID");
   }
   
   // Attach user info to request
   (req as any).mobileUser = payload;
   next();
+}
+
+function mobileSuccess(res: Response, data: Record<string, any>, statusCode: number = 200, meta?: Record<string, any>) {
+  return res.status(statusCode).json({
+    status: "success",
+    data,
+    meta: {
+      timestamp: new Date().toISOString(),
+      version: "2.0",
+      ...meta,
+    },
+  });
+}
+
+function mobileError(res: Response, statusCode: number, message: string, code?: string, errors?: any[]) {
+  return res.status(statusCode).json({
+    status: "error",
+    error: {
+      message,
+      code: code || `ERR_${statusCode}`,
+      ...(errors ? { details: errors } : {}),
+    },
+    meta: {
+      timestamp: new Date().toISOString(),
+      version: "2.0",
+    },
+  });
 }
 
 const FIELDHCP_API_URL = "https://admin.carehubapp.com/APIs/Employer/JobSearch";
@@ -578,17 +605,17 @@ export async function registerRoutes(
       const { username, password, deviceId } = req.body;
       
       if (!username || !password) {
-        return res.status(400).json({ message: "Username and password are required" });
+        return mobileError(res, 400, "Username and password are required", "MISSING_CREDENTIALS");
       }
 
       const user = await storage.getUserByUsername(username);
       if (!user) {
-        return res.status(401).json({ message: "Invalid username or password" });
+        return mobileError(res, 401, "Invalid username or password", "INVALID_CREDENTIALS");
       }
 
       const isValidPassword = await bcrypt.compare(password, user.password);
       if (!isValidPassword) {
-        return res.status(401).json({ message: "Invalid username or password" });
+        return mobileError(res, 401, "Invalid username or password", "INVALID_CREDENTIALS");
       }
 
       // Get driver profile if user is a driver
@@ -616,10 +643,10 @@ export async function registerRoutes(
       // Clear rate limit on successful login
       clearLoginAttempts((req as any).loginRateLimitKey);
 
-      res.json({
+      mobileSuccess(res, {
         accessToken,
         refreshToken: refreshTokenValue,
-        expiresIn: 900, // 15 minutes in seconds
+        expiresIn: 900,
         user: {
           id: user.id,
           username: user.username,
@@ -634,7 +661,7 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Mobile login error:", error);
-      res.status(500).json({ message: "Login failed" });
+      mobileError(res, 500, "Login failed", "AUTH_FAILED");
     }
   });
 
@@ -644,18 +671,16 @@ export async function registerRoutes(
       const { refreshToken } = req.body;
       
       if (!refreshToken) {
-        return res.status(400).json({ message: "Refresh token required" });
+        return mobileError(res, 400, "Refresh token required", "MISSING_TOKEN");
       }
 
       const payload = verifyToken(refreshToken, 'refresh');
       if (!payload) {
-        return res.status(401).json({ message: "Invalid or expired refresh token" });
+        return mobileError(res, 401, "Invalid or expired refresh token", "TOKEN_EXPIRED");
       }
 
-      // Invalidate old refresh token
       refreshTokens.delete(refreshToken);
 
-      // Generate new tokens
       const tokenPayload = {
         userId: payload.userId,
         username: payload.username,
@@ -667,14 +692,14 @@ export async function registerRoutes(
       const newAccessToken = generateAccessToken(tokenPayload);
       const newRefreshToken = generateRefreshToken(tokenPayload);
 
-      res.json({
+      mobileSuccess(res, {
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
         expiresIn: 900
       });
     } catch (error) {
       console.error("Token refresh error:", error);
-      res.status(500).json({ message: "Token refresh failed" });
+      mobileError(res, 500, "Token refresh failed", "REFRESH_FAILED");
     }
   });
 
@@ -684,7 +709,7 @@ export async function registerRoutes(
     if (refreshToken) {
       refreshTokens.delete(refreshToken);
     }
-    res.json({ message: "Logged out successfully" });
+    mobileSuccess(res, { message: "Logged out successfully" });
   });
 
   // Mobile - get current user (using JWT)
@@ -694,7 +719,7 @@ export async function registerRoutes(
       
       const user = await storage.getUserByUsername(mobileUser.username);
       if (!user) {
-        return res.status(401).json({ message: "User not found" });
+        return mobileError(res, 401, "User not found", "USER_NOT_FOUND");
       }
 
       let driverProfile = null;
@@ -702,7 +727,7 @@ export async function registerRoutes(
         driverProfile = await storage.getDriver(mobileUser.driverId);
       }
 
-      res.json({
+      mobileSuccess(res, {
         user: {
           id: user.id,
           username: user.username,
@@ -717,7 +742,7 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Mobile auth me error:", error);
-      res.status(500).json({ message: "Failed to get user info" });
+      mobileError(res, 500, "Failed to get user info", "FETCH_FAILED");
     }
   });
 
@@ -728,27 +753,26 @@ export async function registerRoutes(
       const { deviceToken, platform, deviceId } = req.body;
       
       if (!deviceToken || !platform) {
-        return res.status(400).json({ message: "Device token and platform are required" });
+        return mobileError(res, 400, "Device token and platform are required", "MISSING_FIELDS");
       }
       
       if (!['fcm', 'apns', 'ios', 'android'].includes(platform.toLowerCase())) {
-        return res.status(400).json({ message: "Platform must be 'fcm', 'apns', 'ios', or 'android'" });
+        return mobileError(res, 400, "Platform must be 'fcm', 'apns', 'ios', or 'android'", "INVALID_PLATFORM");
       }
       
-      // Store mobile push subscription using the push service
       const endpoint = `mobile://${platform.toLowerCase()}/${deviceToken}`;
       const p256dh = deviceId || 'mobile-device';
       const auth = `user-${mobileUser.userId}`;
       
       await saveSubscription(endpoint, p256dh, auth, mobileUser.role, mobileUser.driverId);
       
-      res.json({ 
-        message: "Device registered for push notifications",
+      mobileSuccess(res, { 
+        registered: true,
         platform: platform.toLowerCase()
       });
     } catch (error) {
       console.error("Mobile push registration error:", error);
-      res.status(500).json({ message: "Failed to register device" });
+      mobileError(res, 500, "Failed to register device", "REGISTRATION_FAILED");
     }
   });
 
@@ -756,7 +780,7 @@ export async function registerRoutes(
   app.get("/api/mobile/auth/ws-token", mobileAuthMiddleware, (req, res) => {
     const mobileUser = (req as any).mobileUser as JwtPayload;
     const token = generateWsToken(String(mobileUser.userId), mobileUser.role);
-    res.json({ token });
+    mobileSuccess(res, { token, expiresIn: 60 });
   });
 
   // Mobile - get available rides (for drivers)
@@ -777,12 +801,13 @@ export async function registerRoutes(
         rides = rides.filter((r: any) => r.status === status);
       }
       
+      const total = rides.length;
       rides = rides.slice(0, Number(limit));
       
-      res.json({ rides });
+      mobileSuccess(res, { rides }, 200, { total, limit: Number(limit) });
     } catch (error) {
       console.error("Mobile get rides error:", error);
-      res.status(500).json({ message: "Failed to get rides" });
+      mobileError(res, 500, "Failed to get rides", "FETCH_FAILED");
     }
   });
 
@@ -795,25 +820,39 @@ export async function registerRoutes(
       
       const ride = await storage.getRide(rideId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        return mobileError(res, 404, "Ride not found", "RIDE_NOT_FOUND");
       }
       
-      // Verify driver owns this ride
       if (mobileUser.role === 'driver' && ride.driverId !== mobileUser.driverId) {
-        return res.status(403).json({ message: "Not authorized for this ride" });
+        return mobileError(res, 403, "Not authorized for this ride", "UNAUTHORIZED");
       }
       
-      // Update status
       const updatedRide = await storage.updateRideStatus(rideId, status);
       if (!updatedRide) {
-        return res.status(500).json({ message: "Failed to update ride" });
+        return mobileError(res, 500, "Failed to update ride", "UPDATE_FAILED");
       }
       broadcastRideUpdate("status_change", updatedRide);
+
+      try {
+        const driver = mobileUser.driverId ? await storage.getDriver(mobileUser.driverId) : null;
+        await notifyPatientOfRideUpdate(status, driver?.fullName, {
+          rideId,
+          driverName: driver?.fullName,
+          driverPhone: driver?.phone || undefined,
+          vehicleInfo: driver?.vehicleMake && driver?.vehicleModel ? `${driver.vehicleMake} ${driver.vehicleModel}` : undefined,
+          licensePlate: driver?.licensePlate || undefined,
+          pickupAddress: ride.pickupAddress,
+          dropoffAddress: ride.dropoffAddress,
+          fare: ride.estimatedFare ? Number(ride.estimatedFare) : undefined,
+        });
+      } catch (e) {
+        console.error("Failed to send rich notification:", e);
+      }
       
-      res.json({ ride: updatedRide });
+      mobileSuccess(res, { ride: updatedRide });
     } catch (error) {
       console.error("Mobile update ride status error:", error);
-      res.status(500).json({ message: "Failed to update ride status" });
+      mobileError(res, 500, "Failed to update ride status", "STATUS_UPDATE_FAILED");
     }
   });
 
@@ -823,13 +862,13 @@ export async function registerRoutes(
       const mobileUser = (req as any).mobileUser as JwtPayload;
       
       if (!mobileUser.driverId) {
-        return res.status(403).json({ message: "Not a driver account" });
+        return mobileError(res, 403, "Not a driver account", "NOT_DRIVER");
       }
       
       const { latitude, longitude, rideId } = req.body;
       
       if (typeof latitude !== 'number' || typeof longitude !== 'number') {
-        return res.status(400).json({ message: "Valid latitude and longitude required" });
+        return mobileError(res, 400, "Valid latitude and longitude required", "INVALID_COORDS");
       }
       
       await storage.updateDriverLocation(mobileUser.driverId, latitude, longitude);
@@ -841,10 +880,10 @@ export async function registerRoutes(
         }
       }
       
-      res.json({ message: "Location updated" });
+      mobileSuccess(res, { updated: true, latitude, longitude });
     } catch (error) {
       console.error("Mobile driver location update error:", error);
-      res.status(500).json({ message: "Failed to update location" });
+      mobileError(res, 500, "Failed to update location", "LOCATION_UPDATE_FAILED");
     }
   });
 
@@ -857,32 +896,32 @@ export async function registerRoutes(
       const { username, password, confirmPassword, role, fullName, phone } = req.body;
 
       if (!username || !password) {
-        return res.status(400).json({ message: "Username (email) and password are required" });
+        return mobileError(res, 400, "Username (email) and password are required", "MISSING_CREDENTIALS");
       }
 
       if (password.length < 8) {
-        return res.status(400).json({ message: "Password must be at least 8 characters" });
+        return mobileError(res, 400, "Password must be at least 8 characters", "WEAK_PASSWORD");
       }
       if (!/[A-Z]/.test(password)) {
-        return res.status(400).json({ message: "Password must contain at least one uppercase letter" });
+        return mobileError(res, 400, "Password must contain at least one uppercase letter", "WEAK_PASSWORD");
       }
       if (!/[a-z]/.test(password)) {
-        return res.status(400).json({ message: "Password must contain at least one lowercase letter" });
+        return mobileError(res, 400, "Password must contain at least one lowercase letter", "WEAK_PASSWORD");
       }
       if (!/[0-9]/.test(password)) {
-        return res.status(400).json({ message: "Password must contain at least one number" });
+        return mobileError(res, 400, "Password must contain at least one number", "WEAK_PASSWORD");
       }
       if (!/[^A-Za-z0-9]/.test(password)) {
-        return res.status(400).json({ message: "Password must contain at least one special character" });
+        return mobileError(res, 400, "Password must contain at least one special character", "WEAK_PASSWORD");
       }
 
       if (confirmPassword && password !== confirmPassword) {
-        return res.status(400).json({ message: "Passwords don't match" });
+        return mobileError(res, 400, "Passwords don't match", "PASSWORD_MISMATCH");
       }
 
       const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
-        return res.status(400).json({ message: "Email is already registered. Please use a different email or login." });
+        return mobileError(res, 400, "Email is already registered. Please use a different email or login.", "EMAIL_EXISTS");
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -929,7 +968,7 @@ export async function registerRoutes(
       const accessToken = generateAccessToken(tokenPayload);
       const refreshTokenValue = generateRefreshToken(tokenPayload);
 
-      res.status(201).json({
+      mobileSuccess(res, {
         accessToken,
         refreshToken: refreshTokenValue,
         expiresIn: 900,
@@ -938,10 +977,10 @@ export async function registerRoutes(
           username: user.username,
           role: user.role
         }
-      });
+      }, 201);
     } catch (error) {
       console.error("Mobile registration error:", error);
-      res.status(500).json({ message: "Registration failed" });
+      mobileError(res, 500, "Registration failed", "REGISTRATION_FAILED");
     }
   });
 
@@ -972,11 +1011,12 @@ export async function registerRoutes(
         );
       }
 
+      const total = jobs.length;
       jobs = jobs.slice(0, Number(limit));
-      res.json({ jobs, total: jobs.length });
+      mobileSuccess(res, { jobs }, 200, { total, limit: Number(limit) });
     } catch (error) {
       console.error("Mobile get jobs error:", error);
-      res.status(500).json({ message: "Failed to get jobs" });
+      mobileError(res, 500, "Failed to get jobs", "FETCH_FAILED");
     }
   });
 
@@ -985,12 +1025,12 @@ export async function registerRoutes(
       const id = parseInt(req.params.id);
       const job = await storage.getJob(id);
       if (!job) {
-        return res.status(404).json({ message: "Job not found" });
+        return mobileError(res, 404, "Job not found", "JOB_NOT_FOUND");
       }
-      res.json({ job });
+      mobileSuccess(res, { job });
     } catch (error) {
       console.error("Mobile get job error:", error);
-      res.status(500).json({ message: "Failed to get job" });
+      mobileError(res, 500, "Failed to get job", "FETCH_FAILED");
     }
   });
 
@@ -999,13 +1039,13 @@ export async function registerRoutes(
       const parsed = insertJobSchema.parse(req.body);
       const job = await storage.createJob(parsed);
       broadcastJobUpdate("add", job);
-      res.status(201).json({ job });
+      mobileSuccess(res, { job }, 201);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid job data", errors: error.errors });
+        return mobileError(res, 400, "Invalid job data", "VALIDATION_ERROR", error.errors);
       }
       console.error("Mobile create job error:", error);
-      res.status(500).json({ message: "Failed to create job" });
+      mobileError(res, 500, "Failed to create job", "CREATE_FAILED");
     }
   });
 
@@ -1032,7 +1072,13 @@ export async function registerRoutes(
       broadcastRideUpdate("new", ride);
 
       try {
-        await notifyDriversOfNewRide(ride.pickupAddress, new Date(ride.appointmentTime));
+        await notifyDriversOfNewRide(ride.pickupAddress, new Date(ride.appointmentTime), {
+          rideId: ride.id,
+          dropoffAddress: ride.dropoffAddress,
+          distanceMiles: ride.distanceMiles ? Number(ride.distanceMiles) : undefined,
+          estimatedFare: ride.estimatedFare ? Number(ride.estimatedFare) : undefined,
+          vehicleType: ride.vehicleType || undefined,
+        });
       } catch (e) {
         console.error("Failed to notify drivers:", e);
       }
@@ -1053,13 +1099,13 @@ export async function registerRoutes(
         });
       }
 
-      res.status(201).json({ ride });
+      mobileSuccess(res, { ride }, 201);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid ride data", errors: error.errors });
+        return mobileError(res, 400, "Invalid ride data", "VALIDATION_ERROR", error.errors);
       }
       console.error("Mobile create ride error:", error);
-      res.status(500).json({ message: "Failed to create ride" });
+      mobileError(res, 500, "Failed to create ride", "CREATE_FAILED");
     }
   });
 
@@ -1067,15 +1113,15 @@ export async function registerRoutes(
     try {
       const mobileUser = (req as any).mobileUser as JwtPayload;
       if (mobileUser.role !== 'driver') {
-        return res.status(403).json({ message: "Only drivers can view the ride pool" });
+        return mobileError(res, 403, "Only drivers can view the ride pool", "NOT_DRIVER");
       }
 
       let rides = await storage.getAllRides();
       rides = rides.filter((r: any) => r.status === "requested" && !r.driverId);
-      res.json({ rides });
+      mobileSuccess(res, { rides }, 200, { total: rides.length });
     } catch (error) {
       console.error("Mobile ride pool error:", error);
-      res.status(500).json({ message: "Failed to get ride pool" });
+      mobileError(res, 500, "Failed to get ride pool", "FETCH_FAILED");
     }
   });
 
@@ -1085,17 +1131,17 @@ export async function registerRoutes(
       const rideId = parseInt(req.params.id);
       const ride = await storage.getRide(rideId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        return mobileError(res, 404, "Ride not found", "RIDE_NOT_FOUND");
       }
       const isPatient = String(ride.patientId) === String(mobileUser.userId);
       const isDriver = mobileUser.driverId && ride.driverId === mobileUser.driverId;
       if (!isPatient && !isDriver) {
-        return res.status(403).json({ message: "Not authorized for this ride" });
+        return mobileError(res, 403, "Not authorized for this ride", "UNAUTHORIZED");
       }
-      res.json({ ride });
+      mobileSuccess(res, { ride });
     } catch (error) {
       console.error("Mobile get ride error:", error);
-      res.status(500).json({ message: "Failed to get ride" });
+      mobileError(res, 500, "Failed to get ride", "FETCH_FAILED");
     }
   });
 
@@ -1103,16 +1149,16 @@ export async function registerRoutes(
     try {
       const mobileUser = (req as any).mobileUser as JwtPayload;
       if (!mobileUser.driverId) {
-        return res.status(403).json({ message: "Only drivers can accept rides" });
+        return mobileError(res, 403, "Only drivers can accept rides", "NOT_DRIVER");
       }
 
       const rideId = parseInt(req.params.id);
       const ride = await storage.getRide(rideId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        return mobileError(res, 404, "Ride not found", "RIDE_NOT_FOUND");
       }
       if (ride.status !== "requested") {
-        return res.status(400).json({ message: "Ride is no longer available" });
+        return mobileError(res, 400, "Ride is no longer available", "RIDE_UNAVAILABLE");
       }
 
       const updatedRide = await storage.assignDriver(rideId, mobileUser.driverId);
@@ -1122,18 +1168,27 @@ export async function registerRoutes(
         broadcastRideUpdate("status_change", finalRide);
 
         try {
-          if (finalRide) await notifyPatientOfRideUpdate("accepted", finalRide.driverId?.toString());
+          const driver = await storage.getDriver(mobileUser.driverId);
+          if (finalRide) await notifyPatientOfRideUpdate("accepted", driver?.fullName, {
+            rideId,
+            driverName: driver?.fullName,
+            driverPhone: driver?.phone || undefined,
+            vehicleInfo: driver?.vehicleMake && driver?.vehicleModel ? `${driver.vehicleMake} ${driver.vehicleModel}` : undefined,
+            licensePlate: driver?.licensePlate || undefined,
+            pickupAddress: ride.pickupAddress,
+            dropoffAddress: ride.dropoffAddress,
+          });
         } catch (e) {
           console.error("Failed to notify patient:", e);
         }
 
-        res.json({ ride: finalRide });
+        mobileSuccess(res, { ride: finalRide });
       } else {
-        res.status(500).json({ message: "Failed to accept ride" });
+        mobileError(res, 500, "Failed to accept ride", "ACCEPT_FAILED");
       }
     } catch (error) {
       console.error("Mobile accept ride error:", error);
-      res.status(500).json({ message: "Failed to accept ride" });
+      mobileError(res, 500, "Failed to accept ride", "ACCEPT_FAILED");
     }
   });
 
@@ -1143,10 +1198,10 @@ export async function registerRoutes(
       const rideId = parseInt(req.params.id);
       const ride = await storage.getRide(rideId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        return mobileError(res, 404, "Ride not found", "RIDE_NOT_FOUND");
       }
       if (mobileUser.role === 'driver' && ride.driverId !== mobileUser.driverId) {
-        return res.status(403).json({ message: "Not authorized for this ride" });
+        return mobileError(res, 403, "Not authorized for this ride", "UNAUTHORIZED");
       }
 
       const { actualDistanceMiles } = req.body;
@@ -1162,16 +1217,20 @@ export async function registerRoutes(
           await storage.incrementDriverCompletedRides(mobileUser.driverId);
         }
         try {
-          await notifyPatientOfRideUpdate("completed");
+          await notifyPatientOfRideUpdate("completed", undefined, {
+            rideId,
+            dropoffAddress: ride.dropoffAddress,
+            fare: updatedRide.estimatedFare ? Number(updatedRide.estimatedFare) : undefined,
+          });
         } catch (e) {
           console.error("Failed to notify patient:", e);
         }
       }
 
-      res.json({ ride: updatedRide });
+      mobileSuccess(res, { ride: updatedRide });
     } catch (error) {
       console.error("Mobile complete ride error:", error);
-      res.status(500).json({ message: "Failed to complete ride" });
+      mobileError(res, 500, "Failed to complete ride", "COMPLETE_FAILED");
     }
   });
 
@@ -1181,7 +1240,7 @@ export async function registerRoutes(
       const rideId = parseInt(req.params.id);
       const ride = await storage.getRide(rideId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        return mobileError(res, 404, "Ride not found", "RIDE_NOT_FOUND");
       }
 
       const { reason } = req.body;
@@ -1193,12 +1252,17 @@ export async function registerRoutes(
         if (cancelledBy === 'driver' && mobileUser.driverId) {
           await storage.incrementDriverCancellations(mobileUser.driverId);
         }
+        try {
+          await notifyPatientOfRideUpdate("cancelled", undefined, { rideId });
+        } catch (e) {
+          console.error("Failed to notify patient:", e);
+        }
       }
 
-      res.json({ ride: updatedRide });
+      mobileSuccess(res, { ride: updatedRide });
     } catch (error) {
       console.error("Mobile cancel ride error:", error);
-      res.status(500).json({ message: "Failed to cancel ride" });
+      mobileError(res, 500, "Failed to cancel ride", "CANCEL_FAILED");
     }
   });
 
@@ -1208,18 +1272,18 @@ export async function registerRoutes(
       const rideId = parseInt(req.params.id);
       const ride = await storage.getRide(rideId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        return mobileError(res, 404, "Ride not found", "RIDE_NOT_FOUND");
       }
       const isPatient = String(ride.patientId) === String(mobileUser.userId);
       const isDriver = mobileUser.driverId && ride.driverId === mobileUser.driverId;
       if (!isPatient && !isDriver) {
-        return res.status(403).json({ message: "Not authorized for this ride" });
+        return mobileError(res, 403, "Not authorized for this ride", "UNAUTHORIZED");
       }
       const messages = await storage.getRideMessages(rideId);
-      res.json({ messages });
+      mobileSuccess(res, { messages }, 200, { total: messages.length });
     } catch (error) {
       console.error("Mobile get messages error:", error);
-      res.status(500).json({ message: "Failed to get messages" });
+      mobileError(res, 500, "Failed to get messages", "FETCH_FAILED");
     }
   });
 
@@ -1230,17 +1294,17 @@ export async function registerRoutes(
       const { message: messageText } = req.body;
 
       if (!messageText || typeof messageText !== 'string' || messageText.trim().length === 0) {
-        return res.status(400).json({ message: "Message text is required" });
+        return mobileError(res, 400, "Message text is required", "MISSING_MESSAGE");
       }
 
       const ride = await storage.getRide(rideId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        return mobileError(res, 404, "Ride not found", "RIDE_NOT_FOUND");
       }
       const isPatient = String(ride.patientId) === String(mobileUser.userId);
       const isDriver = mobileUser.driverId && ride.driverId === mobileUser.driverId;
       if (!isPatient && !isDriver) {
-        return res.status(403).json({ message: "Not authorized for this ride" });
+        return mobileError(res, 403, "Not authorized for this ride", "UNAUTHORIZED");
       }
 
       const senderType = mobileUser.role === 'driver' ? 'driver' : 'patient';
@@ -1252,10 +1316,10 @@ export async function registerRoutes(
       });
 
       broadcastChatMessage(rideId, msg);
-      res.status(201).json({ message: msg });
+      mobileSuccess(res, { message: msg }, 201);
     } catch (error) {
       console.error("Mobile send message error:", error);
-      res.status(500).json({ message: "Failed to send message" });
+      mobileError(res, 500, "Failed to send message", "SEND_FAILED");
     }
   });
 
@@ -1265,18 +1329,18 @@ export async function registerRoutes(
       const rideId = parseInt(req.params.id);
       const ride = await storage.getRide(rideId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        return mobileError(res, 404, "Ride not found", "RIDE_NOT_FOUND");
       }
       const isPatient = String(ride.patientId) === String(mobileUser.userId);
       const isDriver = mobileUser.driverId && ride.driverId === mobileUser.driverId;
       if (!isPatient && !isDriver) {
-        return res.status(403).json({ message: "Not authorized for this ride" });
+        return mobileError(res, 403, "Not authorized for this ride", "UNAUTHORIZED");
       }
       const events = await storage.getRideEvents(rideId);
-      res.json({ events });
+      mobileSuccess(res, { events }, 200, { total: events.length });
     } catch (error) {
       console.error("Mobile get events error:", error);
-      res.status(500).json({ message: "Failed to get ride events" });
+      mobileError(res, 500, "Failed to get ride events", "FETCH_FAILED");
     }
   });
 
@@ -1287,17 +1351,17 @@ export async function registerRoutes(
       const { rating, comment } = req.body;
 
       if (!rating || typeof rating !== 'number' || rating < 1 || rating > 5) {
-        return res.status(400).json({ message: "Rating must be a number between 1 and 5" });
+        return mobileError(res, 400, "Rating must be a number between 1 and 5", "INVALID_RATING");
       }
 
       const ride = await storage.getRide(rideId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        return mobileError(res, 404, "Ride not found", "RIDE_NOT_FOUND");
       }
       const isPatient = String(ride.patientId) === String(mobileUser.userId);
       const isDriver = mobileUser.driverId && ride.driverId === mobileUser.driverId;
       if (!isPatient && !isDriver) {
-        return res.status(403).json({ message: "Not authorized for this ride" });
+        return mobileError(res, 403, "Not authorized for this ride", "UNAUTHORIZED");
       }
 
       const rideRating = await storage.createRideRating({
@@ -1311,10 +1375,10 @@ export async function registerRoutes(
         await storage.updateDriverRating(ride.driverId, rating);
       }
 
-      res.status(201).json({ rating: rideRating });
+      mobileSuccess(res, { rating: rideRating }, 201);
     } catch (error) {
       console.error("Mobile rate ride error:", error);
-      res.status(500).json({ message: "Failed to rate ride" });
+      mobileError(res, 500, "Failed to rate ride", "RATE_FAILED");
     }
   });
 
@@ -1328,18 +1392,18 @@ export async function registerRoutes(
       if (!mobileUser.driverId) {
         const driverByUser = await storage.getDriverByUserId(mobileUser.userId);
         if (!driverByUser) {
-          return res.status(404).json({ message: "No driver profile found" });
+          return mobileError(res, 404, "No driver profile found", "DRIVER_NOT_FOUND");
         }
-        return res.json({ driver: driverByUser });
+        return mobileSuccess(res, { driver: driverByUser });
       }
       const driver = await storage.getDriver(mobileUser.driverId);
       if (!driver) {
-        return res.status(404).json({ message: "Driver not found" });
+        return mobileError(res, 404, "Driver not found", "DRIVER_NOT_FOUND");
       }
-      res.json({ driver });
+      mobileSuccess(res, { driver });
     } catch (error) {
       console.error("Mobile get driver profile error:", error);
-      res.status(500).json({ message: "Failed to get driver profile" });
+      mobileError(res, 500, "Failed to get driver profile", "FETCH_FAILED");
     }
   });
 
@@ -1347,17 +1411,17 @@ export async function registerRoutes(
     try {
       const mobileUser = (req as any).mobileUser as JwtPayload;
       if (!mobileUser.driverId) {
-        return res.status(403).json({ message: "Not a driver account" });
+        return mobileError(res, 403, "Not a driver account", "NOT_DRIVER");
       }
       const { isAvailable } = req.body;
       if (typeof isAvailable !== 'boolean') {
-        return res.status(400).json({ message: "isAvailable must be a boolean" });
+        return mobileError(res, 400, "isAvailable must be a boolean", "INVALID_INPUT");
       }
       const driver = await storage.updateDriverAvailability(mobileUser.driverId, isAvailable);
-      res.json({ driver });
+      mobileSuccess(res, { driver });
     } catch (error) {
       console.error("Mobile update availability error:", error);
-      res.status(500).json({ message: "Failed to update availability" });
+      mobileError(res, 500, "Failed to update availability", "UPDATE_FAILED");
     }
   });
 
@@ -1365,11 +1429,11 @@ export async function registerRoutes(
     try {
       const mobileUser = (req as any).mobileUser as JwtPayload;
       if (!mobileUser.driverId) {
-        return res.status(403).json({ message: "Not a driver account" });
+        return mobileError(res, 403, "Not a driver account", "NOT_DRIVER");
       }
       const earnings = await storage.getDriverEarnings(mobileUser.driverId);
       const driver = await storage.getDriver(mobileUser.driverId);
-      res.json({
+      mobileSuccess(res, {
         earnings,
         balance: {
           available: driver?.availableBalance || "0",
@@ -1379,7 +1443,7 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Mobile get earnings error:", error);
-      res.status(500).json({ message: "Failed to get earnings" });
+      mobileError(res, 500, "Failed to get earnings", "FETCH_FAILED");
     }
   });
 
@@ -1387,13 +1451,13 @@ export async function registerRoutes(
     try {
       const mobileUser = (req as any).mobileUser as JwtPayload;
       if (!mobileUser.driverId) {
-        return res.status(403).json({ message: "Not a driver account" });
+        return mobileError(res, 403, "Not a driver account", "NOT_DRIVER");
       }
       const payouts = await storage.getDriverPayouts(mobileUser.driverId);
-      res.json({ payouts });
+      mobileSuccess(res, { payouts }, 200, { total: payouts.length });
     } catch (error) {
       console.error("Mobile get payouts error:", error);
-      res.status(500).json({ message: "Failed to get payouts" });
+      mobileError(res, 500, "Failed to get payouts", "FETCH_FAILED");
     }
   });
 
@@ -1402,21 +1466,21 @@ export async function registerRoutes(
       const { email, password, confirmPassword, ...driverData } = req.body;
 
       if (!email || !password) {
-        return res.status(400).json({ message: "Email and password are required" });
+        return mobileError(res, 400, "Email and password are required", "MISSING_CREDENTIALS");
       }
       if (password.length < 8) {
-        return res.status(400).json({ message: "Password must be at least 8 characters" });
+        return mobileError(res, 400, "Password must be at least 8 characters", "WEAK_PASSWORD");
       }
       if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
-        return res.status(400).json({ message: "Password must contain uppercase, lowercase, number, and special character" });
+        return mobileError(res, 400, "Password must contain uppercase, lowercase, number, and special character", "WEAK_PASSWORD");
       }
       if (confirmPassword && password !== confirmPassword) {
-        return res.status(400).json({ message: "Passwords don't match" });
+        return mobileError(res, 400, "Passwords don't match", "PASSWORD_MISMATCH");
       }
 
       const existingUser = await storage.getUserByUsername(email);
       if (existingUser) {
-        return res.status(400).json({ message: "Email is already registered" });
+        return mobileError(res, 400, "Email is already registered", "EMAIL_EXISTS");
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -1439,19 +1503,19 @@ export async function registerRoutes(
       const accessToken = generateAccessToken(tokenPayload);
       const refreshTokenValue = generateRefreshToken(tokenPayload);
 
-      res.status(201).json({
+      mobileSuccess(res, {
         accessToken,
         refreshToken: refreshTokenValue,
         expiresIn: 900,
         user: { id: user.id, username: user.username, role: "driver" },
         driver: { id: driver.id, fullName: driver.fullName, applicationStatus: driver.applicationStatus }
-      });
+      }, 201);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid driver data", errors: error.errors });
+        return mobileError(res, 400, "Invalid driver data", "VALIDATION_ERROR", error.errors);
       }
       console.error("Mobile driver apply error:", error);
-      res.status(500).json({ message: "Failed to submit driver application" });
+      mobileError(res, 500, "Failed to submit driver application", "APPLY_FAILED");
     }
   });
 
@@ -1464,12 +1528,12 @@ export async function registerRoutes(
       const mobileUser = (req as any).mobileUser as JwtPayload;
       const patient = await storage.getPatient(mobileUser.userId);
       if (!patient) {
-        return res.status(404).json({ message: "Patient profile not found" });
+        return mobileError(res, 404, "Patient profile not found", "PATIENT_NOT_FOUND");
       }
-      res.json({ patient });
+      mobileSuccess(res, { patient });
     } catch (error) {
       console.error("Mobile get patient profile error:", error);
-      res.status(500).json({ message: "Failed to get patient profile" });
+      mobileError(res, 500, "Failed to get patient profile", "FETCH_FAILED");
     }
   });
 
@@ -1478,7 +1542,7 @@ export async function registerRoutes(
       const mobileUser = (req as any).mobileUser as JwtPayload;
       const existing = await storage.getPatient(mobileUser.userId);
       if (existing) {
-        return res.json({ patient: existing });
+        return mobileSuccess(res, { patient: existing });
       }
 
       const { fullName, phone, email, mobilityNeeds, emergencyContactName, emergencyContactPhone } = req.body;
@@ -1493,10 +1557,10 @@ export async function registerRoutes(
         savedAddresses: [],
       });
 
-      res.status(201).json({ patient });
+      mobileSuccess(res, { patient }, 201);
     } catch (error) {
       console.error("Mobile create patient profile error:", error);
-      res.status(500).json({ message: "Failed to create patient profile" });
+      mobileError(res, 500, "Failed to create patient profile", "CREATE_FAILED");
     }
   });
 
@@ -1512,14 +1576,14 @@ export async function registerRoutes(
 
       const activeSurge = await storage.getActiveSurgePricing(currentDay, currentHour);
 
-      res.json({
+      mobileSuccess(res, {
         isActive: !!activeSurge,
         multiplier: activeSurge ? activeSurge.multiplier : 1.0,
         reason: activeSurge ? activeSurge.reason : null,
       });
     } catch (error) {
       console.error("Mobile surge pricing error:", error);
-      res.status(500).json({ message: "Failed to get surge pricing" });
+      mobileError(res, 500, "Failed to get surge pricing", "FETCH_FAILED");
     }
   });
 
@@ -1537,10 +1601,10 @@ export async function registerRoutes(
       };
 
       const incident = await storage.createIncidentReport(incidentData);
-      res.status(201).json({ incident });
+      mobileSuccess(res, { incident }, 201);
     } catch (error) {
       console.error("Mobile create incident error:", error);
-      res.status(500).json({ message: "Failed to report incident" });
+      mobileError(res, 500, "Failed to report incident", "CREATE_FAILED");
     }
   });
 
@@ -1554,22 +1618,22 @@ export async function registerRoutes(
       const rideId = parseInt(req.params.id);
       const ride = await storage.getRide(rideId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        return mobileError(res, 404, "Ride not found", "RIDE_NOT_FOUND");
       }
 
       const isPatient = String(ride.patientId) === String(mobileUser.userId);
       if (!isPatient) {
-        return res.status(403).json({ message: "Only the ride patient can create a payment" });
+        return mobileError(res, 403, "Only the ride patient can create a payment", "UNAUTHORIZED");
       }
 
       const fare = parseFloat(ride.estimatedFare || "0");
       if (fare <= 0) {
-        return res.status(400).json({ message: "Invalid fare amount" });
+        return mobileError(res, 400, "Invalid fare amount", "INVALID_FARE");
       }
 
       const stripeClient = getUncachableStripeClient();
       if (!stripeClient) {
-        return res.status(500).json({ message: "Payment service unavailable" });
+        return mobileError(res, 500, "Payment service unavailable", "PAYMENT_UNAVAILABLE");
       }
 
       const paymentIntent = await stripeClient.paymentIntents.create({
@@ -1578,14 +1642,15 @@ export async function registerRoutes(
         metadata: { rideId: String(rideId), type: "ride_payment" },
       });
 
-      res.json({
+      mobileSuccess(res, {
         clientSecret: paymentIntent.client_secret,
         publishableKey: getStripePublishableKey(),
         amount: fare,
+        currency: "usd",
       });
     } catch (error) {
       console.error("Mobile payment intent error:", error);
-      res.status(500).json({ message: "Failed to create payment" });
+      mobileError(res, 500, "Failed to create payment", "PAYMENT_FAILED");
     }
   });
 
@@ -1596,22 +1661,22 @@ export async function registerRoutes(
       const { amount } = req.body;
 
       if (!amount || typeof amount !== 'number' || amount <= 0 || amount > 500) {
-        return res.status(400).json({ message: "Tip amount must be a number between $0.01 and $500" });
+        return mobileError(res, 400, "Tip amount must be a number between $0.01 and $500", "INVALID_TIP");
       }
 
       const ride = await storage.getRide(rideId);
       if (!ride) {
-        return res.status(404).json({ message: "Ride not found" });
+        return mobileError(res, 404, "Ride not found", "RIDE_NOT_FOUND");
       }
 
       const isPatient = String(ride.patientId) === String(mobileUser.userId);
       if (!isPatient) {
-        return res.status(403).json({ message: "Only the ride patient can tip" });
+        return mobileError(res, 403, "Only the ride patient can tip", "UNAUTHORIZED");
       }
 
       const stripeClient = getUncachableStripeClient();
       if (!stripeClient) {
-        return res.status(500).json({ message: "Payment service unavailable" });
+        return mobileError(res, 500, "Payment service unavailable", "PAYMENT_UNAVAILABLE");
       }
 
       const paymentIntent = await stripeClient.paymentIntents.create({
@@ -1620,14 +1685,15 @@ export async function registerRoutes(
         metadata: { rideId: String(rideId), type: "tip" },
       });
 
-      res.json({
+      mobileSuccess(res, {
         clientSecret: paymentIntent.client_secret,
         publishableKey: getStripePublishableKey(),
         amount,
+        currency: "usd",
       });
     } catch (error) {
       console.error("Mobile tip payment error:", error);
-      res.status(500).json({ message: "Failed to create tip payment" });
+      mobileError(res, 500, "Failed to create tip payment", "TIP_FAILED");
     }
   });
 
@@ -1719,8 +1785,9 @@ export async function registerRoutes(
         }
       },
       responseFormat: {
-        success: "{ data: ... } or { rides: [...] } etc.",
-        error: "{ message: 'Error description' }"
+        success: "{ status: 'success', data: { ... }, meta: { timestamp, version } }",
+        error: "{ status: 'error', error: { message, code, details? }, meta: { timestamp, version } }",
+        note: "All responses include a status field and meta object with timestamp and API version"
       },
       rideStatuses: ["requested", "accepted", "en_route", "arrived", "in_progress", "completed", "cancelled"],
       paymentTypes: ["self_pay", "insurance"],
@@ -2112,7 +2179,13 @@ export async function registerRoutes(
       
       broadcastRideUpdate("new", ride);
       
-      notifyDriversOfNewRide(ride.pickupAddress, ride.appointmentTime).catch(err => {
+      notifyDriversOfNewRide(ride.pickupAddress, ride.appointmentTime, {
+        rideId: ride.id,
+        dropoffAddress: ride.dropoffAddress,
+        distanceMiles: ride.distanceMiles ? Number(ride.distanceMiles) : undefined,
+        estimatedFare: ride.estimatedFare ? Number(ride.estimatedFare) : undefined,
+        vehicleType: ride.vehicleType || undefined,
+      }).catch(err => {
         console.error("Failed to send push notification:", err);
       });
 

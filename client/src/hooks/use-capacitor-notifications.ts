@@ -3,11 +3,30 @@ import { Capacitor } from '@capacitor/core';
 import { PushNotifications, Token, PushNotificationSchema, ActionPerformed } from '@capacitor/push-notifications';
 import { apiRequest } from '@/lib/queryClient';
 
+interface NotificationData {
+  type?: string;
+  category?: string;
+  rideId?: number;
+  status?: string;
+  url?: string;
+  driverName?: string;
+  driverPhone?: string;
+  vehicleInfo?: string;
+  licensePlate?: string;
+  fare?: number;
+  pickupAddress?: string;
+  dropoffAddress?: string;
+  estimatedFare?: number;
+  distanceMiles?: number;
+  timestamp?: number;
+}
+
 interface UseCapacitorNotificationsReturn {
   isSupported: boolean;
   isNative: boolean;
   permissionStatus: 'prompt' | 'granted' | 'denied' | 'unknown';
   token: string | null;
+  lastNotification: PushNotificationSchema | null;
   requestPermission: () => Promise<boolean>;
   registerForPush: (userType: 'driver' | 'user', driverId?: number) => Promise<void>;
 }
@@ -15,6 +34,7 @@ interface UseCapacitorNotificationsReturn {
 export function useCapacitorNotifications(): UseCapacitorNotificationsReturn {
   const [permissionStatus, setPermissionStatus] = useState<'prompt' | 'granted' | 'denied' | 'unknown'>('unknown');
   const [token, setToken] = useState<string | null>(null);
+  const [lastNotification, setLastNotification] = useState<PushNotificationSchema | null>(null);
   
   const isNative = Capacitor.isNativePlatform();
   const isSupported = isNative && Capacitor.isPluginAvailable('PushNotifications');
@@ -51,13 +71,42 @@ export function useCapacitorNotifications(): UseCapacitorNotificationsReturn {
 
     PushNotifications.addListener('pushNotificationReceived', (notification: PushNotificationSchema) => {
       console.log('Push notification received:', notification);
+      setLastNotification(notification);
+
+      const data = notification.data as NotificationData;
+      if (data?.category === 'ride_arrived') {
+        if (navigator.vibrate) {
+          navigator.vibrate([300, 100, 300, 100, 300]);
+        }
+      }
     });
 
     PushNotifications.addListener('pushNotificationActionPerformed', (action: ActionPerformed) => {
       console.log('Push notification action performed:', action);
-      if (action.notification.data?.url) {
-        window.location.href = action.notification.data.url;
+      const data = action.notification.data as NotificationData;
+      const actionId = action.actionId;
+
+      let targetUrl = data?.url || '/';
+
+      if (actionId === 'track' && data?.rideId) {
+        targetUrl = `/my-rides?ride=${data.rideId}`;
+      } else if (actionId === 'contact' && data?.rideId) {
+        targetUrl = `/my-rides?ride=${data.rideId}&chat=true`;
+      } else if (actionId === 'rate' && data?.rideId) {
+        targetUrl = `/my-rides?ride=${data.rideId}&rate=true`;
+      } else if (actionId === 'receipt' && data?.rideId) {
+        targetUrl = `/my-rides?ride=${data.rideId}`;
+      } else if (actionId === 'rebook') {
+        targetUrl = '/book-ride';
+      } else if (actionId === 'view' && data?.rideId) {
+        targetUrl = data.type === 'ride_request'
+          ? `/driver?ride=${data.rideId}`
+          : `/my-rides?ride=${data.rideId}`;
+      } else if (actionId === 'tap' && data?.url) {
+        targetUrl = data.url;
       }
+
+      window.location.href = targetUrl;
     });
 
     return () => {
@@ -108,6 +157,7 @@ export function useCapacitorNotifications(): UseCapacitorNotificationsReturn {
     isNative,
     permissionStatus,
     token,
+    lastNotification,
     requestPermission,
     registerForPush
   };

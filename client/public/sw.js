@@ -2,18 +2,34 @@ self.addEventListener("push", (event) => {
   if (!event.data) return;
 
   const data = event.data.json();
+  
   const options = {
     body: data.body,
     icon: data.icon || "/icon-192.png",
-    badge: "/icon-192.png",
-    vibrate: [100, 50, 100],
+    badge: data.badge || "/icon-192.png",
+    image: data.image || undefined,
+    tag: data.tag || undefined,
+    renotify: data.renotify !== undefined ? data.renotify : true,
+    silent: data.silent || false,
+    requireInteraction: data.requireInteraction || false,
+    vibrate: [200, 100, 200],
+    timestamp: data.data?.timestamp || Date.now(),
     data: {
-      url: data.url || "/",
+      url: data.url || data.data?.url || "/",
+      category: data.data?.category || "general",
+      rideId: data.data?.rideId,
+      status: data.data?.status,
+      type: data.data?.type,
+      driverName: data.data?.driverName,
+      vehicleInfo: data.data?.vehicleInfo,
+      fare: data.data?.fare,
     },
-    actions: [
-      { action: "open", title: "View" },
-      { action: "close", title: "Dismiss" },
-    ],
+    actions: data.actions && data.actions.length > 0
+      ? data.actions.slice(0, 2)
+      : [
+          { action: "open", title: "View" },
+          { action: "close", title: "Dismiss" },
+        ],
   };
 
   event.waitUntil(
@@ -24,9 +40,26 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  if (event.action === "close") return;
+  if (event.action === "close" || event.action === "dismiss") return;
 
-  const urlToOpen = event.notification.data?.url || "/";
+  const data = event.notification.data || {};
+  let urlToOpen = data.url || "/";
+
+  if (event.action === "track" && data.rideId) {
+    urlToOpen = `/my-rides?ride=${data.rideId}`;
+  } else if (event.action === "contact" && data.rideId) {
+    urlToOpen = `/my-rides?ride=${data.rideId}&chat=true`;
+  } else if (event.action === "rate" && data.rideId) {
+    urlToOpen = `/my-rides?ride=${data.rideId}&rate=true`;
+  } else if (event.action === "receipt" && data.rideId) {
+    urlToOpen = `/my-rides?ride=${data.rideId}`;
+  } else if (event.action === "rebook") {
+    urlToOpen = "/book-ride";
+  } else if (event.action === "view" && data.rideId) {
+    urlToOpen = data.type === "ride_request" 
+      ? `/driver?ride=${data.rideId}` 
+      : `/my-rides?ride=${data.rideId}`;
+  }
 
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
@@ -41,7 +74,7 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
-const CACHE_NAME = "carehub-v1";
+const CACHE_NAME = "carehub-v2";
 const STATIC_ASSETS = [
   "/",
   "/favicon.png",
