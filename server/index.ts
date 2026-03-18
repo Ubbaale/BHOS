@@ -275,18 +275,21 @@ app.use((req, res, next) => {
     async () => {
       log(`serving on port ${port}`);
       try {
-        const existingAdmin = await storage.getUserByUsername("admin@carehubapp.com");
-        if (!existingAdmin) {
-          const adminHash = await bcrypt.hash("Admin123!", 10);
-          await storage.createUser({
-            username: "admin@carehubapp.com",
-            password: adminHash,
-            role: "admin"
-          });
-          log("Admin account created: admin@carehubapp.com");
+        const accounts = [
+          { username: "admin@carehubapp.com", password: "Admin123!", role: "admin" },
+          { username: "driver@test.com", password: "TestDriver123!", role: "driver" },
+          { username: "patient@test.com", password: "TestPatient123!", role: "patient" },
+        ];
+        for (const acct of accounts) {
+          const existing = await storage.getUserByUsername(acct.username);
+          if (!existing) {
+            const hash = await bcrypt.hash(acct.password, 10);
+            await storage.createUser({ username: acct.username, password: hash, role: acct.role });
+            log(`${acct.role} account created: ${acct.username}`);
+          }
         }
       } catch (err) {
-        console.error("Error seeding admin account:", err);
+        console.error("Error seeding accounts:", err);
       }
     },
   );
