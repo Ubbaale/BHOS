@@ -436,12 +436,26 @@ export async function registerRoutes(
       } else {
         results.push("Patient account already exists: patient@test.com");
       }
+
+      const existingAdmin = await storage.getUserByUsername("admin@carehubapp.com");
+      if (!existingAdmin) {
+        const adminHash = await bcrypt.hash("Admin123!", 10);
+        await storage.createUser({
+          username: "admin@carehubapp.com",
+          password: adminHash,
+          role: "admin"
+        });
+        results.push("Admin account created: admin@carehubapp.com");
+      } else {
+        results.push("Admin account already exists: admin@carehubapp.com");
+      }
       
       res.json({ 
         success: true, 
         message: "Test accounts setup complete",
         results,
         credentials: {
+          admin: { username: "admin@carehubapp.com", password: "Admin123!" },
           driver: { username: "driver@test.com", password: "TestDriver123!" },
           patient: { username: "patient@test.com", password: "TestPatient123!" }
         }
