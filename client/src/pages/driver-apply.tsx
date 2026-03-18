@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { User, Phone, Mail, Car, FileCheck, CheckCircle2, Clock, Lock } from "lucide-react";
+import { User, Phone, Mail, Car, FileCheck, CheckCircle2, Clock, Lock, Eye, EyeOff } from "lucide-react";
 
 const passwordSchema = z.string()
   .min(6, "Password must be at least 6 characters")
@@ -70,6 +70,8 @@ export default function DriverApply() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [applicationSubmitted, setApplicationSubmitted] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const form = useForm<DriverApplicationFormData>({
     resolver: zodResolver(driverApplicationSchema),
@@ -249,12 +251,23 @@ export default function DriverApply() {
                             Password
                           </FormLabel>
                           <FormControl>
-                            <Input 
-                              type="password"
-                              placeholder="Strong password" 
-                              {...field} 
-                              data-testid="input-driver-password"
-                            />
+                            <div className="relative">
+                              <Input 
+                                type={showPassword ? "text" : "password"}
+                                placeholder="Strong password" 
+                                {...field} 
+                                data-testid="input-driver-password"
+                                className="pr-10"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                data-testid="button-toggle-password"
+                              >
+                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
                           </FormControl>
                           <FormDescription className="text-xs">
                             Min. 6 chars with uppercase, lowercase, number, and special character
@@ -274,12 +287,23 @@ export default function DriverApply() {
                             Confirm Password
                           </FormLabel>
                           <FormControl>
-                            <Input 
-                              type="password"
-                              placeholder="Confirm password" 
-                              {...field} 
-                              data-testid="input-driver-confirm-password"
-                            />
+                            <div className="relative">
+                              <Input 
+                                type={showConfirmPassword ? "text" : "password"}
+                                placeholder="Confirm password" 
+                                {...field} 
+                                data-testid="input-driver-confirm-password"
+                                className="pr-10"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                data-testid="button-toggle-confirm-password"
+                              >
+                                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>
