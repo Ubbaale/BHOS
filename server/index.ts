@@ -9,6 +9,8 @@ import { WebhookHandlers } from "./webhookHandlers";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
 import { securityHeaders, globalRateLimiter } from "./security";
+import bcrypt from "bcryptjs";
+import { storage } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -270,8 +272,22 @@ app.use((req, res, next) => {
       host: "0.0.0.0",
       reusePort: true,
     },
-    () => {
+    async () => {
       log(`serving on port ${port}`);
+      try {
+        const existingAdmin = await storage.getUserByUsername("admin@carehubapp.com");
+        if (!existingAdmin) {
+          const adminHash = await bcrypt.hash("Admin123!", 10);
+          await storage.createUser({
+            username: "admin@carehubapp.com",
+            password: adminHash,
+            role: "admin"
+          });
+          log("Admin account created: admin@carehubapp.com");
+        }
+      } catch (err) {
+        console.error("Error seeding admin account:", err);
+      }
     },
   );
 })();
