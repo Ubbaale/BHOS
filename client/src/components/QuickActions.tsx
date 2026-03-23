@@ -89,38 +89,44 @@ export default function QuickActions() {
   }
 
   return (
-    <section id="quick-actions" className="py-16 bg-muted/30">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-10">
-          <h2 className="text-3xl md:text-4xl font-semibold mb-4">
+    <section id="quick-actions" className="py-10 bg-muted/30">
+      <div className="max-w-5xl mx-auto px-6">
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-semibold mb-2">
             Get Started
           </h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-sm text-muted-foreground max-w-xl mx-auto">
             Whether you need a ride or want to become a driver, we make it easy to get started.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          {actions.slice(0, 2).map((action, index) => (
-            <Card
-              key={index}
-              className="hover-elevate transition-all"
-              data-testid={action.testId}
-            >
-              <CardContent className="p-8 flex flex-col items-center text-center">
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6">
-                  <action.icon className="w-8 h-8 text-primary" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
+          {actions.map((action, index) => {
+            const Icon = action.icon;
+            const tileContent = (
+              <div
+                className={cn(
+                  "flex flex-col items-center justify-center p-5 rounded-xl text-white transition-transform hover:scale-[1.03] cursor-pointer",
+                  `bg-gradient-to-br ${action.gradient}`
+                )}
+                data-testid={action.testId}
+              >
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mb-2">
+                  <Icon className="w-5 h-5" />
                 </div>
-                <h3 className="text-xl font-semibold mb-3">{action.title}</h3>
-                <p className="text-muted-foreground mb-6">{action.description}</p>
-                <Link href={action.link}>
-                  <Button size="lg" data-testid={`button-${action.testId}`}>
-                    {action.buttonText}
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          ))}
+                <span className="text-sm font-semibold">{action.title}</span>
+                <span className="text-[11px] opacity-80 text-center mt-0.5">{action.mobileDesc}</span>
+              </div>
+            );
+
+            if (action.isExternal) {
+              return <a key={index} href={action.link}>{tileContent}</a>;
+            }
+            if (action.isAnchor) {
+              return <a key={index} href={action.link.replace("/", "")}>{tileContent}</a>;
+            }
+            return <Link key={index} href={action.link}>{tileContent}</Link>;
+          })}
         </div>
       </div>
     </section>
