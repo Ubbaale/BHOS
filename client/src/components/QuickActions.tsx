@@ -66,22 +66,22 @@ export default function QuickActions() {
   if (showMobileUI) {
     return (
       <section id="quick-actions" className="py-6 px-4">
-        <div className="grid grid-cols-4 gap-3">
+        <div className="flex justify-center gap-3">
           {actions.map((action, index) => {
             const Icon = action.icon;
             return (
               <TileLink key={index} action={action}>
                 <div
                   className={cn(
-                    "aspect-square flex flex-col items-center justify-center rounded-xl text-white touch-feedback",
+                    "w-20 h-20 flex flex-col items-center justify-center rounded-xl text-white touch-feedback",
                     `bg-gradient-to-br ${action.gradient}`
                   )}
                   data-testid={action.testId}
                 >
-                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center mb-1.5">
-                    <Icon className="w-4 h-4" />
+                  <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center mb-1">
+                    <Icon className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-[10px] font-semibold text-center leading-tight px-1">{action.title}</span>
+                  <span className="text-[9px] font-semibold text-center leading-tight px-1">{action.title}</span>
                 </div>
               </TileLink>
             );
@@ -103,23 +103,22 @@ export default function QuickActions() {
           </p>
         </div>
 
-        <div className="grid grid-cols-4 gap-5 max-w-2xl mx-auto">
+        <div className="flex justify-center gap-4">
           {actions.map((action, index) => {
             const Icon = action.icon;
             return (
               <TileLink key={index} action={action}>
                 <div
                   className={cn(
-                    "aspect-square flex flex-col items-center justify-center rounded-xl text-white transition-transform hover:scale-[1.03] cursor-pointer",
+                    "w-28 h-28 flex flex-col items-center justify-center rounded-xl text-white transition-transform hover:scale-[1.03] cursor-pointer",
                     `bg-gradient-to-br ${action.gradient}`
                   )}
                   data-testid={action.testId}
                 >
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mb-2">
-                    <Icon className="w-5 h-5" />
+                  <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center mb-1.5">
+                    <Icon className="w-4 h-4" />
                   </div>
-                  <span className="text-xs font-semibold text-center px-2">{action.title}</span>
-                  <span className="text-[10px] opacity-80 text-center mt-0.5 px-2">{action.mobileDesc}</span>
+                  <span className="text-[11px] font-semibold text-center px-1 leading-tight">{action.title}</span>
                 </div>
               </TileLink>
             );
