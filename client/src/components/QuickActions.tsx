@@ -56,23 +56,22 @@ export default function QuickActions() {
   if (showMobileUI) {
     return (
       <section id="quick-actions" className="py-6 px-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           {actions.map((action, index) => {
             const Icon = action.icon;
             const content = (
-              <div
-                className={cn(
-                  "flex flex-col items-center justify-center p-4 rounded-2xl text-white touch-feedback",
-                  `bg-gradient-to-br ${action.gradient}`
-                )}
+              <Card
+                className="touch-feedback transition-all"
                 data-testid={action.testId}
               >
-                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mb-2">
-                  <Icon className="w-6 h-6" />
-                </div>
-                <span className="text-sm font-semibold">{action.title}</span>
-                <span className="text-[11px] opacity-80 text-center mt-0.5">{action.mobileDesc}</span>
-              </div>
+                <CardContent className="p-4">
+                  <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center mb-3">
+                    <Icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <h3 className="text-sm font-semibold mb-1">{action.title}</h3>
+                  <p className="text-muted-foreground text-xs">{action.mobileDesc}</p>
+                </CardContent>
+              </Card>
             );
 
             if (action.isExternal) {
