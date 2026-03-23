@@ -73,15 +73,15 @@ export default function QuickActions() {
               <TileLink key={index} action={action}>
                 <div
                   className={cn(
-                    "w-20 h-20 flex flex-col items-center justify-center rounded-xl text-white touch-feedback",
+                    "w-40 h-40 flex flex-col items-center justify-center rounded-xl text-white touch-feedback",
                     `bg-gradient-to-br ${action.gradient}`
                   )}
                   data-testid={action.testId}
                 >
-                  <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center mb-1">
-                    <Icon className="w-3.5 h-3.5" />
+                  <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mb-2">
+                    <Icon className="w-6 h-6" />
                   </div>
-                  <span className="text-[9px] font-semibold text-center leading-tight px-1">{action.title}</span>
+                  <span className="text-xs font-semibold text-center leading-tight px-2">{action.title}</span>
                 </div>
               </TileLink>
             );
@@ -110,15 +110,15 @@ export default function QuickActions() {
               <TileLink key={index} action={action}>
                 <div
                   className={cn(
-                    "w-28 h-28 flex flex-col items-center justify-center rounded-xl text-white transition-transform hover:scale-[1.03] cursor-pointer",
+                    "w-56 h-56 flex flex-col items-center justify-center rounded-xl text-white transition-transform hover:scale-[1.03] cursor-pointer",
                     `bg-gradient-to-br ${action.gradient}`
                   )}
                   data-testid={action.testId}
                 >
-                  <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center mb-1.5">
-                    <Icon className="w-4 h-4" />
+                  <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mb-2">
+                    <Icon className="w-7 h-7" />
                   </div>
-                  <span className="text-[11px] font-semibold text-center px-1 leading-tight">{action.title}</span>
+                  <span className="text-sm font-semibold text-center px-2">{action.title}</span>
                 </div>
               </TileLink>
             );
