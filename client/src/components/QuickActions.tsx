@@ -50,37 +50,41 @@ const actions = [
   },
 ];
 
+function TileLink({ action, children }: { action: typeof actions[number]; children: React.ReactNode }) {
+  if (action.isExternal) {
+    return <a href={action.link}>{children}</a>;
+  }
+  if (action.isAnchor) {
+    return <a href={action.link.replace("/", "")}>{children}</a>;
+  }
+  return <Link href={action.link}>{children}</Link>;
+}
+
 export default function QuickActions() {
   const { showMobileUI } = usePlatform();
 
   if (showMobileUI) {
     return (
       <section id="quick-actions" className="py-6 px-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-4 gap-3">
           {actions.map((action, index) => {
             const Icon = action.icon;
-            const content = (
-              <Card
-                className="touch-feedback transition-all"
-                data-testid={action.testId}
-              >
-                <CardContent className="p-4">
-                  <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center mb-3">
-                    <Icon className="w-5 h-5 text-primary" />
+            return (
+              <TileLink key={index} action={action}>
+                <div
+                  className={cn(
+                    "aspect-square flex flex-col items-center justify-center rounded-xl text-white touch-feedback",
+                    `bg-gradient-to-br ${action.gradient}`
+                  )}
+                  data-testid={action.testId}
+                >
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center mb-1.5">
+                    <Icon className="w-4 h-4" />
                   </div>
-                  <h3 className="text-sm font-semibold mb-1">{action.title}</h3>
-                  <p className="text-muted-foreground text-xs">{action.mobileDesc}</p>
-                </CardContent>
-              </Card>
+                  <span className="text-[10px] font-semibold text-center leading-tight px-1">{action.title}</span>
+                </div>
+              </TileLink>
             );
-
-            if (action.isExternal) {
-              return <a key={index} href={action.link}>{content}</a>;
-            }
-            if (action.isAnchor) {
-              return <a key={index} href={action.link.replace("/", "")}>{content}</a>;
-            }
-            return <Link key={index} href={action.link}>{content}</Link>;
           })}
         </div>
       </section>
@@ -89,7 +93,7 @@ export default function QuickActions() {
 
   return (
     <section id="quick-actions" className="py-10 bg-muted/30">
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="max-w-3xl mx-auto px-6">
         <div className="text-center mb-6">
           <h2 className="text-2xl font-semibold mb-2">
             Get Started
@@ -99,31 +103,26 @@ export default function QuickActions() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-4 gap-5 max-w-2xl mx-auto">
           {actions.map((action, index) => {
             const Icon = action.icon;
-            const tileContent = (
-              <Card
-                className="hover-elevate transition-all cursor-pointer"
-                data-testid={action.testId}
-              >
-                <CardContent className="p-6">
-                  <div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center mb-4">
-                    <Icon className="w-6 h-6 text-primary" />
+            return (
+              <TileLink key={index} action={action}>
+                <div
+                  className={cn(
+                    "aspect-square flex flex-col items-center justify-center rounded-xl text-white transition-transform hover:scale-[1.03] cursor-pointer",
+                    `bg-gradient-to-br ${action.gradient}`
+                  )}
+                  data-testid={action.testId}
+                >
+                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mb-2">
+                    <Icon className="w-5 h-5" />
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">{action.title}</h3>
-                  <p className="text-muted-foreground text-sm">{action.mobileDesc}</p>
-                </CardContent>
-              </Card>
+                  <span className="text-xs font-semibold text-center px-2">{action.title}</span>
+                  <span className="text-[10px] opacity-80 text-center mt-0.5 px-2">{action.mobileDesc}</span>
+                </div>
+              </TileLink>
             );
-
-            if (action.isExternal) {
-              return <a key={index} href={action.link}>{tileContent}</a>;
-            }
-            if (action.isAnchor) {
-              return <a key={index} href={action.link.replace("/", "")}>{tileContent}</a>;
-            }
-            return <Link key={index} href={action.link}>{tileContent}</Link>;
           })}
         </div>
       </div>
