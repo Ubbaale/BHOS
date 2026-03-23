@@ -90,7 +90,7 @@ export default function QuickActions() {
 
   return (
     <section id="quick-actions" className="py-10 bg-muted/30">
-      <div className="max-w-5xl mx-auto px-6">
+      <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-6">
           <h2 className="text-2xl font-semibold mb-2">
             Get Started
@@ -100,23 +100,22 @@ export default function QuickActions() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
           {actions.map((action, index) => {
             const Icon = action.icon;
             const tileContent = (
-              <div
-                className={cn(
-                  "flex flex-col items-center justify-center p-5 rounded-xl text-white transition-transform hover:scale-[1.03] cursor-pointer",
-                  `bg-gradient-to-br ${action.gradient}`
-                )}
+              <Card
+                className="hover-elevate transition-all cursor-pointer"
                 data-testid={action.testId}
               >
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mb-2">
-                  <Icon className="w-5 h-5" />
-                </div>
-                <span className="text-sm font-semibold">{action.title}</span>
-                <span className="text-[11px] opacity-80 text-center mt-0.5">{action.mobileDesc}</span>
-              </div>
+                <CardContent className="p-6">
+                  <div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center mb-4">
+                    <Icon className="w-6 h-6 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">{action.title}</h3>
+                  <p className="text-muted-foreground text-sm">{action.mobileDesc}</p>
+                </CardContent>
+              </Card>
             );
 
             if (action.isExternal) {
