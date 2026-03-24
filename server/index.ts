@@ -281,11 +281,14 @@ app.use((req, res, next) => {
           { username: "patient@test.com", password: "TestPatient123!", role: "patient" },
         ];
         for (const acct of accounts) {
+          const hash = await bcrypt.hash(acct.password, 10);
           const existing = await storage.getUserByUsername(acct.username);
           if (!existing) {
-            const hash = await bcrypt.hash(acct.password, 10);
             await storage.createUser({ username: acct.username, password: hash, role: acct.role });
             log(`${acct.role} account created: ${acct.username}`);
+          } else {
+            await storage.updateUserPassword(existing.id, hash);
+            log(`${acct.role} account password reset: ${acct.username}`);
           }
         }
       } catch (err) {
