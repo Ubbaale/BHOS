@@ -31,11 +31,13 @@ import CaregiverDashboard from "@/pages/caregiver-dashboard";
 import CaregiverBookRide from "@/pages/caregiver-book-ride";
 import FacilityDashboard from "@/pages/facility-dashboard";
 import FacilityBookRide from "@/pages/facility-book-ride";
+import ForgotPassword from "@/pages/forgot-password";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/book-ride" component={BookRide} />
       <Route path="/track/:id" component={TrackRide} />
       <Route path="/share/:code" component={SharedTracking} />

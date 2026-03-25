@@ -2,11 +2,11 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
-import { sendIssueNotification, sendRideBookedForPatientEmail, FileAttachment } from "./email";
+import { sendIssueNotification, sendRideBookedForPatientEmail, sendPasswordResetCode, FileAttachment } from "./email";
 import { saveSubscription, removeSubscription, getVapidPublicKey, notifyDriversOfNewRide, notifyPatientOfRideUpdate } from "./push";
 import multer from "multer";
 import path from "path";
@@ -550,6 +550,108 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  app.post("/api/auth/forgot-password", loginRateLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const user = await storage.getUserByUsername(email);
+      if (!user) {
+        return res.json({ message: "If an account exists with that email, a reset code has been sent." });
+      }
+
+      const code = Math.floor(10000 + Math.random() * 90000).toString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+      await db.insert(passwordResetCodes).values({
+        userId: user.id,
+        code,
+        expiresAt,
+      });
+
+      try {
+        await sendPasswordResetCode(email, code);
+      } catch (emailErr) {
+        console.error("Email sending failed, code still valid:", emailErr);
+      }
+
+      console.log(`Password reset code generated for ${email}`);
+      res.json({ message: "If an account exists with that email, a reset code has been sent." });
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      res.status(500).json({ message: "Something went wrong. Please try again." });
+    }
+  });
+
+  app.post("/api/auth/verify-reset-code", loginRateLimiter, async (req, res) => {
+    try {
+      const { email, code } = req.body;
+      if (!email || !code) {
+        return res.status(400).json({ message: "Email and code are required" });
+      }
+
+      const user = await storage.getUserByUsername(email);
+      if (!user) {
+        return res.status(400).json({ message: "Invalid code" });
+      }
+
+      const [resetEntry] = await db.select().from(passwordResetCodes)
+        .where(eq(passwordResetCodes.userId, user.id))
+        .orderBy(desc(passwordResetCodes.createdAt))
+        .limit(1);
+
+      if (!resetEntry || resetEntry.code !== code || resetEntry.used || new Date() > resetEntry.expiresAt) {
+        return res.status(400).json({ message: "Invalid or expired code" });
+      }
+
+      res.json({ message: "Code verified", verified: true });
+    } catch (error) {
+      console.error("Verify reset code error:", error);
+      res.status(500).json({ message: "Something went wrong. Please try again." });
+    }
+  });
+
+  app.post("/api/auth/reset-password", loginRateLimiter, async (req, res) => {
+    try {
+      const { email, code, newPassword } = req.body;
+      if (!email || !code || !newPassword) {
+        return res.status(400).json({ message: "Email, code, and new password are required" });
+      }
+
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{6,}$/;
+      if (!passwordRegex.test(newPassword)) {
+        return res.status(400).json({ message: "Password must be at least 6 characters with uppercase, lowercase, number, and special character" });
+      }
+
+      const user = await storage.getUserByUsername(email);
+      if (!user) {
+        return res.status(400).json({ message: "Invalid request" });
+      }
+
+      const [resetEntry] = await db.select().from(passwordResetCodes)
+        .where(eq(passwordResetCodes.userId, user.id))
+        .orderBy(desc(passwordResetCodes.createdAt))
+        .limit(1);
+
+      if (!resetEntry || resetEntry.code !== code || resetEntry.used || new Date() > resetEntry.expiresAt) {
+        return res.status(400).json({ message: "Invalid or expired code. Please request a new one." });
+      }
+
+      const hash = await bcrypt.hash(newPassword, 10);
+      await storage.updateUserPassword(user.id, hash);
+
+      await db.update(passwordResetCodes).set({ used: true }).where(eq(passwordResetCodes.id, resetEntry.id));
+
+      console.log(`Password reset successful for ${email}`);
+      res.json({ message: "Password reset successfully. You can now log in with your new password." });
+    } catch (error) {
+      console.error("Reset password error:", error);
+      res.status(500).json({ message: "Something went wrong. Please try again." });
     }
   });
 

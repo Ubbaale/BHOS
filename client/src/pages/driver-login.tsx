@@ -148,6 +148,18 @@ export default function DriverLogin() {
                     "Sign In"
                   )}
                 </Button>
+
+                <div className="text-center mt-3">
+                  <Button
+                    variant="link"
+                    type="button"
+                    className="text-sm text-muted-foreground hover:text-primary p-0 h-auto"
+                    onClick={() => setLocation("/forgot-password")}
+                    data-testid="link-forgot-password"
+                  >
+                    Forgot Password?
+                  </Button>
+                </div>
               </form>
             </Form>
 
