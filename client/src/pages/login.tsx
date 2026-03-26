@@ -269,7 +269,19 @@ export default function LoginPage() {
               </form>
             </Form>
 
-            <div className="mt-6 pt-4 border-t text-center text-sm text-muted-foreground">
+            <div className="mt-4 text-center text-sm text-muted-foreground">
+              Don't have an account?{" "}
+              <Button
+                variant="link"
+                className="p-0 h-auto text-primary"
+                onClick={() => setLocation("/signup")}
+                data-testid="link-signup"
+              >
+                Sign Up
+              </Button>
+            </div>
+
+            <div className="mt-4 pt-4 border-t text-center text-sm text-muted-foreground">
               <p>Want to drive with CareHub?</p>
               <Button
                 variant="ghost"

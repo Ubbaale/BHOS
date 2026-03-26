@@ -589,7 +589,7 @@ export default function ITServicesPage() {
               </Card>
             </div>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button size="lg" onClick={() => setLocation("/it-services/onboard")} data-testid="button-it-onboard">
+              <Button size="lg" onClick={() => setLocation("/signup")} data-testid="button-it-onboard">
                 <Building2 className="mr-2 h-5 w-5" />
                 Onboard Your Company
               </Button>

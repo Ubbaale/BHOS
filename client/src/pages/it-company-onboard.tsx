@@ -107,11 +107,16 @@ export default function ITCompanyOnboard() {
             <Building2 className="h-16 w-16 mx-auto mb-6 text-primary" />
             <h1 className="text-3xl font-bold mb-4" data-testid="text-onboard-hero">Company Onboarding</h1>
             <p className="text-lg text-muted-foreground mb-8">
-              Sign in to register your healthcare company and start submitting IT service requests.
+              Create an account or sign in to register your healthcare company and start submitting IT service requests.
             </p>
-            <Button size="lg" onClick={() => setLocation("/login")} data-testid="button-onboard-signin">
-              Sign In to Continue
-            </Button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Button size="lg" onClick={() => setLocation("/signup")} data-testid="button-onboard-signup">
+                Create an Account
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => setLocation("/login")} data-testid="button-onboard-signin">
+                Sign In
+              </Button>
+            </div>
           </div>
         </main>
         <Footer />

@@ -36,12 +36,14 @@ import ITServices from "@/pages/it-services";
 import ITTechApply from "@/pages/it-tech-apply";
 import ITTechDashboard from "@/pages/it-tech-dashboard";
 import ITCompanyOnboard from "@/pages/it-company-onboard";
+import SignupPage from "@/pages/signup";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/login" component={LoginPage} />
+      <Route path="/signup" component={SignupPage} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/book-ride" component={BookRide} />
       <Route path="/track/:id" component={TrackRide} />

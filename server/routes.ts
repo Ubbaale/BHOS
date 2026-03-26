@@ -466,6 +466,80 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/auth/register", loginRateLimiter, async (req, res) => {
+    try {
+      const { fullName, email, password, confirmPassword, role } = req.body;
+
+      if (!fullName || !email || !password) {
+        return res.status(400).json({ message: "Full name, email, and password are required" });
+      }
+      if (password.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+      if (!/[A-Z]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain at least one uppercase letter" });
+      }
+      if (!/[a-z]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain at least one lowercase letter" });
+      }
+      if (!/[0-9]/.test(password)) {
+        return res.status(400).json({ message: "Password must contain at least one number" });
+      }
+      if (confirmPassword && password !== confirmPassword) {
+        return res.status(400).json({ message: "Passwords don't match" });
+      }
+
+      const existingUser = await storage.getUserByUsername(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "An account with this email already exists. Please sign in instead." });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const validRoles = ["user", "patient", "employer"];
+      const userRole = validRoles.includes(role) ? role : "user";
+      const user = await storage.createUser({
+        username: email,
+        password: hashedPassword,
+        role: userRole,
+      });
+
+      if (userRole === "user" || userRole === "patient") {
+        try {
+          await storage.createPatient({
+            userId: user.id,
+            fullName: fullName,
+            phone: "",
+            email: email,
+            mobilityNeeds: [],
+            emergencyContactName: null,
+            emergencyContactPhone: null,
+            savedAddresses: [],
+          });
+        } catch (e) {
+          console.error("Failed to create patient profile during registration:", e);
+        }
+      }
+
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error("Session regeneration error after registration:", err);
+          return res.status(500).json({ message: "Account created but login failed. Please sign in." });
+        }
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        req.session.role = user.role || "user";
+
+        res.status(201).json({
+          message: "Account created successfully",
+          user: { id: user.id, username: user.username, role: user.role },
+        });
+      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({ message: "Failed to create account" });
+    }
+  });
+
   // Auth routes with rate limiting protection
   app.post("/api/auth/login", loginRateLimiter, async (req, res) => {
     try {
