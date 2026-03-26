@@ -138,9 +138,27 @@ export default function Header({ title, showBack }: { title?: string; showBack?:
               774-581-9700
             </a>
             <JobPostingForm />
-            <Button asChild data-testid="button-get-started">
-              <a href="https://app.carehubapp.com/#/login">Get Started</a>
-            </Button>
+            {isAuthenticated && user?.role === "admin" && (
+              <Button variant="outline" asChild data-testid="button-admin-dashboard">
+                <Link href="/admin">Admin</Link>
+              </Button>
+            )}
+            {isAuthenticated ? (
+              <Button variant="outline" asChild data-testid="button-my-account">
+                <Link href={user?.role === "admin" ? "/admin" : user?.role === "driver" ? "/driver" : "/my-rides"}>
+                  {user?.username?.split("@")[0] || "Account"}
+                </Link>
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" asChild data-testid="button-sign-in">
+                  <Link href="/login">Sign In</Link>
+                </Button>
+                <Button asChild data-testid="button-get-started">
+                  <a href="https://app.carehubapp.com/#/login">Get Started</a>
+                </Button>
+              </>
+            )}
           </div>
 
           {showMobileUI && (
@@ -225,9 +243,22 @@ export default function Header({ title, showBack }: { title?: string; showBack?:
                   <Phone className="w-4 h-4" />
                   774-581-9700
                 </a>
-                <Button asChild className="w-full" data-testid="button-mobile-get-started">
-                  <a href="https://app.carehubapp.com/#/login">Get Started</a>
-                </Button>
+                {isAuthenticated ? (
+                  <Button asChild className="w-full" variant="outline" data-testid="button-mobile-account">
+                    <Link href={user?.role === "admin" ? "/admin" : user?.role === "driver" ? "/driver" : "/my-rides"} onClick={() => setMobileMenuOpen(false)}>
+                      {user?.role === "admin" ? "Admin Dashboard" : "My Account"}
+                    </Link>
+                  </Button>
+                ) : (
+                  <>
+                    <Button asChild className="w-full" variant="outline" data-testid="button-mobile-sign-in">
+                      <Link href="/login" onClick={() => setMobileMenuOpen(false)}>Sign In</Link>
+                    </Button>
+                    <Button asChild className="w-full" data-testid="button-mobile-get-started">
+                      <a href="https://app.carehubapp.com/#/login">Get Started</a>
+                    </Button>
+                  </>
+                )}
               </div>
             </nav>
           </div>

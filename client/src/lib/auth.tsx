@@ -77,7 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(data.user);
       setDriver(data.driver);
-      return { success: true };
+      let redirectTo = "/";
+      if (data.user?.role === "admin") redirectTo = "/admin";
+      else if (data.user?.role === "driver") redirectTo = data.redirectTo || "/driver";
+      return { success: true, redirectTo };
     } catch (error) {
       return { success: false, message: "Login failed. Please try again." };
     }

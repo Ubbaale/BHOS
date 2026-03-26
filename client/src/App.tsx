@@ -32,11 +32,13 @@ import CaregiverBookRide from "@/pages/caregiver-book-ride";
 import FacilityDashboard from "@/pages/facility-dashboard";
 import FacilityBookRide from "@/pages/facility-book-ride";
 import ForgotPassword from "@/pages/forgot-password";
+import LoginPage from "@/pages/login";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/login" component={LoginPage} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/book-ride" component={BookRide} />
       <Route path="/track/:id" component={TrackRide} />
@@ -70,12 +72,12 @@ function Router() {
         </ProtectedRoute>
       </Route>
       <Route path="/admin">
-        <ProtectedRoute requiredRole="admin" redirectTo="/">
+        <ProtectedRoute requiredRole="admin" redirectTo="/login">
           <AdminDashboard />
         </ProtectedRoute>
       </Route>
       <Route path="/admin/drivers">
-        <ProtectedRoute requiredRole="admin" redirectTo="/">
+        <ProtectedRoute requiredRole="admin" redirectTo="/login">
           <AdminDrivers />
         </ProtectedRoute>
       </Route>

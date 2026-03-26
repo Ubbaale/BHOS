@@ -30,7 +30,7 @@ export default function ProtectedRoute({
       }
 
       if (requiredRole === "admin" && user?.role !== "admin") {
-        setLocation("/");
+        setLocation(redirectTo);
         return;
       }
 
