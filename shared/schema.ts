@@ -769,6 +769,26 @@ export const itServiceTickets = pgTable("it_service_tickets", {
   specialInstructions: text("special_instructions"),
   equipmentNeeded: text("equipment_needed"),
   assignedTo: varchar("assigned_to"),
+  etaStatus: text("eta_status").default("none"),
+  checkInTime: timestamp("check_in_time"),
+  checkOutTime: timestamp("check_out_time"),
+  hoursWorked: numeric("hours_worked"),
+  payType: text("pay_type").default("hourly"),
+  payRate: numeric("pay_rate"),
+  totalPay: numeric("total_pay"),
+  platformFee: numeric("platform_fee"),
+  techPayout: numeric("tech_payout"),
+  paymentStatus: text("payment_status").default("unpaid"),
+  deliverables: text("deliverables").default("[]"),
+  customerRating: integer("customer_rating"),
+  customerReview: text("customer_review"),
+  techRating: integer("tech_rating"),
+  techReview: text("tech_review"),
+  routingMode: text("routing_mode").default("broadcast"),
+  talentPoolId: varchar("talent_pool_id"),
+  directAssignTo: varchar("direct_assign_to"),
+  isTemplate: boolean("is_template").default(false),
+  templateName: text("template_name"),
   resolvedAt: timestamp("resolved_at"),
   closedAt: timestamp("closed_at"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -791,6 +811,13 @@ export const insertItServiceTicketSchema = z.object({
   contactPhone: z.string().optional(),
   specialInstructions: z.string().optional(),
   equipmentNeeded: z.string().optional(),
+  payType: z.enum(["hourly", "fixed"]).default("hourly").optional(),
+  payRate: z.string().optional(),
+  routingMode: z.enum(["broadcast", "talent_pool", "direct_assign"]).default("broadcast").optional(),
+  talentPoolId: z.string().optional(),
+  directAssignTo: z.string().optional(),
+  isTemplate: z.boolean().default(false).optional(),
+  templateName: z.string().optional(),
 });
 export type InsertItServiceTicket = z.infer<typeof insertItServiceTicketSchema>;
 export type ItServiceTicket = typeof itServiceTickets.$inferSelect;
@@ -830,6 +857,11 @@ export const itTechProfiles = pgTable("it_tech_profiles", {
   backgroundCheckStatus: text("background_check_status").default("not_started"),
   totalJobsCompleted: integer("total_jobs_completed").default(0),
   averageRating: numeric("average_rating").default("0"),
+  reliabilityScore: numeric("reliability_score").default("100"),
+  timelinessScore: numeric("timeliness_score").default("100"),
+  totalEarnings: numeric("total_earnings").default("0"),
+  lateCheckIns: integer("late_check_ins").default(0),
+  onTimeCheckIns: integer("on_time_check_ins").default(0),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -850,3 +882,63 @@ export const insertItTechProfileSchema = z.object({
 });
 export type InsertItTechProfile = z.infer<typeof insertItTechProfileSchema>;
 export type ItTechProfile = typeof itTechProfiles.$inferSelect;
+
+export const itTalentPools = pgTable("it_talent_pools", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id").references(() => users.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  requiredSkills: text("required_skills").array().default([]),
+  requiredCertifications: text("required_certifications").array().default([]),
+  maxDistanceMiles: integer("max_distance_miles"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertItTalentPoolSchema = z.object({
+  name: z.string().min(1, "Pool name is required"),
+  description: z.string().optional(),
+  requiredSkills: z.array(z.string()).default([]),
+  requiredCertifications: z.array(z.string()).default([]),
+  maxDistanceMiles: z.number().optional(),
+});
+export type InsertItTalentPool = z.infer<typeof insertItTalentPoolSchema>;
+export type ItTalentPool = typeof itTalentPools.$inferSelect;
+
+export const itTalentPoolMembers = pgTable("it_talent_pool_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  poolId: varchar("pool_id").references(() => itTalentPools.id).notNull(),
+  techUserId: varchar("tech_user_id").references(() => users.id).notNull(),
+  addedAt: timestamp("added_at").defaultNow(),
+});
+
+export const itWorkOrderTemplates = pgTable("it_work_order_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id").references(() => users.id).notNull(),
+  name: text("name").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  category: text("category").default("general"),
+  priority: text("priority").default("medium"),
+  estimatedDuration: text("estimated_duration"),
+  equipmentNeeded: text("equipment_needed"),
+  specialInstructions: text("special_instructions"),
+  payType: text("pay_type").default("hourly"),
+  payRate: numeric("pay_rate"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertItWorkOrderTemplateSchema = z.object({
+  name: z.string().min(1, "Template name is required"),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  category: z.string().default("general"),
+  priority: z.string().default("medium"),
+  estimatedDuration: z.string().optional(),
+  equipmentNeeded: z.string().optional(),
+  specialInstructions: z.string().optional(),
+  payType: z.string().default("hourly"),
+  payRate: z.string().optional(),
+});
+export type InsertItWorkOrderTemplate = z.infer<typeof insertItWorkOrderTemplateSchema>;
+export type ItWorkOrderTemplate = typeof itWorkOrderTemplates.$inferSelect;

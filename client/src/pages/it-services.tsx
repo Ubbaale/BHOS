@@ -61,6 +61,13 @@ import {
   ChevronRight,
   Building2,
   LogIn,
+  Star,
+  DollarSign,
+  FileText,
+  Navigation,
+  LogOut,
+  Save,
+  FolderOpen,
 } from "lucide-react";
 import type { ItServiceTicket, ItTicketNote } from "@shared/schema";
 
@@ -80,6 +87,8 @@ const ticketSchema = z.object({
   contactPhone: z.string().optional(),
   specialInstructions: z.string().optional(),
   equipmentNeeded: z.string().optional(),
+  payType: z.enum(["hourly", "fixed"]).optional(),
+  payRate: z.string().optional(),
 });
 
 const categoryIcons: Record<string, typeof Monitor> = {
@@ -149,8 +158,48 @@ function CreateTicketDialog({ onCreated }: { onCreated: () => void }) {
       contactPhone: "",
       specialInstructions: "",
       equipmentNeeded: "",
+      payType: "hourly",
+      payRate: "",
     },
   });
+
+  const { data: templates = [] } = useQuery<any[]>({
+    queryKey: ["/api/it/templates"],
+  });
+
+  const saveTemplate = useMutation({
+    mutationFn: () => {
+      const values = form.getValues();
+      return apiRequest("POST", "/api/it/templates", {
+        name: values.title || "Untitled Template",
+        category: values.category,
+        priority: values.priority,
+        description: values.description,
+        estimatedDuration: values.estimatedDuration,
+        payType: values.payType,
+        payRate: values.payRate,
+        equipmentNeeded: values.equipmentNeeded,
+        specialInstructions: values.specialInstructions,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Template saved!" });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/templates"] });
+    },
+  });
+
+  const loadTemplate = (template: any) => {
+    form.setValue("title", template.name || "");
+    form.setValue("description", template.description || "");
+    form.setValue("category", template.category || "general");
+    form.setValue("priority", template.priority || "medium");
+    if (template.estimatedDuration) form.setValue("estimatedDuration", template.estimatedDuration);
+    if (template.payType) form.setValue("payType", template.payType);
+    if (template.payRate) form.setValue("payRate", template.payRate);
+    if (template.equipmentNeeded) form.setValue("equipmentNeeded", template.equipmentNeeded);
+    if (template.specialInstructions) form.setValue("specialInstructions", template.specialInstructions);
+    toast({ title: "Template loaded" });
+  };
 
   const createTicket = useMutation({
     mutationFn: (data: z.infer<typeof ticketSchema>) =>
@@ -183,6 +232,18 @@ function CreateTicketDialog({ onCreated }: { onCreated: () => void }) {
             Submit IT Service Request
           </DialogTitle>
         </DialogHeader>
+
+        {templates.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-muted-foreground flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Templates:</span>
+            {templates.map((t: any) => (
+              <Button key={t.id} variant="outline" size="sm" onClick={() => loadTemplate(t)} data-testid={`template-${t.id}`}>
+                {t.name}
+              </Button>
+            ))}
+          </div>
+        )}
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => createTicket.mutate(data))} className="space-y-4">
             <FormField control={form.control} name="title" render={({ field }) => (
@@ -344,15 +405,111 @@ function CreateTicketDialog({ onCreated }: { onCreated: () => void }) {
               )} />
             </div>
 
-            <Button type="submit" className="w-full" disabled={createTicket.isPending} data-testid="button-submit-ticket">
-              {createTicket.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting...</> : "Submit Ticket"}
-            </Button>
+            <div className="border rounded-lg p-4 space-y-4">
+              <h4 className="font-medium flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Payment
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField control={form.control} name="payType" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Pay Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || "hourly"}>
+                      <FormControl><SelectTrigger data-testid="select-pay-type"><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="hourly">Hourly Rate</SelectItem>
+                        <SelectItem value="fixed">Fixed Price</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="payRate" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Rate ($)</FormLabel>
+                    <FormControl><Input {...field} type="number" step="0.01" placeholder="e.g. 75.00" data-testid="input-pay-rate" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button type="submit" className="flex-1" disabled={createTicket.isPending} data-testid="button-submit-ticket">
+                {createTicket.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting...</> : "Submit Ticket"}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => saveTemplate.mutate()} disabled={saveTemplate.isPending} data-testid="button-save-template">
+                <Save className="h-4 w-4 mr-1" /> Save as Template
+              </Button>
+            </div>
           </form>
         </Form>
       </DialogContent>
     </Dialog>
   );
 }
+
+function RateTicketDialog({ ticketId, onRated }: { ticketId: string; onRated: () => void }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [review, setReview] = useState("");
+
+  const submitRating = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/it/tickets/${ticketId}/rate`, { rating, review }),
+    onSuccess: () => {
+      toast({ title: "Rating submitted!" });
+      setOpen(false);
+      onRated();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" data-testid="button-rate-tech">
+          <Star className="h-4 w-4 mr-1" /> Rate Technician
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Rate the Technician</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 justify-center">
+            {[1, 2, 3, 4, 5].map(n => (
+              <button key={n} type="button" onClick={() => setRating(n)} className="focus:outline-none" data-testid={`owner-star-${n}`}>
+                <Star className={`h-8 w-8 ${n <= rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+              </button>
+            ))}
+          </div>
+          <Textarea placeholder="Write a review (optional)..." value={review} onChange={(e) => setReview(e.target.value)} data-testid="input-owner-review" />
+          <Button className="w-full" disabled={rating === 0 || submitRating.isPending} onClick={() => submitRating.mutate()} data-testid="button-submit-owner-rating">
+            {submitRating.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Submit Rating
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const etaLabels: Record<string, string> = {
+  none: "Awaiting",
+  en_route: "On Their Way",
+  arriving: "Arriving Soon",
+  on_site: "On Site",
+};
+
+const etaColors: Record<string, string> = {
+  none: "bg-gray-100 text-gray-600",
+  en_route: "bg-blue-100 text-blue-700",
+  arriving: "bg-yellow-100 text-yellow-700",
+  on_site: "bg-green-100 text-green-700",
+};
 
 function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => void }) {
   const { toast } = useToast();
@@ -389,6 +546,8 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
   const { ticket, notes } = data;
   const StatusIcon = statusIcons[ticket.status] || AlertCircle;
   const CategoryIcon = categoryIcons[ticket.category] || Wrench;
+  let deliverables: any[] = [];
+  try { deliverables = JSON.parse(ticket.deliverables || "[]"); } catch { deliverables = []; }
 
   return (
     <div className="space-y-4">
@@ -401,7 +560,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
         <CardHeader>
           <div className="flex items-start justify-between">
             <div>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <span className="text-sm text-muted-foreground font-mono">{ticket.ticketNumber}</span>
                 <Badge className={priorityColors[ticket.priority]} variant="secondary">
                   {ticket.priority}
@@ -410,6 +569,12 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
                   <StatusIcon className="h-3 w-3 mr-1" />
                   {ticket.status.replace("_", " ")}
                 </Badge>
+                {ticket.etaStatus && ticket.status === "in_progress" && (
+                  <Badge className={etaColors[ticket.etaStatus || "none"]} variant="secondary">
+                    <Navigation className="h-3 w-3 mr-1" />
+                    {etaLabels[ticket.etaStatus || "none"]}
+                  </Badge>
+                )}
               </div>
               <CardTitle className="flex items-center gap-2">
                 <CategoryIcon className="h-5 w-5" />
@@ -420,12 +585,10 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              {ticket.status === "open" && (
-                <Button size="sm" variant="outline" onClick={() => updateStatus.mutate("closed")} data-testid="button-close-ticket">
-                  Close
-                </Button>
+              {(ticket.status === "resolved" || ticket.status === "closed") && !ticket.customerRating && (
+                <RateTicketDialog ticketId={ticketId} onRated={() => queryClient.invalidateQueries({ queryKey: ["/api/it/tickets", ticketId] })} />
               )}
-              {ticket.status === "resolved" && (
+              {(ticket.status === "open" || ticket.status === "resolved") && (
                 <Button size="sm" variant="outline" onClick={() => updateStatus.mutate("closed")} data-testid="button-close-ticket">
                   Close
                 </Button>
@@ -484,6 +647,126 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
               </div>
             )}
           </div>
+
+          {(ticket.checkInTime || ticket.checkOutTime) && (
+            <Card className="bg-muted/50">
+              <CardContent className="p-4">
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <Clock className="h-4 w-4" /> Tech Check-In/Out
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  {ticket.checkInTime && (
+                    <div className="flex items-center gap-2">
+                      <LogIn className="h-4 w-4 text-green-600 shrink-0" />
+                      <span>Checked in: {new Date(ticket.checkInTime).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {ticket.checkOutTime && (
+                    <div className="flex items-center gap-2">
+                      <LogOut className="h-4 w-4 text-blue-600 shrink-0" />
+                      <span>Checked out: {new Date(ticket.checkOutTime).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {ticket.hoursWorked && (
+                    <div className="flex items-center gap-2">
+                      <Timer className="h-4 w-4 shrink-0" />
+                      <span>Hours worked: {Number(ticket.hoursWorked).toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {(ticket.payRate || ticket.totalPay) && (
+            <Card className="bg-muted/50">
+              <CardContent className="p-4">
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" /> Payment Breakdown
+                </h4>
+                <div className="space-y-2 text-sm">
+                  {ticket.payRate && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Rate</span>
+                      <span>${ticket.payRate}/{ticket.payType === "fixed" ? "flat" : "hr"}</span>
+                    </div>
+                  )}
+                  {ticket.totalPay && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Total</span>
+                        <span className="font-medium">${Number(ticket.totalPay).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Platform fee (10%)</span>
+                        <span>${Number(ticket.platformFee || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between border-t pt-1">
+                        <span className="text-muted-foreground">Tech payout</span>
+                        <span className="font-medium text-green-600">${Number(ticket.techPayout || 0).toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
+                  {ticket.paymentStatus && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Payment status</span>
+                      <Badge variant="outline" className={ticket.paymentStatus === "paid" ? "text-green-600" : "text-yellow-600"}>
+                        {ticket.paymentStatus}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {deliverables.length > 0 && (
+            <Card className="bg-muted/50">
+              <CardContent className="p-4">
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <FileText className="h-4 w-4" /> Proof of Work ({deliverables.length})
+                </h4>
+                <div className="space-y-2">
+                  {deliverables.map((d: any) => (
+                    <div key={d.id} className="border rounded p-2 text-sm">
+                      <p>{d.description}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{new Date(d.addedAt).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {ticket.customerRating && (
+            <Card className="bg-muted/50">
+              <CardContent className="p-4">
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <Star className="h-4 w-4" /> Your Rating
+                </h4>
+                <div className="flex items-center gap-1 mb-1">
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <Star key={n} className={`h-5 w-5 ${n <= (ticket.customerRating || 0) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+                  ))}
+                </div>
+                {ticket.customerReview && <p className="text-sm text-muted-foreground italic">"{ticket.customerReview}"</p>}
+              </CardContent>
+            </Card>
+          )}
+
+          {ticket.techRating && (
+            <Card className="bg-muted/50">
+              <CardContent className="p-4">
+                <h4 className="text-sm font-medium mb-2">Tech's Rating of You</h4>
+                <div className="flex items-center gap-1 mb-1">
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <Star key={n} className={`h-5 w-5 ${n <= (ticket.techRating || 0) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+                  ))}
+                </div>
+                {ticket.techReview && <p className="text-sm text-muted-foreground italic">"{ticket.techReview}"</p>}
+              </CardContent>
+            </Card>
+          )}
 
           <div className="text-xs text-muted-foreground">
             Created: {ticket.createdAt ? new Date(ticket.createdAt).toLocaleString() : "N/A"}
@@ -708,7 +991,7 @@ export default function ITServicesPage() {
                           </div>
                           <p className="font-medium truncate">{ticket.title}</p>
                           <p className="text-sm text-muted-foreground truncate">{ticket.description}</p>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
                             {ticket.scheduledDate && (
                               <span className="flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
@@ -720,6 +1003,17 @@ export default function ITServicesPage() {
                                 <MapPin className="h-3 w-3" />
                                 {ticket.siteCity}, {ticket.siteState}
                               </span>
+                            )}
+                            {ticket.payRate && (
+                              <span className="flex items-center gap-1 text-green-600 font-medium">
+                                <DollarSign className="h-3 w-3" />
+                                ${ticket.payRate}/{ticket.payType === "fixed" ? "flat" : "hr"}
+                              </span>
+                            )}
+                            {ticket.etaStatus && ticket.status === "in_progress" && (
+                              <Badge className={etaColors[ticket.etaStatus || "none"]} variant="secondary">
+                                {etaLabels[ticket.etaStatus || "none"]}
+                              </Badge>
                             )}
                             <span>{ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : ""}</span>
                           </div>

@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -6123,10 +6123,23 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
         return res.status(403).json({ message: "Your application must be approved first" });
       }
 
-      const tickets = await db.select().from(itServiceTickets)
+      const allOpenTickets = await db.select().from(itServiceTickets)
         .where(eq(itServiceTickets.status, "open"))
         .orderBy(desc(itServiceTickets.createdAt));
-      res.json(tickets);
+
+      const poolMemberships = await db.select().from(itTalentPoolMembers)
+        .where(eq(itTalentPoolMembers.techUserId, userId));
+      const myPoolIds = poolMemberships.map(m => m.poolId);
+
+      const filtered = allOpenTickets.filter(ticket => {
+        const mode = ticket.routingMode || "broadcast";
+        if (mode === "broadcast") return true;
+        if (mode === "direct_assign") return ticket.directAssignTo === userId;
+        if (mode === "talent_pool") return ticket.talentPoolId && myPoolIds.includes(ticket.talentPoolId);
+        return true;
+      });
+
+      res.json(filtered);
     } catch (error) {
       console.error("Get available IT tickets error:", error);
       res.status(500).json({ message: "Failed to get tickets" });
@@ -6253,6 +6266,386 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     } catch (error) {
       console.error("Reject IT tech error:", error);
       res.status(500).json({ message: "Failed to reject tech" });
+    }
+  });
+
+  // ==========================================
+  // IT TECH: ETA / On My Way
+  // ==========================================
+  app.patch("/api/it/tech/eta/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const { etaStatus } = req.body;
+      if (!["en_route", "arriving", "on_site"].includes(etaStatus)) {
+        return res.status(400).json({ message: "Invalid ETA status" });
+      }
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.assignedTo !== userId) return res.status(403).json({ message: "Not assigned to you" });
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({ etaStatus, updatedAt: new Date() })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      notifyItCompanyOfTicketUpdate(
+        ticket.createdBy,
+        ticket.ticketNumber,
+        ticket.title,
+        etaStatus === "en_route" ? "tech is on the way" : etaStatus === "arriving" ? "tech is arriving" : "tech is on site",
+        ""
+      ).catch(err => console.error("Failed to notify ETA:", err));
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Update ETA error:", error);
+      res.status(500).json({ message: "Failed to update ETA" });
+    }
+  });
+
+  // ==========================================
+  // IT TECH: Check-In / Check-Out
+  // ==========================================
+  app.post("/api/it/tech/checkin/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.assignedTo !== userId) return res.status(403).json({ message: "Not assigned to you" });
+      if (ticket.checkInTime) return res.status(400).json({ message: "Already checked in" });
+
+      const now = new Date();
+      const isLate = ticket.scheduledDate && ticket.scheduledTime
+        ? now > new Date(`${new Date(ticket.scheduledDate).toISOString().split('T')[0]}T${ticket.scheduledTime}:00`)
+        : false;
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({ checkInTime: now, etaStatus: "on_site", updatedAt: now })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      const [profile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (profile) {
+        const updateData: Record<string, any> = {
+          onTimeCheckIns: (profile.onTimeCheckIns || 0) + (isLate ? 0 : 1),
+          lateCheckIns: (profile.lateCheckIns || 0) + (isLate ? 1 : 0),
+        };
+        const totalCheckins = (updateData.onTimeCheckIns + (profile.lateCheckIns || 0)) + (isLate ? 0 : 0);
+        const totalAll = (profile.onTimeCheckIns || 0) + (profile.lateCheckIns || 0) + 1;
+        updateData.timelinessScore = String(Math.round(((profile.onTimeCheckIns || 0) + (isLate ? 0 : 1)) / totalAll * 100));
+        await db.update(itTechProfiles).set(updateData).where(eq(itTechProfiles.userId, userId));
+      }
+
+      notifyItCompanyOfTicketUpdate(
+        ticket.createdBy, ticket.ticketNumber, ticket.title,
+        "tech checked in" + (isLate ? " (late)" : ""), ""
+      ).catch(err => console.error("Failed to notify check-in:", err));
+
+      res.json({ ...updated, isLate });
+    } catch (error) {
+      console.error("Check-in error:", error);
+      res.status(500).json({ message: "Failed to check in" });
+    }
+  });
+
+  app.post("/api/it/tech/checkout/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.assignedTo !== userId) return res.status(403).json({ message: "Not assigned to you" });
+      if (!ticket.checkInTime) return res.status(400).json({ message: "Must check in first" });
+      if (ticket.checkOutTime) return res.status(400).json({ message: "Already checked out" });
+
+      const now = new Date();
+      const hoursWorked = ((now.getTime() - new Date(ticket.checkInTime).getTime()) / 3600000).toFixed(2);
+
+      const payRate = ticket.payRate ? parseFloat(ticket.payRate) : 0;
+      let totalPay = 0;
+      if (ticket.payType === "fixed") {
+        totalPay = payRate;
+      } else {
+        totalPay = payRate * parseFloat(hoursWorked);
+      }
+      const platformFee = Math.round(totalPay * 0.10 * 100) / 100;
+      const techPayout = Math.round((totalPay - platformFee) * 100) / 100;
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          checkOutTime: now,
+          hoursWorked: hoursWorked,
+          totalPay: String(totalPay.toFixed(2)),
+          platformFee: String(platformFee.toFixed(2)),
+          techPayout: String(techPayout.toFixed(2)),
+          paymentStatus: totalPay > 0 ? "pending" : "unpaid",
+          updatedAt: now,
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      const [profile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (profile) {
+        await db.update(itTechProfiles)
+          .set({ totalEarnings: String((parseFloat(profile.totalEarnings || "0") + techPayout).toFixed(2)) })
+          .where(eq(itTechProfiles.userId, userId));
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Check-out error:", error);
+      res.status(500).json({ message: "Failed to check out" });
+    }
+  });
+
+  // ==========================================
+  // IT TECH: Deliverables / Proof of Work
+  // ==========================================
+  app.post("/api/it/tech/deliverables/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.assignedTo !== userId) return res.status(403).json({ message: "Not assigned to you" });
+
+      const { description, type, url } = req.body;
+      if (!description) return res.status(400).json({ message: "Description is required" });
+
+      const existing = JSON.parse(ticket.deliverables || "[]");
+      existing.push({
+        id: Date.now().toString(),
+        description,
+        type: type || "note",
+        url: url || null,
+        addedAt: new Date().toISOString(),
+        addedBy: userId,
+      });
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({ deliverables: JSON.stringify(existing), updatedAt: new Date() })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Add deliverable error:", error);
+      res.status(500).json({ message: "Failed to add deliverable" });
+    }
+  });
+
+  // ==========================================
+  // IT: Ratings (Both Ways)
+  // ==========================================
+  app.post("/api/it/tickets/:id/rate", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.createdBy !== userId) return res.status(403).json({ message: "Not authorized" });
+      if (!["resolved", "closed"].includes(ticket.status)) return res.status(400).json({ message: "Ticket must be resolved first" });
+
+      const { rating, review } = req.body;
+      if (!rating || rating < 1 || rating > 5) return res.status(400).json({ message: "Rating must be 1-5" });
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({ customerRating: rating, customerReview: review || null, updatedAt: new Date() })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      if (ticket.assignedTo) {
+        const techTickets = await db.select().from(itServiceTickets)
+          .where(eq(itServiceTickets.assignedTo, ticket.assignedTo));
+        const allRated = techTickets.filter(t => t.id !== ticket.id && t.customerRating != null);
+        allRated.push({ ...updated } as any);
+        const avg = allRated.reduce((sum, t) => sum + (t.customerRating || 0), 0) / allRated.length;
+        await db.update(itTechProfiles)
+          .set({ averageRating: String(avg.toFixed(2)) })
+          .where(eq(itTechProfiles.userId, ticket.assignedTo));
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Rate tech error:", error);
+      res.status(500).json({ message: "Failed to rate" });
+    }
+  });
+
+  app.post("/api/it/tech/rate-customer/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.assignedTo !== userId) return res.status(403).json({ message: "Not assigned to you" });
+
+      const { rating, review } = req.body;
+      if (!rating || rating < 1 || rating > 5) return res.status(400).json({ message: "Rating must be 1-5" });
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({ techRating: rating, techReview: review || null, updatedAt: new Date() })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Rate customer error:", error);
+      res.status(500).json({ message: "Failed to rate" });
+    }
+  });
+
+  // ==========================================
+  // IT TECH: Earnings Dashboard
+  // ==========================================
+  app.get("/api/it/tech/earnings", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [profile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!profile) return res.status(404).json({ message: "Tech profile not found" });
+
+      const completedJobs = await db.select().from(itServiceTickets)
+        .where(and(eq(itServiceTickets.assignedTo, userId), eq(itServiceTickets.paymentStatus, "pending")))
+        .orderBy(desc(itServiceTickets.resolvedAt));
+
+      const paidJobs = await db.select().from(itServiceTickets)
+        .where(and(eq(itServiceTickets.assignedTo, userId), eq(itServiceTickets.paymentStatus, "paid")))
+        .orderBy(desc(itServiceTickets.resolvedAt));
+
+      res.json({
+        totalEarnings: profile.totalEarnings || "0",
+        pendingPayout: completedJobs.reduce((sum, t) => sum + parseFloat(t.techPayout || "0"), 0).toFixed(2),
+        paidOut: paidJobs.reduce((sum, t) => sum + parseFloat(t.techPayout || "0"), 0).toFixed(2),
+        totalJobs: profile.totalJobsCompleted || 0,
+        averageRating: profile.averageRating || "0",
+        timelinessScore: profile.timelinessScore || "100",
+        pendingJobs: completedJobs,
+        paidJobs: paidJobs.slice(0, 20),
+      });
+    } catch (error) {
+      console.error("Get earnings error:", error);
+      res.status(500).json({ message: "Failed to get earnings" });
+    }
+  });
+
+  // ==========================================
+  // IT: Talent Pools
+  // ==========================================
+  app.post("/api/it/talent-pools", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const parsed = insertItTalentPoolSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+
+      const [pool] = await db.insert(itTalentPools).values({
+        ...parsed.data,
+        ownerId: userId,
+      }).returning();
+      res.status(201).json(pool);
+    } catch (error) {
+      console.error("Create talent pool error:", error);
+      res.status(500).json({ message: "Failed to create talent pool" });
+    }
+  });
+
+  app.get("/api/it/talent-pools", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const pools = await db.select().from(itTalentPools)
+        .where(eq(itTalentPools.ownerId, userId))
+        .orderBy(desc(itTalentPools.createdAt));
+
+      const poolsWithMembers = await Promise.all(pools.map(async (pool) => {
+        const members = await db.select().from(itTalentPoolMembers)
+          .where(eq(itTalentPoolMembers.poolId, pool.id));
+        return { ...pool, memberCount: members.length };
+      }));
+
+      res.json(poolsWithMembers);
+    } catch (error) {
+      console.error("Get talent pools error:", error);
+      res.status(500).json({ message: "Failed to get talent pools" });
+    }
+  });
+
+  app.post("/api/it/talent-pools/:id/members", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const { techUserId } = req.body;
+      if (!techUserId) return res.status(400).json({ message: "Tech user ID is required" });
+
+      const [pool] = await db.select().from(itTalentPools).where(eq(itTalentPools.id, req.params.id));
+      if (!pool || pool.ownerId !== userId) return res.status(403).json({ message: "Not authorized" });
+
+      const [member] = await db.insert(itTalentPoolMembers).values({
+        poolId: pool.id,
+        techUserId,
+      }).returning();
+      res.status(201).json(member);
+    } catch (error) {
+      console.error("Add pool member error:", error);
+      res.status(500).json({ message: "Failed to add member" });
+    }
+  });
+
+  app.delete("/api/it/talent-pools/:poolId/members/:memberId", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [pool] = await db.select().from(itTalentPools).where(eq(itTalentPools.id, req.params.poolId));
+      if (!pool || pool.ownerId !== userId) return res.status(403).json({ message: "Not authorized" });
+
+      await db.delete(itTalentPoolMembers).where(
+        and(
+          eq(itTalentPoolMembers.id, req.params.memberId),
+          eq(itTalentPoolMembers.poolId, req.params.poolId)
+        )
+      );
+      res.json({ message: "Member removed" });
+    } catch (error) {
+      console.error("Remove pool member error:", error);
+      res.status(500).json({ message: "Failed to remove member" });
+    }
+  });
+
+  // ==========================================
+  // IT: Work Order Templates
+  // ==========================================
+  app.post("/api/it/templates", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const parsed = insertItWorkOrderTemplateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+
+      const [template] = await db.insert(itWorkOrderTemplates).values({
+        ...parsed.data,
+        ownerId: userId,
+      }).returning();
+      res.status(201).json(template);
+    } catch (error) {
+      console.error("Create template error:", error);
+      res.status(500).json({ message: "Failed to create template" });
+    }
+  });
+
+  app.get("/api/it/templates", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const templates = await db.select().from(itWorkOrderTemplates)
+        .where(eq(itWorkOrderTemplates.ownerId, userId))
+        .orderBy(desc(itWorkOrderTemplates.createdAt));
+      res.json(templates);
+    } catch (error) {
+      console.error("Get templates error:", error);
+      res.status(500).json({ message: "Failed to get templates" });
+    }
+  });
+
+  app.delete("/api/it/templates/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [template] = await db.select().from(itWorkOrderTemplates).where(eq(itWorkOrderTemplates.id, req.params.id));
+      if (!template || template.ownerId !== userId) return res.status(403).json({ message: "Not authorized" });
+      await db.delete(itWorkOrderTemplates).where(eq(itWorkOrderTemplates.id, req.params.id));
+      res.json({ message: "Template deleted" });
+    } catch (error) {
+      console.error("Delete template error:", error);
+      res.status(500).json({ message: "Failed to delete template" });
     }
   });
 
