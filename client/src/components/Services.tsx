@@ -1,7 +1,8 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Stethoscope, Heart, UserCheck, Activity, AlertCircle, Calendar, Car } from "lucide-react";
+import { Stethoscope, Heart, UserCheck, Activity, AlertCircle, Calendar, Car, Monitor } from "lucide-react";
+import { Link } from "wouter";
 
-const services = [
+const services: { icon: any; title: string; description: string; href?: string }[] = [
   {
     icon: Stethoscope,
     title: "Nursing Staff",
@@ -37,6 +38,12 @@ const services = [
     title: "Transportation Services",
     description: "Reliable transportation to doctor's appointments and medical visits for patients and elderly persons.",
   },
+  {
+    icon: Monitor,
+    title: "IT Services",
+    description: "On-demand IT support for healthcare facilities — network setup, EHR systems, hardware repair, and HIPAA-compliant security.",
+    href: "/it-services",
+  },
 ];
 
 export default function Services() {
@@ -53,22 +60,28 @@ export default function Services() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {services.map((service, index) => (
-            <Card
-              key={index}
-              className="hover-elevate transition-all"
-              data-testid={`card-service-${index}`}
-            >
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center mb-4">
-                  <service.icon className="w-6 h-6 text-primary" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">{service.title}</h3>
-                <p className="text-muted-foreground">{service.description}</p>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {services.map((service, index) => {
+            const content = (
+              <Card
+                key={index}
+                className="hover-elevate transition-all h-full"
+                data-testid={`card-service-${index}`}
+              >
+                <CardContent className="p-6">
+                  <div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center mb-4">
+                    <service.icon className="w-6 h-6 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">{service.title}</h3>
+                  <p className="text-muted-foreground">{service.description}</p>
+                </CardContent>
+              </Card>
+            );
+            if (service.href) {
+              return <Link key={index} href={service.href} className="block">{content}</Link>;
+            }
+            return content;
+          })}
         </div>
       </div>
     </section>
