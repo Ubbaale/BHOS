@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -5764,6 +5764,231 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
 
   // Seed toll zones on startup
   seedTollZonesData().catch(err => console.error("Failed to seed toll zones:", err));
+
+  // ==========================================
+  // IT SERVICES - TICKETING & DISPATCH SYSTEM
+  // ==========================================
+
+  app.post("/api/it/companies", requireAuth, async (req, res) => {
+    try {
+      const parsed = insertItCompanySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const userId = (req as any).session?.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const existing = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
+      if (existing.length > 0) {
+        return res.status(400).json({ message: "You already have a company registered", company: existing[0] });
+      }
+
+      const [company] = await db.insert(itCompanies).values({
+        ...parsed.data,
+        ownerId: userId,
+      }).returning();
+      res.status(201).json(company);
+    } catch (error) {
+      console.error("Create IT company error:", error);
+      res.status(500).json({ message: "Failed to create company" });
+    }
+  });
+
+  app.get("/api/it/companies/mine", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
+      res.json(companies[0] || null);
+    } catch (error) {
+      console.error("Get IT company error:", error);
+      res.status(500).json({ message: "Failed to get company" });
+    }
+  });
+
+  app.patch("/api/it/companies/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const company = await db.select().from(itCompanies).where(eq(itCompanies.id, req.params.id));
+      if (!company.length || company[0].ownerId !== userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      const allowedFields = ["companyName", "contactEmail", "contactPhone", "address", "city", "state", "zipCode", "industry", "companySize"];
+      const safeUpdate: Record<string, any> = {};
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) safeUpdate[field] = req.body[field];
+      }
+      const [updated] = await db.update(itCompanies)
+        .set(safeUpdate)
+        .where(eq(itCompanies.id, req.params.id))
+        .returning();
+      res.json(updated);
+    } catch (error) {
+      console.error("Update IT company error:", error);
+      res.status(500).json({ message: "Failed to update company" });
+    }
+  });
+
+  app.post("/api/it/tickets", requireAuth, async (req, res) => {
+    try {
+      const parsed = insertItServiceTicketSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const userId = (req as any).session?.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
+      if (!companies.length) {
+        return res.status(400).json({ message: "Please register your company first" });
+      }
+
+      const ticketCount = await db.select().from(itServiceTickets).where(eq(itServiceTickets.companyId, companies[0].id));
+      const ticketNumber = `IT-${String(ticketCount.length + 1).padStart(5, '0')}`;
+
+      const [ticket] = await db.insert(itServiceTickets).values({
+        ...parsed.data,
+        companyId: companies[0].id,
+        createdBy: userId,
+        ticketNumber,
+        scheduledDate: parsed.data.scheduledDate ? new Date(parsed.data.scheduledDate) : undefined,
+      }).returning();
+      res.status(201).json(ticket);
+    } catch (error) {
+      console.error("Create IT ticket error:", error);
+      res.status(500).json({ message: "Failed to create ticket" });
+    }
+  });
+
+  app.get("/api/it/tickets", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
+      if (!companies.length) {
+        return res.json([]);
+      }
+
+      const tickets = await db.select().from(itServiceTickets)
+        .where(eq(itServiceTickets.companyId, companies[0].id))
+        .orderBy(desc(itServiceTickets.createdAt));
+      res.json(tickets);
+    } catch (error) {
+      console.error("Get IT tickets error:", error);
+      res.status(500).json({ message: "Failed to get tickets" });
+    }
+  });
+
+  app.get("/api/it/tickets/stats/summary", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
+      if (!companies.length) {
+        return res.json({ total: 0, open: 0, inProgress: 0, resolved: 0, closed: 0 });
+      }
+      const tickets = await db.select().from(itServiceTickets)
+        .where(eq(itServiceTickets.companyId, companies[0].id));
+      const stats = {
+        total: tickets.length,
+        open: tickets.filter(t => t.status === "open").length,
+        inProgress: tickets.filter(t => t.status === "in_progress").length,
+        resolved: tickets.filter(t => t.status === "resolved").length,
+        closed: tickets.filter(t => t.status === "closed").length,
+      };
+      res.json(stats);
+    } catch (error) {
+      console.error("Get IT ticket stats error:", error);
+      res.status(500).json({ message: "Failed to get stats" });
+    }
+  });
+
+  app.get("/api/it/tickets/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+
+      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
+      if (!companies.length || companies[0].id !== ticket.companyId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const notes = await db.select().from(itTicketNotes)
+        .where(eq(itTicketNotes.ticketId, ticket.id))
+        .orderBy(desc(itTicketNotes.createdAt));
+
+      res.json({ ticket, notes });
+    } catch (error) {
+      console.error("Get IT ticket error:", error);
+      res.status(500).json({ message: "Failed to get ticket" });
+    }
+  });
+
+  app.patch("/api/it/tickets/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+
+      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
+      if (!companies.length || companies[0].id !== ticket.companyId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const allowedFields = ["status", "title", "description", "category", "priority",
+        "scheduledDate", "scheduledTime", "estimatedDuration", "siteAddress", "siteCity",
+        "siteState", "siteZipCode", "contactOnSite", "contactPhone", "specialInstructions",
+        "equipmentNeeded", "assignedTo"];
+      const updateData: Record<string, any> = { updatedAt: new Date() };
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) updateData[field] = req.body[field];
+      }
+      if (req.body.status === "resolved") updateData.resolvedAt = new Date();
+      if (req.body.status === "closed") updateData.closedAt = new Date();
+
+      const [updated] = await db.update(itServiceTickets)
+        .set(updateData)
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+      res.json(updated);
+    } catch (error) {
+      console.error("Update IT ticket error:", error);
+      res.status(500).json({ message: "Failed to update ticket" });
+    }
+  });
+
+  app.post("/api/it/tickets/:id/notes", requireAuth, async (req, res) => {
+    try {
+      const parsed = insertItTicketNoteSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+
+      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
+      if (!companies.length || companies[0].id !== ticket.companyId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const [note] = await db.insert(itTicketNotes).values({
+        ...parsed.data,
+        ticketId: ticket.id,
+        authorId: userId,
+      }).returning();
+
+      await db.update(itServiceTickets)
+        .set({ updatedAt: new Date() })
+        .where(eq(itServiceTickets.id, ticket.id));
+
+      res.status(201).json(note);
+    } catch (error) {
+      console.error("Create IT ticket note error:", error);
+      res.status(500).json({ message: "Failed to add note" });
+    }
+  });
 
   return httpServer;
 }

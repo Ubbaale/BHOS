@@ -716,3 +716,97 @@ export const insertCaregiverPatientSchema = z.object({
 });
 export type InsertCaregiverPatient = z.infer<typeof insertCaregiverPatientSchema>;
 export type CaregiverPatient = typeof caregiverPatients.$inferSelect;
+
+export const itCompanies = pgTable("it_companies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id").references(() => users.id).notNull(),
+  companyName: text("company_name").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  contactPhone: text("contact_phone"),
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  zipCode: text("zip_code"),
+  industry: text("industry").default("healthcare"),
+  companySize: text("company_size").default("1-10"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertItCompanySchema = z.object({
+  companyName: z.string().min(1, "Company name is required"),
+  contactEmail: z.string().email("Valid email required"),
+  contactPhone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zipCode: z.string().optional(),
+  industry: z.enum(["healthcare", "dental", "pharmacy", "clinic", "hospital", "nursing_home", "other"]).default("healthcare"),
+  companySize: z.enum(["1-10", "11-50", "51-100", "100+"]).default("1-10"),
+});
+export type InsertItCompany = z.infer<typeof insertItCompanySchema>;
+export type ItCompany = typeof itCompanies.$inferSelect;
+
+export const itServiceTickets = pgTable("it_service_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").references(() => itCompanies.id).notNull(),
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  ticketNumber: text("ticket_number").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  category: text("category").notNull().default("general"),
+  priority: text("priority").notNull().default("medium"),
+  status: text("status").notNull().default("open"),
+  scheduledDate: timestamp("scheduled_date"),
+  scheduledTime: text("scheduled_time"),
+  estimatedDuration: text("estimated_duration"),
+  siteAddress: text("site_address"),
+  siteCity: text("site_city"),
+  siteState: text("site_state"),
+  siteZipCode: text("site_zip_code"),
+  contactOnSite: text("contact_on_site"),
+  contactPhone: text("contact_phone"),
+  specialInstructions: text("special_instructions"),
+  equipmentNeeded: text("equipment_needed"),
+  assignedTo: varchar("assigned_to"),
+  resolvedAt: timestamp("resolved_at"),
+  closedAt: timestamp("closed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertItServiceTicketSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  description: z.string().min(1, "Description is required"),
+  category: z.enum(["network", "hardware", "software", "printer", "ehr_system", "security", "phone_system", "email", "backup", "general"]).default("general"),
+  priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+  scheduledDate: z.string().optional(),
+  scheduledTime: z.string().optional(),
+  estimatedDuration: z.enum(["30min", "1hr", "2hr", "4hr", "full_day"]).optional(),
+  siteAddress: z.string().optional(),
+  siteCity: z.string().optional(),
+  siteState: z.string().optional(),
+  siteZipCode: z.string().optional(),
+  contactOnSite: z.string().optional(),
+  contactPhone: z.string().optional(),
+  specialInstructions: z.string().optional(),
+  equipmentNeeded: z.string().optional(),
+});
+export type InsertItServiceTicket = z.infer<typeof insertItServiceTicketSchema>;
+export type ItServiceTicket = typeof itServiceTickets.$inferSelect;
+
+export const itTicketNotes = pgTable("it_ticket_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").references(() => itServiceTickets.id).notNull(),
+  authorId: varchar("author_id").references(() => users.id).notNull(),
+  content: text("content").notNull(),
+  isInternal: boolean("is_internal").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertItTicketNoteSchema = z.object({
+  content: z.string().min(1, "Note content is required"),
+  isInternal: z.boolean().optional().default(false),
+});
+export type InsertItTicketNote = z.infer<typeof insertItTicketNoteSchema>;
+export type ItTicketNote = typeof itTicketNotes.$inferSelect;

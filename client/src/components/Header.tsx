@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Phone, Car, Truck, ChevronLeft, Building2, Heart } from "lucide-react";
+import { Menu, X, Phone, Car, Truck, ChevronLeft, Building2, Heart, Server } from "lucide-react";
 import logoImg from "@assets/Logocare-Picsart-BackgroundRemover_1767809315800.jpg";
 import JobPostingForm from "./JobPostingForm";
 import { usePlatform } from "@/hooks/use-platform";
@@ -18,6 +18,7 @@ export default function Header({ title, showBack }: { title?: string; showBack?:
     { name: "Services", href: "#services", isAnchor: true },
     { name: "Find Jobs", href: "#jobs", isAnchor: true },
     { name: "Book Ride", href: "/book-ride", isAnchor: false },
+    { name: "IT Services", href: "/it-services", isAnchor: false },
     { name: "Report Issue", href: "#report", isAnchor: true },
     { name: "Contact", href: "#contact", isAnchor: true },
   ];

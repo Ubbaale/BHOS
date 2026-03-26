@@ -32,6 +32,7 @@ import CaregiverBookRide from "@/pages/caregiver-book-ride";
 import FacilityDashboard from "@/pages/facility-dashboard";
 import FacilityBookRide from "@/pages/facility-book-ride";
 import ForgotPassword from "@/pages/forgot-password";
+import ITServices from "@/pages/it-services";
 
 function Router() {
   return (
@@ -88,6 +89,7 @@ function Router() {
       <Route path="/receipt/:id" component={TripReceipt} />
       <Route path="/report/:id" component={ReportIncident} />
       <Route path="/report" component={ReportIncident} />
+      <Route path="/it-services" component={ITServices} />
       <Route path="/terms" component={TermsOfService} />
       <Route path="/privacy" component={PrivacyPolicy} />
       <Route component={NotFound} />
