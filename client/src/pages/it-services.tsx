@@ -40,7 +40,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Loader2,
   Plus,
-  Building2,
   Ticket,
   Clock,
   MapPin,
@@ -61,19 +60,7 @@ import {
   Server,
   ChevronRight,
 } from "lucide-react";
-import type { ItCompany, ItServiceTicket, ItTicketNote } from "@shared/schema";
-
-const companySchema = z.object({
-  companyName: z.string().min(1, "Company name is required"),
-  contactEmail: z.string().email("Valid email required"),
-  contactPhone: z.string().optional(),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  zipCode: z.string().optional(),
-  industry: z.enum(["healthcare", "dental", "pharmacy", "clinic", "hospital", "nursing_home", "other"]).default("healthcare"),
-  companySize: z.enum(["1-10", "11-50", "51-100", "100+"]).default("1-10"),
-});
+import type { ItServiceTicket, ItTicketNote } from "@shared/schema";
 
 const ticketSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -139,138 +126,6 @@ const statusIcons: Record<string, typeof AlertCircle> = {
   resolved: CheckCircle2,
   closed: XCircle,
 };
-
-function CompanyRegistration({ onSuccess }: { onSuccess: () => void }) {
-  const { toast } = useToast();
-  const form = useForm<z.infer<typeof companySchema>>({
-    resolver: zodResolver(companySchema),
-    defaultValues: {
-      companyName: "",
-      contactEmail: "",
-      contactPhone: "",
-      address: "",
-      city: "",
-      state: "",
-      zipCode: "",
-      industry: "healthcare",
-      companySize: "1-10",
-    },
-  });
-
-  const createCompany = useMutation({
-    mutationFn: (data: z.infer<typeof companySchema>) =>
-      apiRequest("POST", "/api/it/companies", data),
-    onSuccess: () => {
-      toast({ title: "Company registered!", description: "You can now submit IT service tickets." });
-      queryClient.invalidateQueries({ queryKey: ["/api/it/companies/mine"] });
-      onSuccess();
-    },
-    onError: (err: any) => {
-      toast({ title: "Error", description: err.message || "Failed to register company", variant: "destructive" });
-    },
-  });
-
-  return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2" data-testid="text-register-company-title">
-          <Building2 className="h-5 w-5" />
-          Register Your Company
-        </CardTitle>
-        <CardDescription>
-          Set up your company profile to start submitting IT service tickets
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit((data) => createCompany.mutate(data))} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField control={form.control} name="companyName" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Company Name *</FormLabel>
-                  <FormControl><Input {...field} placeholder="e.g. City Health Clinic" data-testid="input-company-name" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="contactEmail" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contact Email *</FormLabel>
-                  <FormControl><Input {...field} type="email" placeholder="it@company.com" data-testid="input-company-email" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="contactPhone" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Phone</FormLabel>
-                  <FormControl><Input {...field} placeholder="(555) 123-4567" data-testid="input-company-phone" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="industry" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Industry</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl><SelectTrigger data-testid="select-industry"><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="healthcare">Healthcare</SelectItem>
-                      <SelectItem value="dental">Dental</SelectItem>
-                      <SelectItem value="pharmacy">Pharmacy</SelectItem>
-                      <SelectItem value="clinic">Clinic</SelectItem>
-                      <SelectItem value="hospital">Hospital</SelectItem>
-                      <SelectItem value="nursing_home">Nursing Home</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="companySize" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Company Size</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl><SelectTrigger data-testid="select-company-size"><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="1-10">1-10 employees</SelectItem>
-                      <SelectItem value="11-50">11-50 employees</SelectItem>
-                      <SelectItem value="51-100">51-100 employees</SelectItem>
-                      <SelectItem value="100+">100+ employees</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="address" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Address</FormLabel>
-                  <FormControl><Input {...field} placeholder="123 Main St" data-testid="input-company-address" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="city" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>City</FormLabel>
-                  <FormControl><Input {...field} placeholder="City" data-testid="input-company-city" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="state" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>State</FormLabel>
-                  <FormControl><Input {...field} placeholder="State" data-testid="input-company-state" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </div>
-
-            <Button type="submit" className="w-full" disabled={createCompany.isPending} data-testid="button-register-company">
-              {createCompany.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Registering...</> : "Register Company"}
-            </Button>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
-  );
-}
 
 function CreateTicketDialog({ onCreated }: { onCreated: () => void }) {
   const { toast } = useToast();
@@ -545,27 +400,33 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <Badge variant="outline" data-testid="text-ticket-number">{ticket.ticketNumber}</Badge>
-                <Badge className={priorityColors[ticket.priority]}>{ticket.priority}</Badge>
-                <Badge className={statusColors[ticket.status]}>
+                <span className="text-sm text-muted-foreground font-mono">{ticket.ticketNumber}</span>
+                <Badge className={priorityColors[ticket.priority]} variant="secondary">
+                  {ticket.priority}
+                </Badge>
+                <Badge className={statusColors[ticket.status]} variant="secondary">
                   <StatusIcon className="h-3 w-3 mr-1" />
                   {ticket.status.replace("_", " ")}
                 </Badge>
               </div>
-              <CardTitle className="flex items-center gap-2" data-testid="text-ticket-title">
+              <CardTitle className="flex items-center gap-2">
                 <CategoryIcon className="h-5 w-5" />
                 {ticket.title}
               </CardTitle>
+              <CardDescription className="mt-1">
+                {categoryLabels[ticket.category] || ticket.category}
+              </CardDescription>
             </div>
             <div className="flex gap-2">
               {ticket.status === "open" && (
-                <Button size="sm" variant="outline" onClick={() => updateStatus.mutate("in_progress")} data-testid="button-start-progress">Start Progress</Button>
+                <Button size="sm" variant="outline" onClick={() => updateStatus.mutate("closed")} data-testid="button-close-ticket">
+                  Close
+                </Button>
               )}
-              {ticket.status === "in_progress" && (
-                <Button size="sm" variant="outline" onClick={() => updateStatus.mutate("resolved")} data-testid="button-resolve">Mark Resolved</Button>
-              )}
-              {ticket.status !== "closed" && (
-                <Button size="sm" variant="ghost" onClick={() => updateStatus.mutate("closed")} data-testid="button-close">Close</Button>
+              {ticket.status === "resolved" && (
+                <Button size="sm" variant="outline" onClick={() => updateStatus.mutate("closed")} data-testid="button-close-ticket">
+                  Close
+                </Button>
               )}
             </div>
           </div>
@@ -573,17 +434,10 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
         <CardContent className="space-y-4">
           <div>
             <h4 className="text-sm font-medium text-muted-foreground mb-1">Description</h4>
-            <p data-testid="text-ticket-description">{ticket.description}</p>
+            <p>{ticket.description}</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <h4 className="text-sm font-medium text-muted-foreground mb-1">Category</h4>
-              <p className="flex items-center gap-1">
-                <CategoryIcon className="h-4 w-4" />
-                {categoryLabels[ticket.category] || ticket.category}
-              </p>
-            </div>
             {ticket.scheduledDate && (
               <div>
                 <h4 className="text-sm font-medium text-muted-foreground mb-1">Scheduled</h4>
@@ -688,19 +542,14 @@ export default function ITServicesPage() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const { data: company, isLoading: loadingCompany } = useQuery<ItCompany | null>({
-    queryKey: ["/api/it/companies/mine"],
-    enabled: isAuthenticated,
-  });
-
   const { data: tickets = [], isLoading: loadingTickets } = useQuery<ItServiceTicket[]>({
     queryKey: ["/api/it/tickets"],
-    enabled: isAuthenticated && !!company,
+    enabled: isAuthenticated,
   });
 
   const { data: stats } = useQuery<{ total: number; open: number; inProgress: number; resolved: number; closed: number }>({
     queryKey: ["/api/it/tickets/stats/summary"],
-    enabled: isAuthenticated && !!company,
+    enabled: isAuthenticated,
   });
 
   if (!isAuthenticated) {
@@ -747,30 +596,6 @@ export default function ITServicesPage() {
     );
   }
 
-  if (loadingCompany) {
-    return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <Header />
-        <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </main>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (!company) {
-    return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <Header />
-        <main className="flex-1 py-8 px-4">
-          <CompanyRegistration onSuccess={() => {}} />
-        </main>
-        <Footer />
-      </div>
-    );
-  }
-
   if (selectedTicketId) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
@@ -792,10 +617,10 @@ export default function ITServicesPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-it-dashboard-title">
-              <Building2 className="h-6 w-6" />
-              {company.companyName}
+              <Monitor className="h-6 w-6" />
+              IT Services
             </h1>
-            <p className="text-muted-foreground">IT Services Dashboard</p>
+            <p className="text-muted-foreground">Submit and track IT service requests</p>
           </div>
           <CreateTicketDialog onCreated={() => {}} />
         </div>

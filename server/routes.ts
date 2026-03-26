@@ -5838,17 +5838,12 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       const userId = (req as any).session?.userId;
       if (!userId) return res.status(401).json({ message: "Not authenticated" });
 
-      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
-      if (!companies.length) {
-        return res.status(400).json({ message: "Please register your company first" });
-      }
-
-      const ticketCount = await db.select().from(itServiceTickets).where(eq(itServiceTickets.companyId, companies[0].id));
-      const ticketNumber = `IT-${String(ticketCount.length + 1).padStart(5, '0')}`;
+      const userTickets = await db.select().from(itServiceTickets).where(eq(itServiceTickets.createdBy, userId));
+      const ticketNumber = `IT-${String(userTickets.length + 1).padStart(5, '0')}`;
 
       const [ticket] = await db.insert(itServiceTickets).values({
         ...parsed.data,
-        companyId: companies[0].id,
+        companyId: userId,
         createdBy: userId,
         ticketNumber,
         scheduledDate: parsed.data.scheduledDate ? new Date(parsed.data.scheduledDate) : undefined,
@@ -5874,13 +5869,8 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       const userId = (req as any).session?.userId;
       if (!userId) return res.status(401).json({ message: "Not authenticated" });
 
-      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
-      if (!companies.length) {
-        return res.json([]);
-      }
-
       const tickets = await db.select().from(itServiceTickets)
-        .where(eq(itServiceTickets.companyId, companies[0].id))
+        .where(eq(itServiceTickets.createdBy, userId))
         .orderBy(desc(itServiceTickets.createdAt));
       res.json(tickets);
     } catch (error) {
@@ -5892,12 +5882,8 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
   app.get("/api/it/tickets/stats/summary", requireAuth, async (req, res) => {
     try {
       const userId = (req as any).session?.userId;
-      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
-      if (!companies.length) {
-        return res.json({ total: 0, open: 0, inProgress: 0, resolved: 0, closed: 0 });
-      }
       const tickets = await db.select().from(itServiceTickets)
-        .where(eq(itServiceTickets.companyId, companies[0].id));
+        .where(eq(itServiceTickets.createdBy, userId));
       const stats = {
         total: tickets.length,
         open: tickets.filter(t => t.status === "open").length,
@@ -5918,8 +5904,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
       if (!ticket) return res.status(404).json({ message: "Ticket not found" });
 
-      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
-      if (!companies.length || companies[0].id !== ticket.companyId) {
+      if (ticket.createdBy !== userId) {
         return res.status(403).json({ message: "Not authorized" });
       }
 
@@ -5940,8 +5925,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
       if (!ticket) return res.status(404).json({ message: "Ticket not found" });
 
-      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
-      if (!companies.length || companies[0].id !== ticket.companyId) {
+      if (ticket.createdBy !== userId) {
         return res.status(403).json({ message: "Not authorized" });
       }
 
@@ -5977,8 +5961,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
       if (!ticket) return res.status(404).json({ message: "Ticket not found" });
 
-      const companies = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, userId));
-      if (!companies.length || companies[0].id !== ticket.companyId) {
+      if (ticket.createdBy !== userId) {
         return res.status(403).json({ message: "Not authorized" });
       }
 
@@ -6112,16 +6095,13 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
         return res.status(400).json({ message: "Ticket is no longer available or already assigned" });
       }
 
-      const company = await db.select().from(itCompanies).where(eq(itCompanies.id, updated.companyId));
-      if (company.length) {
-        notifyItCompanyOfTicketUpdate(
-          company[0].ownerId,
-          updated.ticketNumber,
-          updated.title,
-          "accepted",
-          profile.fullName
-        ).catch(err => console.error("Failed to notify company:", err));
-      }
+      notifyItCompanyOfTicketUpdate(
+        updated.createdBy,
+        updated.ticketNumber,
+        updated.title,
+        "accepted",
+        profile.fullName
+      ).catch(err => console.error("Failed to notify ticket owner:", err));
 
       res.json(updated);
     } catch (error) {
@@ -6151,16 +6131,13 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
         .set({ totalJobsCompleted: (profile.totalJobsCompleted || 0) + 1 })
         .where(eq(itTechProfiles.userId, userId));
 
-      const company = await db.select().from(itCompanies).where(eq(itCompanies.id, ticket.companyId));
-      if (company.length) {
-        notifyItCompanyOfTicketUpdate(
-          company[0].ownerId,
-          ticket.ticketNumber,
-          ticket.title,
-          "resolved",
-          profile.fullName
-        ).catch(err => console.error("Failed to notify company:", err));
-      }
+      notifyItCompanyOfTicketUpdate(
+        ticket.createdBy,
+        ticket.ticketNumber,
+        ticket.title,
+        "resolved",
+        profile.fullName
+      ).catch(err => console.error("Failed to notify ticket owner:", err));
 
       res.json(updated);
     } catch (error) {
