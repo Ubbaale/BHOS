@@ -11,6 +11,9 @@ import pg from "pg";
 import { securityHeaders, globalRateLimiter } from "./security";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
+import { users } from "@shared/schema";
 
 const app = express();
 const httpServer = createServer(app);
@@ -284,10 +287,12 @@ app.use((req, res, next) => {
           const hash = await bcrypt.hash(acct.password, 10);
           const existing = await storage.getUserByUsername(acct.username);
           if (!existing) {
-            await storage.createUser({ username: acct.username, password: hash, role: acct.role });
+            const newUser = await storage.createUser({ username: acct.username, password: hash, role: acct.role });
+            await db.update(users).set({ emailVerified: true }).where(eq(users.id, newUser.id));
             log(`${acct.role} account created: ${acct.username}`);
           } else {
             await storage.updateUserPassword(existing.id, hash);
+            await db.update(users).set({ emailVerified: true }).where(eq(users.id, existing.id));
             log(`${acct.role} account password reset: ${acct.username}`);
           }
         }

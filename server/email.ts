@@ -615,6 +615,46 @@ The CareHub Team
   }
 }
 
+export async function sendEmailVerificationCode(email: string, code: string, fullName?: string): Promise<boolean> {
+  try {
+    const { client, fromEmail } = getSendGridClient();
+
+    const msg = {
+      to: email,
+      from: fromEmail,
+      subject: 'CareHub - Verify Your Email',
+      text: `Hi${fullName ? ` ${fullName}` : ''}! Your email verification code is: ${code}. This code expires in 15 minutes.`,
+      html: `
+<div style="max-width: 480px; margin: 0 auto; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f9fafb; padding: 32px;">
+  <div style="background-color: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h1 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0;">CareHub</h1>
+      <p style="color: #6b7280; margin-top: 4px;">Email Verification</p>
+    </div>
+    <p style="color: #374151; font-size: 16px;">Hi${fullName ? ` ${fullName}` : ''}! Welcome to CareHub. Please verify your email address with the code below:</p>
+    <div style="text-align: center; margin: 24px 0;">
+      <div style="display: inline-block; background-color: #f3f4f6; border-radius: 8px; padding: 16px 32px; letter-spacing: 8px; font-size: 32px; font-weight: 700; color: #111827;">${code}</div>
+    </div>
+    <p style="color: #6b7280; font-size: 14px; text-align: center;">This code expires in <strong>15 minutes</strong>.</p>
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+    <p style="color: #9ca3af; font-size: 12px; text-align: center;">If you didn't create a CareHub account, you can safely ignore this email.</p>
+  </div>
+</div>
+      `.trim()
+    };
+
+    await client.send(msg);
+    console.log('Email verification code sent to:', email);
+    return true;
+  } catch (error: any) {
+    console.error('Failed to send email verification code:', error);
+    if (error?.response?.body) {
+      console.error('SendGrid error details:', JSON.stringify(error.response.body, null, 2));
+    }
+    return false;
+  }
+}
+
 export async function sendPasswordResetCode(email: string, code: string): Promise<boolean> {
   try {
     const { client, fromEmail } = getSendGridClient();

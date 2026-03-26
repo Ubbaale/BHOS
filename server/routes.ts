@@ -2,11 +2,11 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { sendIssueNotification, sendRideBookedForPatientEmail, sendPasswordResetCode, FileAttachment } from "./email";
+import { sendIssueNotification, sendRideBookedForPatientEmail, sendPasswordResetCode, sendEmailVerificationCode, FileAttachment } from "./email";
 import { saveSubscription, removeSubscription, getVapidPublicKey, notifyDriversOfNewRide, notifyPatientOfRideUpdate, notifyItTechsOfNewTicket, notifyItCompanyOfTicketUpdate } from "./push";
 import multer from "multer";
 import path from "path";
@@ -520,22 +520,117 @@ export async function registerRoutes(
         }
       }
 
+      const verificationCode = crypto.randomInt(10000, 100000).toString();
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+      await db.insert(emailVerificationCodes).values({
+        userId: user.id,
+        email: email,
+        code: verificationCode,
+        expiresAt,
+      });
+
+      try {
+        await sendEmailVerificationCode(email, verificationCode, fullName);
+      } catch (emailErr) {
+        console.error("Email verification send failed, code still valid:", emailErr);
+      }
+
+      console.log(`Email verification code generated for ${email}`);
+
+      return res.status(201).json({
+        message: "Account created! Please check your email for a verification code.",
+        requiresVerification: true,
+        email: email,
+      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({ message: "Failed to create account" });
+    }
+  });
+
+  app.post("/api/auth/verify-email", loginRateLimiter, async (req, res) => {
+    try {
+      const { email, code } = req.body;
+      if (!email || !code) {
+        return res.status(400).json({ message: "Email and verification code are required" });
+      }
+
+      const user = await storage.getUserByUsername(email);
+      if (!user || user.emailVerified) {
+        return res.status(400).json({ message: "Invalid or expired verification code" });
+      }
+
+      const [verifyEntry] = await db.select().from(emailVerificationCodes)
+        .where(and(
+          eq(emailVerificationCodes.userId, user.id),
+          eq(emailVerificationCodes.email, email)
+        ))
+        .orderBy(desc(emailVerificationCodes.createdAt))
+        .limit(1);
+
+      if (!verifyEntry || verifyEntry.code !== code || verifyEntry.used || new Date() > verifyEntry.expiresAt) {
+        return res.status(400).json({ message: "Invalid or expired verification code" });
+      }
+
+      await db.update(emailVerificationCodes).set({ used: true }).where(eq(emailVerificationCodes.id, verifyEntry.id));
+      await db.update(users).set({ emailVerified: true }).where(eq(users.id, user.id));
+
       req.session.userId = user.id;
       req.session.username = user.username;
       req.session.role = user.role || "user";
 
       req.session.save((err) => {
         if (err) {
-          console.error("Session save error after registration:", err);
+          console.error("Session save error after verification:", err);
+          return res.status(500).json({ message: "Verification succeeded but login failed. Please sign in." });
         }
-        res.status(201).json({
-          message: "Account created successfully",
+        console.log(`Email verified for ${email}`);
+        res.json({
+          message: "Email verified successfully!",
+          verified: true,
           user: { id: user.id, username: user.username, role: user.role },
         });
       });
     } catch (error) {
-      console.error("Registration error:", error);
-      res.status(500).json({ message: "Failed to create account" });
+      console.error("Email verification error:", error);
+      res.status(500).json({ message: "Verification failed. Please try again." });
+    }
+  });
+
+  app.post("/api/auth/resend-verification", loginRateLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const user = await storage.getUserByUsername(email);
+      if (!user || user.emailVerified) {
+        return res.json({ message: "If an account exists with an unverified email, a new code has been sent." });
+      }
+
+      const newCode = crypto.randomInt(10000, 100000).toString();
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+      await db.insert(emailVerificationCodes).values({
+        userId: user.id,
+        email: email,
+        code: newCode,
+        expiresAt,
+      });
+
+      try {
+        await sendEmailVerificationCode(email, newCode);
+      } catch (emailErr) {
+        console.error("Resend verification email failed:", emailErr);
+      }
+
+      console.log(`Verification code resent for ${email}`);
+      res.json({ message: "A new verification code has been sent to your email." });
+    } catch (error) {
+      console.error("Resend verification error:", error);
+      res.status(500).json({ message: "Something went wrong. Please try again." });
     }
   });
 
@@ -556,6 +651,27 @@ export async function registerRoutes(
       const isValidPassword = await bcrypt.compare(password, user.password);
       if (!isValidPassword) {
         return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      if (!user.emailVerified) {
+        const newCode = crypto.randomInt(10000, 100000).toString();
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+        await db.insert(emailVerificationCodes).values({
+          userId: user.id,
+          email: username,
+          code: newCode,
+          expiresAt,
+        });
+        try {
+          await sendEmailVerificationCode(username, newCode);
+        } catch (e) {
+          console.error("Failed to send verification on login:", e);
+        }
+        return res.status(403).json({
+          message: "Please verify your email first. A new code has been sent.",
+          requiresVerification: true,
+          email: username,
+        });
       }
 
       // Get driver profile if user is a driver
@@ -638,7 +754,7 @@ export async function registerRoutes(
         return res.json({ message: "If an account exists with that email, a reset code has been sent." });
       }
 
-      const code = Math.floor(10000 + Math.random() * 90000).toString();
+      const code = crypto.randomInt(10000, 100000).toString();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
       await db.insert(passwordResetCodes).values({

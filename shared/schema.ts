@@ -8,9 +8,20 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   role: text("role").notNull().default("user"),
+  emailVerified: boolean("email_verified").notNull().default(false),
   tosAcceptedAt: timestamp("tos_accepted_at"),
   tosVersion: text("tos_version"),
   privacyPolicyAcceptedAt: timestamp("privacy_policy_accepted_at"),
+});
+
+export const emailVerificationCodes = pgTable("email_verification_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  email: text("email").notNull(),
+  code: text("code").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
 export const passwordResetCodes = pgTable("password_reset_codes", {

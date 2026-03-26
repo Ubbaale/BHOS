@@ -19,7 +19,7 @@ interface AuthContextType {
   driver: Driver | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<{ success: boolean; message?: string; redirectTo?: string }>;
+  login: (username: string, password: string) => Promise<{ success: boolean; message?: string; redirectTo?: string; requiresVerification?: boolean; email?: string }>;
   logout: () => Promise<void>;
   refetch: () => Promise<void>;
 }
@@ -71,7 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { 
           success: false, 
           message: data.message,
-          redirectTo: data.redirectTo 
+          redirectTo: data.redirectTo,
+          requiresVerification: data.requiresVerification,
+          email: data.email,
         };
       }
 
