@@ -2,12 +2,12 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { sendIssueNotification, sendRideBookedForPatientEmail, sendPasswordResetCode, FileAttachment } from "./email";
-import { saveSubscription, removeSubscription, getVapidPublicKey, notifyDriversOfNewRide, notifyPatientOfRideUpdate } from "./push";
+import { saveSubscription, removeSubscription, getVapidPublicKey, notifyDriversOfNewRide, notifyPatientOfRideUpdate, notifyItTechsOfNewTicket, notifyItCompanyOfTicketUpdate } from "./push";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -5853,6 +5853,15 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
         ticketNumber,
         scheduledDate: parsed.data.scheduledDate ? new Date(parsed.data.scheduledDate) : undefined,
       }).returning();
+
+      notifyItTechsOfNewTicket(
+        ticketNumber,
+        parsed.data.title,
+        parsed.data.category || "general",
+        parsed.data.priority || "medium",
+        parsed.data.siteCity ? `${parsed.data.siteCity}, ${parsed.data.siteState || ""}` : undefined
+      ).catch(err => console.error("Failed to notify techs:", err));
+
       res.status(201).json(ticket);
     } catch (error) {
       console.error("Create IT ticket error:", error);
@@ -5987,6 +5996,214 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     } catch (error) {
       console.error("Create IT ticket note error:", error);
       res.status(500).json({ message: "Failed to add note" });
+    }
+  });
+
+  // ==========================================
+  // IT TECH ONBOARDING & DISPATCH
+  // ==========================================
+
+  app.post("/api/it/tech/apply", async (req, res) => {
+    try {
+      const parsed = insertItTechProfileSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+
+      const existing = await db.select().from(users).where(eq(users.username, parsed.data.email));
+      if (existing.length > 0) {
+        return res.status(400).json({ message: "An account with this email already exists" });
+      }
+
+      const hashedPassword = await bcrypt.hash(parsed.data.password, 10);
+
+      const result = await db.transaction(async (tx) => {
+        const [user] = await tx.insert(users).values({
+          username: parsed.data.email,
+          password: hashedPassword,
+          role: "it_tech",
+        }).returning();
+
+        const [profile] = await tx.insert(itTechProfiles).values({
+          userId: user.id,
+          fullName: parsed.data.fullName,
+          email: parsed.data.email,
+          phone: parsed.data.phone,
+          city: parsed.data.city,
+          state: parsed.data.state,
+          zipCode: parsed.data.zipCode,
+          skills: parsed.data.skills,
+          certifications: parsed.data.certifications,
+          experienceYears: parsed.data.experienceYears,
+          bio: parsed.data.bio,
+          hourlyRate: parsed.data.hourlyRate,
+        }).returning();
+
+        return profile;
+      });
+
+      res.status(201).json({ message: "Application submitted successfully", profile: result });
+    } catch (error) {
+      console.error("IT tech apply error:", error);
+      res.status(500).json({ message: "Failed to submit application" });
+    }
+  });
+
+  app.get("/api/it/tech/profile", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [profile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      res.json(profile || null);
+    } catch (error) {
+      console.error("Get IT tech profile error:", error);
+      res.status(500).json({ message: "Failed to get profile" });
+    }
+  });
+
+  app.get("/api/it/tech/available-tickets", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [profile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!profile || profile.applicationStatus !== "approved") {
+        return res.status(403).json({ message: "Your application must be approved first" });
+      }
+
+      const tickets = await db.select().from(itServiceTickets)
+        .where(eq(itServiceTickets.status, "open"))
+        .orderBy(desc(itServiceTickets.createdAt));
+      res.json(tickets);
+    } catch (error) {
+      console.error("Get available IT tickets error:", error);
+      res.status(500).json({ message: "Failed to get tickets" });
+    }
+  });
+
+  app.get("/api/it/tech/my-jobs", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const tickets = await db.select().from(itServiceTickets)
+        .where(eq(itServiceTickets.assignedTo, userId))
+        .orderBy(desc(itServiceTickets.updatedAt));
+      res.json(tickets);
+    } catch (error) {
+      console.error("Get IT tech jobs error:", error);
+      res.status(500).json({ message: "Failed to get jobs" });
+    }
+  });
+
+  app.post("/api/it/tech/accept-ticket/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [profile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!profile || profile.applicationStatus !== "approved") {
+        return res.status(403).json({ message: "Your application must be approved first" });
+      }
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({ assignedTo: userId, status: "in_progress", updatedAt: new Date() })
+        .where(and(
+          eq(itServiceTickets.id, req.params.id),
+          eq(itServiceTickets.status, "open"),
+          isNull(itServiceTickets.assignedTo)
+        ))
+        .returning();
+
+      if (!updated) {
+        return res.status(400).json({ message: "Ticket is no longer available or already assigned" });
+      }
+
+      const company = await db.select().from(itCompanies).where(eq(itCompanies.id, updated.companyId));
+      if (company.length) {
+        notifyItCompanyOfTicketUpdate(
+          company[0].ownerId,
+          updated.ticketNumber,
+          updated.title,
+          "accepted",
+          profile.fullName
+        ).catch(err => console.error("Failed to notify company:", err));
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Accept IT ticket error:", error);
+      res.status(500).json({ message: "Failed to accept ticket" });
+    }
+  });
+
+  app.post("/api/it/tech/complete-ticket/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [profile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!profile || profile.applicationStatus !== "approved") {
+        return res.status(403).json({ message: "Your application must be approved first" });
+      }
+
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.assignedTo !== userId) return res.status(403).json({ message: "Not assigned to you" });
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({ status: "resolved", resolvedAt: new Date(), updatedAt: new Date() })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      await db.update(itTechProfiles)
+        .set({ totalJobsCompleted: (profile.totalJobsCompleted || 0) + 1 })
+        .where(eq(itTechProfiles.userId, userId));
+
+      const company = await db.select().from(itCompanies).where(eq(itCompanies.id, ticket.companyId));
+      if (company.length) {
+        notifyItCompanyOfTicketUpdate(
+          company[0].ownerId,
+          ticket.ticketNumber,
+          ticket.title,
+          "resolved",
+          profile.fullName
+        ).catch(err => console.error("Failed to notify company:", err));
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Complete IT ticket error:", error);
+      res.status(500).json({ message: "Failed to complete ticket" });
+    }
+  });
+
+  app.get("/api/it/admin/techs", requireAdmin, async (_req, res) => {
+    try {
+      const techs = await db.select().from(itTechProfiles).orderBy(desc(itTechProfiles.createdAt));
+      res.json(techs);
+    } catch (error) {
+      console.error("Get IT techs error:", error);
+      res.status(500).json({ message: "Failed to get techs" });
+    }
+  });
+
+  app.post("/api/it/admin/techs/:id/approve", requireAdmin, async (req, res) => {
+    try {
+      const [updated] = await db.update(itTechProfiles)
+        .set({ applicationStatus: "approved" })
+        .where(eq(itTechProfiles.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ message: "Tech not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Approve IT tech error:", error);
+      res.status(500).json({ message: "Failed to approve tech" });
+    }
+  });
+
+  app.post("/api/it/admin/techs/:id/reject", requireAdmin, async (req, res) => {
+    try {
+      const [updated] = await db.update(itTechProfiles)
+        .set({ applicationStatus: "rejected" })
+        .where(eq(itTechProfiles.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ message: "Tech not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Reject IT tech error:", error);
+      res.status(500).json({ message: "Failed to reject tech" });
     }
   });
 

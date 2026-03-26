@@ -810,3 +810,43 @@ export const insertItTicketNoteSchema = z.object({
 });
 export type InsertItTicketNote = z.infer<typeof insertItTicketNoteSchema>;
 export type ItTicketNote = typeof itTicketNotes.$inferSelect;
+
+export const itTechProfiles = pgTable("it_tech_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  fullName: text("full_name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone").notNull(),
+  city: text("city"),
+  state: text("state"),
+  zipCode: text("zip_code"),
+  skills: text("skills").array().default([]),
+  certifications: text("certifications").array().default([]),
+  experienceYears: text("experience_years").default("0-1"),
+  bio: text("bio"),
+  hourlyRate: text("hourly_rate"),
+  availabilityStatus: text("availability_status").default("available"),
+  applicationStatus: text("application_status").default("pending"),
+  backgroundCheckStatus: text("background_check_status").default("not_started"),
+  totalJobsCompleted: integer("total_jobs_completed").default(0),
+  averageRating: numeric("average_rating").default("0"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertItTechProfileSchema = z.object({
+  fullName: z.string().min(1, "Full name is required"),
+  email: z.string().email("Valid email required"),
+  phone: z.string().min(1, "Phone number is required"),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zipCode: z.string().optional(),
+  skills: z.array(z.string()).default([]),
+  certifications: z.array(z.string()).default([]),
+  experienceYears: z.enum(["0-1", "1-3", "3-5", "5-10", "10+"]).default("0-1"),
+  bio: z.string().optional(),
+  hourlyRate: z.string().optional(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+export type InsertItTechProfile = z.infer<typeof insertItTechProfileSchema>;
+export type ItTechProfile = typeof itTechProfiles.$inferSelect;

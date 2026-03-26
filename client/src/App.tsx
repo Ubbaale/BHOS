@@ -33,6 +33,8 @@ import FacilityDashboard from "@/pages/facility-dashboard";
 import FacilityBookRide from "@/pages/facility-book-ride";
 import ForgotPassword from "@/pages/forgot-password";
 import ITServices from "@/pages/it-services";
+import ITTechApply from "@/pages/it-tech-apply";
+import ITTechDashboard from "@/pages/it-tech-dashboard";
 
 function Router() {
   return (
@@ -90,6 +92,8 @@ function Router() {
       <Route path="/report/:id" component={ReportIncident} />
       <Route path="/report" component={ReportIncident} />
       <Route path="/it-services" component={ITServices} />
+      <Route path="/it-tech/apply" component={ITTechApply} />
+      <Route path="/it-tech" component={ITTechDashboard} />
       <Route path="/terms" component={TermsOfService} />
       <Route path="/privacy" component={PrivacyPolicy} />
       <Route component={NotFound} />

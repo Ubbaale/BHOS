@@ -1,6 +1,6 @@
 import webpush from "web-push";
 import { db } from "./db";
-import { pushSubscriptions } from "@shared/schema";
+import { pushSubscriptions, itCompanies } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || "").trim();
@@ -294,6 +294,59 @@ export async function notifyPatientOfRideUpdate(
         vehicleInfo: context?.vehicleInfo,
         licensePlate: context?.licensePlate,
         fare: context?.fare,
+      },
+    }
+  );
+}
+
+export async function notifyItCompanyOfTicketUpdate(
+  companyOwnerId: string,
+  ticketNumber: string,
+  title: string,
+  status: string,
+  techName?: string
+) {
+  const statusMessages: Record<string, string> = {
+    accepted: `${techName || "A technician"} has accepted ticket ${ticketNumber}: ${title}`,
+    in_progress: `Work has started on ticket ${ticketNumber}: ${title}`,
+    resolved: `Ticket ${ticketNumber} has been resolved: ${title}`,
+    completed: `Ticket ${ticketNumber} is complete: ${title}`,
+  };
+
+  const body = statusMessages[status] || `Ticket ${ticketNumber} status updated to ${status}`;
+
+  console.log(`IT ticket update notification for company owner ${companyOwnerId}: ${body}`);
+}
+
+export async function notifyItTechsOfNewTicket(
+  ticketNumber: string,
+  title: string,
+  category: string,
+  priority: string,
+  location?: string
+) {
+  const priorityLabel = priority.charAt(0).toUpperCase() + priority.slice(1);
+  const locationInfo = location ? ` in ${location}` : "";
+
+  await sendPushNotification(
+    `New IT Ticket: ${priorityLabel} Priority`,
+    `${title}${locationInfo} (${ticketNumber})`,
+    "/it-tech",
+    "it_tech",
+    {
+      tag: `it-new-ticket-${ticketNumber}`,
+      renotify: true,
+      requireInteraction: priority === "urgent" || priority === "high",
+      category: "it_new_ticket",
+      actions: [
+        { action: "view", title: "View Details" },
+        { action: "accept", title: "Accept Job" },
+      ],
+      data: {
+        type: "it_new_ticket",
+        ticketNumber,
+        category,
+        priority,
       },
     }
   );
