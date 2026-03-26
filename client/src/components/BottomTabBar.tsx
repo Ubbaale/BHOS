@@ -9,7 +9,7 @@ const tabs = [
   { icon: Car, label: "Book Ride", path: "/book-ride", testId: "tab-book-ride" },
   { icon: ClipboardList, label: "My Rides", path: "/my-rides", testId: "tab-my-rides" },
   { icon: Heart, label: "Family", path: "/caregiver", testId: "tab-family" },
-  { icon: User, label: "Account", path: "/driver/login", testId: "tab-account" },
+  { icon: User, label: "Account", path: "/login", testId: "tab-account" },
 ];
 
 export default function BottomTabBar() {
@@ -18,7 +18,7 @@ export default function BottomTabBar() {
   const { isIOS } = usePlatform();
 
   const getAccountPath = () => {
-    if (!isAuthenticated) return "/driver/login";
+    if (!isAuthenticated) return "/login";
     if (user?.role === "admin") return "/admin";
     return "/driver";
   };

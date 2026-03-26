@@ -12,7 +12,7 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ 
   children, 
   requiredRole,
-  redirectTo = "/driver/login" 
+  redirectTo = "/login" 
 }: ProtectedRouteProps) {
   const { user, driver, isLoading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();

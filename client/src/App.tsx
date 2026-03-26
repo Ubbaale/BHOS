@@ -13,7 +13,7 @@ import BookRide from "@/pages/book-ride";
 import DriverDashboard from "@/pages/driver-dashboard";
 import DriverApply from "@/pages/driver-apply";
 import DriverKyc from "@/pages/driver-kyc";
-import DriverLogin from "@/pages/driver-login";
+import LoginPage from "@/pages/login";
 import AdminDrivers from "@/pages/admin-drivers";
 import AdminDashboard from "@/pages/admin-dashboard";
 import TripReceipt from "@/pages/trip-receipt";
@@ -32,7 +32,6 @@ import CaregiverBookRide from "@/pages/caregiver-book-ride";
 import FacilityDashboard from "@/pages/facility-dashboard";
 import FacilityBookRide from "@/pages/facility-book-ride";
 import ForgotPassword from "@/pages/forgot-password";
-import LoginPage from "@/pages/login";
 
 function Router() {
   return (
@@ -43,7 +42,7 @@ function Router() {
       <Route path="/book-ride" component={BookRide} />
       <Route path="/track/:id" component={TrackRide} />
       <Route path="/share/:code" component={SharedTracking} />
-      <Route path="/driver/login" component={DriverLogin} />
+      <Route path="/driver/login" component={LoginPage} />
       <Route path="/driver/apply" component={DriverApply} />
       <Route path="/driver/kyc" component={DriverKyc} />
       <Route path="/driver/ic-agreement">

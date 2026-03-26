@@ -117,7 +117,7 @@ export default function FacilityDashboard() {
               <h2 className="text-xl font-semibold" data-testid="text-auth-required">Authentication Required</h2>
               <p className="text-muted-foreground">Please log in to access the facility portal.</p>
               <Button asChild data-testid="button-login-redirect">
-                <Link href="/driver/login">Log In</Link>
+                <Link href="/login">Log In</Link>
               </Button>
             </CardContent>
           </Card>

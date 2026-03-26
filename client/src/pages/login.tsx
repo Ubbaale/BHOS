@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Form,
   FormControl,
@@ -18,7 +19,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { Loader2, Eye, EyeOff, Mail, Lock, AlertCircle } from "lucide-react";
+import logoImg from "@assets/Logocare-Picsart-BackgroundRemover_1767809315800.jpg";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Email is required").email("Please enter a valid email address"),
@@ -26,11 +28,20 @@ const loginSchema = z.object({
 });
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, isAuthenticated, user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      if (user.role === "admin") setLocation("/admin");
+      else if (user.role === "driver") setLocation("/driver");
+      else setLocation("/");
+    }
+  }, [isAuthenticated, user, setLocation]);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -39,6 +50,7 @@ export default function LoginPage() {
 
   const onSubmit = async (data: z.infer<typeof loginSchema>) => {
     setIsSubmitting(true);
+    setError(null);
     try {
       const result = await login(data.email, data.password);
       if (result.success) {
@@ -49,18 +61,14 @@ export default function LoginPage() {
           setLocation("/");
         }
       } else {
-        toast({
-          title: "Login failed",
-          description: result.message || "Invalid email or password.",
-          variant: "destructive",
-        });
+        if (result.redirectTo) {
+          setLocation(result.redirectTo);
+        } else {
+          setError(result.message || "Invalid email or password.");
+        }
       }
     } catch {
-      toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
+      setError("Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -72,12 +80,22 @@ export default function LoginPage() {
       <main className="flex-1 flex items-center justify-center py-12 px-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">Sign In</CardTitle>
+            <div className="mx-auto mb-4">
+              <img src={logoImg} alt="CareHub" className="h-16 w-auto mx-auto rounded-lg" />
+            </div>
+            <CardTitle className="text-2xl font-bold" data-testid="text-login-title">Sign In</CardTitle>
             <CardDescription>
-              Log in to your CareHub account
+              Sign in to your CareHub account
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription data-testid="text-login-error">{error}</AlertDescription>
+              </Alert>
+            )}
+
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
@@ -166,6 +184,17 @@ export default function LoginPage() {
                 </div>
               </form>
             </Form>
+
+            <div className="mt-6 pt-4 border-t text-center text-sm text-muted-foreground">
+              <p>Want to drive with CareHub?</p>
+              <Button
+                variant="ghost"
+                onClick={() => setLocation("/driver/apply")}
+                data-testid="link-apply"
+              >
+                Apply to become a driver
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </main>
