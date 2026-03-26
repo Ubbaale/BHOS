@@ -59,6 +59,8 @@ import {
   HardDrive,
   Server,
   ChevronRight,
+  Building2,
+  LogIn,
 } from "lucide-react";
 import type { ItServiceTicket, ItTicketNote } from "@shared/schema";
 
@@ -586,9 +588,16 @@ export default function ITServicesPage() {
                 </CardContent>
               </Card>
             </div>
-            <Button size="lg" onClick={() => setLocation("/login")} data-testid="button-it-get-started">
-              Sign In to Get Started
-            </Button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Button size="lg" onClick={() => setLocation("/it-services/onboard")} data-testid="button-it-onboard">
+                <Building2 className="mr-2 h-5 w-5" />
+                Onboard Your Company
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => setLocation("/login")} data-testid="button-it-signin">
+                <LogIn className="mr-2 h-5 w-5" />
+                Sign In
+              </Button>
+            </div>
           </div>
         </main>
         <Footer />

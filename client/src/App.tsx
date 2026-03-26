@@ -35,6 +35,7 @@ import ForgotPassword from "@/pages/forgot-password";
 import ITServices from "@/pages/it-services";
 import ITTechApply from "@/pages/it-tech-apply";
 import ITTechDashboard from "@/pages/it-tech-dashboard";
+import ITCompanyOnboard from "@/pages/it-company-onboard";
 
 function Router() {
   return (
@@ -91,6 +92,7 @@ function Router() {
       <Route path="/receipt/:id" component={TripReceipt} />
       <Route path="/report/:id" component={ReportIncident} />
       <Route path="/report" component={ReportIncident} />
+      <Route path="/it-services/onboard" component={ITCompanyOnboard} />
       <Route path="/it-services" component={ITServices} />
       <Route path="/it-tech/apply" component={ITTechApply} />
       <Route path="/it-tech" component={ITTechDashboard} />
