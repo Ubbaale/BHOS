@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Car, UserCog, Briefcase, Phone } from "lucide-react";
+import { Car, UserCog, Briefcase, Phone, Monitor } from "lucide-react";
 import { Link } from "wouter";
 import { usePlatform } from "@/hooks/use-platform";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,16 @@ const actions = [
     gradient: "from-amber-500 to-amber-600",
     isExternal: true,
   },
+  {
+    icon: Monitor,
+    title: "IT Services",
+    description: "Submit IT service requests for your healthcare facility and get matched with qualified technicians.",
+    mobileDesc: "Healthcare IT support",
+    link: "/it-services",
+    buttonText: "Get Started",
+    testId: "tile-it-services",
+    gradient: "from-rose-500 to-rose-600",
+  },
 ];
 
 function TileLink({ action, children }: { action: typeof actions[number]; children: React.ReactNode }) {
@@ -93,7 +103,7 @@ export default function QuickActions() {
 
   return (
     <section id="quick-actions" className="py-10 bg-muted/30">
-      <div className="max-w-3xl mx-auto px-6">
+      <div className="max-w-5xl mx-auto px-6">
         <div className="text-center mb-6">
           <h2 className="text-2xl font-semibold mb-2">
             Get Started
@@ -103,14 +113,14 @@ export default function QuickActions() {
           </p>
         </div>
 
-        <div className="flex justify-center gap-4">
+        <div className="flex justify-center gap-4 flex-wrap">
           {actions.map((action, index) => {
             const Icon = action.icon;
             return (
               <TileLink key={index} action={action}>
                 <div
                   className={cn(
-                    "w-56 h-56 flex flex-col items-center justify-center rounded-xl text-white transition-transform hover:scale-[1.03] cursor-pointer",
+                    "w-44 h-44 flex flex-col items-center justify-center rounded-xl text-white transition-transform hover:scale-[1.03] cursor-pointer",
                     `bg-gradient-to-br ${action.gradient}`
                   )}
                   data-testid={action.testId}
