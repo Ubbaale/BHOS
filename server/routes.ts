@@ -5843,7 +5843,6 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
 
       const [ticket] = await db.insert(itServiceTickets).values({
         ...parsed.data,
-        companyId: userId,
         createdBy: userId,
         ticketNumber,
         scheduledDate: parsed.data.scheduledDate ? new Date(parsed.data.scheduledDate) : undefined,

@@ -749,7 +749,7 @@ export type ItCompany = typeof itCompanies.$inferSelect;
 
 export const itServiceTickets = pgTable("it_service_tickets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyId: varchar("company_id").references(() => itCompanies.id).notNull(),
+  companyId: varchar("company_id"),
   createdBy: varchar("created_by").references(() => users.id).notNull(),
   ticketNumber: text("ticket_number").notNull(),
   title: text("title").notNull(),
