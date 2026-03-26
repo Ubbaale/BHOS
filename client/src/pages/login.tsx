@@ -19,13 +19,19 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Eye, EyeOff, Mail, Lock, AlertCircle } from "lucide-react";
+import { Loader2, Eye, EyeOff, Mail, Lock, AlertCircle, Smartphone, Monitor } from "lucide-react";
+import { SiApple, SiGoogleplay } from "react-icons/si";
 import logoImg from "@assets/Logocare-Picsart-BackgroundRemover_1767809315800.jpg";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Email is required").email("Please enter a valid email address"),
   password: z.string().min(1, "Password is required"),
 });
+
+function isMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
 
 export default function LoginPage() {
   const { login, isAuthenticated, user } = useAuth();
@@ -34,6 +40,12 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showWebLogin, setShowWebLogin] = useState(false);
+
+  useEffect(() => {
+    setIsMobile(isMobileDevice());
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -73,6 +85,78 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (isMobile && !showWebLogin) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <Header />
+        <main className="flex-1 flex items-center justify-center py-12 px-4">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-4">
+                <img src={logoImg} alt="CareHub" className="h-16 w-auto mx-auto rounded-lg" />
+              </div>
+              <CardTitle className="text-2xl font-bold" data-testid="text-login-title">Welcome to CareHub</CardTitle>
+              <CardDescription>
+                Choose how you'd like to sign in
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button
+                className="w-full h-14 text-base"
+                asChild
+                data-testid="button-open-app"
+              >
+                <a href="https://app.carehubapp.com/#/login">
+                  <Smartphone className="mr-2 h-5 w-5" />
+                  Open CareHub App
+                </a>
+              </Button>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Button variant="outline" className="h-12" asChild data-testid="button-app-store">
+                  <a href="https://apps.apple.com/app/id6444679914" target="_blank" rel="noopener noreferrer">
+                    <SiApple className="mr-2 h-4 w-4" />
+                    App Store
+                  </a>
+                </Button>
+                <Button variant="outline" className="h-12" asChild data-testid="button-play-store">
+                  <a href="https://play.google.com/store/apps/details?id=com.fieldhcp.app" target="_blank" rel="noopener noreferrer">
+                    <SiGoogleplay className="mr-2 h-4 w-4" />
+                    Google Play
+                  </a>
+                </Button>
+              </div>
+
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">or</span>
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                className="w-full h-12"
+                onClick={() => setShowWebLogin(true)}
+                data-testid="button-web-login"
+              >
+                <Monitor className="mr-2 h-4 w-4" />
+                Sign in on Web
+              </Button>
+
+              <p className="text-xs text-center text-muted-foreground mt-2">
+                Admins and drivers can sign in on the web to access dashboards
+              </p>
+            </CardContent>
+          </Card>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -195,6 +279,22 @@ export default function LoginPage() {
                 Apply to become a driver
               </Button>
             </div>
+
+            {isMobile && (
+              <div className="mt-4 pt-4 border-t text-center">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  asChild
+                  data-testid="button-switch-to-app"
+                >
+                  <a href="https://app.carehubapp.com/#/login">
+                    <Smartphone className="mr-2 h-4 w-4" />
+                    Open CareHub App Instead
+                  </a>
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </main>
