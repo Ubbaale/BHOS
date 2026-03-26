@@ -150,14 +150,9 @@ export default function Header({ title, showBack }: { title?: string; showBack?:
                 </Link>
               </Button>
             ) : (
-              <>
-                <Button variant="outline" asChild data-testid="button-sign-in">
-                  <Link href="/login">Sign In</Link>
-                </Button>
-                <Button asChild data-testid="button-get-started">
-                  <a href="https://app.carehubapp.com/#/login">Get Started</a>
-                </Button>
-              </>
+              <Button asChild data-testid="button-sign-in">
+                <Link href="/login">Sign In</Link>
+              </Button>
             )}
           </div>
 
@@ -250,14 +245,9 @@ export default function Header({ title, showBack }: { title?: string; showBack?:
                     </Link>
                   </Button>
                 ) : (
-                  <>
-                    <Button asChild className="w-full" variant="outline" data-testid="button-mobile-sign-in">
-                      <Link href="/login" onClick={() => setMobileMenuOpen(false)}>Sign In</Link>
-                    </Button>
-                    <Button asChild className="w-full" data-testid="button-mobile-get-started">
-                      <a href="https://app.carehubapp.com/#/login">Get Started</a>
-                    </Button>
-                  </>
+                  <Button asChild className="w-full" data-testid="button-mobile-sign-in">
+                    <Link href="/login" onClick={() => setMobileMenuOpen(false)}>Sign In</Link>
+                  </Button>
                 )}
               </div>
             </nav>
