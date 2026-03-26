@@ -520,15 +520,14 @@ export async function registerRoutes(
         }
       }
 
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error("Session regeneration error after registration:", err);
-          return res.status(500).json({ message: "Account created but login failed. Please sign in." });
-        }
-        req.session.userId = user.id;
-        req.session.username = user.username;
-        req.session.role = user.role || "user";
+      req.session.userId = user.id;
+      req.session.username = user.username;
+      req.session.role = user.role || "user";
 
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error after registration:", err);
+        }
         res.status(201).json({
           message: "Account created successfully",
           user: { id: user.id, username: user.username, role: user.role },
