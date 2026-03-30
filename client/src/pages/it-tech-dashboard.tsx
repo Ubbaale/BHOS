@@ -20,6 +20,14 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import {
   Loader2,
   Wrench,
   Clock,
@@ -49,6 +57,13 @@ import {
   AlertTriangle,
   MapPinned,
   Receipt,
+  Upload,
+  Trash2,
+  Download,
+  Settings,
+  BadgeCheck,
+  ShieldCheck,
+  FileCheck,
 } from "lucide-react";
 import type { ItServiceTicket, ItTechProfile } from "@shared/schema";
 
@@ -666,6 +681,447 @@ function CompletedTicketCard({ ticket }: { ticket: ItServiceTicket }) {
   );
 }
 
+function ContractorOnboardingSection() {
+  const { toast } = useToast();
+  const [ssnLast4, setSsnLast4] = useState("");
+  const [taxClassification, setTaxClassification] = useState("individual");
+  const [businessName, setBusinessName] = useState("");
+  const [taxAddress, setTaxAddress] = useState("");
+  const [taxCity, setTaxCity] = useState("");
+  const [taxState, setTaxState] = useState("");
+  const [taxZip, setTaxZip] = useState("");
+  const [fullLegalName, setFullLegalName] = useState("");
+  const [showAgreement, setShowAgreement] = useState(false);
+
+  const { data: contractorStatus, isLoading } = useQuery<any>({
+    queryKey: ["/api/it/tech/contractor-status"],
+  });
+
+  const { data: agreementText } = useQuery<any>({
+    queryKey: ["/api/it/tech/ic-agreement-text"],
+    enabled: showAgreement,
+  });
+
+  const onboardMutation = useMutation({
+    mutationFn: () => fetch("/api/it/tech/contractor-onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ ssnLast4, taxClassification, businessName, taxAddress, taxCity, taxState, taxZip }),
+    }).then(async r => { if (!r.ok) throw new Error((await r.json()).message); return r.json(); }),
+    onSuccess: () => {
+      toast({ title: "Tax information saved" });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tech/contractor-status"] });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const signAgreementMutation = useMutation({
+    mutationFn: () => fetch("/api/it/tech/sign-ic-agreement", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ fullLegalName }),
+    }).then(async r => { if (!r.ok) throw new Error((await r.json()).message); return r.json(); }),
+    onSuccess: () => {
+      toast({ title: "Agreement signed successfully" });
+      setShowAgreement(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tech/contractor-status"] });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+
+  const isOnboarded = contractorStatus?.isContractorOnboarded;
+  const hasSigned = !!contractorStatus?.icAgreementSignedAt;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5" /> Independent Contractor Agreement
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {hasSigned ? (
+            <div className="flex items-center gap-2 text-green-600" data-testid="text-ic-signed">
+              <CheckCircle2 className="h-5 w-5" />
+              <span>Signed on {new Date(contractorStatus.icAgreementSignedAt).toLocaleDateString()}</span>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                You must sign the Independent Contractor Agreement before receiving payouts. This confirms your status as a 1099 independent contractor.
+              </p>
+              {!showAgreement ? (
+                <Button onClick={() => setShowAgreement(true)} data-testid="button-view-ic-agreement">
+                  <FileText className="h-4 w-4 mr-2" /> View & Sign Agreement
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="max-h-60 overflow-y-auto border rounded-lg p-4 text-xs whitespace-pre-wrap bg-muted/30" data-testid="text-ic-agreement-content">
+                    {agreementText?.content || "Loading..."}
+                  </div>
+                  <div>
+                    <Label>Full Legal Name (Digital Signature)</Label>
+                    <Input
+                      value={fullLegalName}
+                      onChange={(e) => setFullLegalName(e.target.value)}
+                      placeholder="Type your full legal name"
+                      data-testid="input-legal-name"
+                    />
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={fullLegalName.trim().length < 2 || signAgreementMutation.isPending}
+                    onClick={() => signAgreementMutation.mutate()}
+                    data-testid="button-sign-ic-agreement"
+                  >
+                    {signAgreementMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Sign Agreement
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <FileCheck className="h-5 w-5" /> Tax Information (W-9)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isOnboarded ? (
+            <div className="space-y-2" data-testid="text-tax-info-complete">
+              <div className="flex items-center gap-2 text-green-600 mb-3">
+                <CheckCircle2 className="h-5 w-5" />
+                <span>Tax information on file</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">SSN:</span>
+                  <span className="ml-2 font-medium">{contractorStatus.ssnLast4}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Classification:</span>
+                  <span className="ml-2 font-medium capitalize">{contractorStatus.taxClassification?.replace("_", " ")}</span>
+                </div>
+                {contractorStatus.businessName && (
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Business:</span>
+                    <span className="ml-2 font-medium">{contractorStatus.businessName}</span>
+                  </div>
+                )}
+                {contractorStatus.taxAddress && (
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Address:</span>
+                    <span className="ml-2 font-medium">{contractorStatus.taxAddress}, {contractorStatus.taxCity}, {contractorStatus.taxState} {contractorStatus.taxZip}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                We need your tax information to issue 1099-NEC forms for earnings over $600/year. This is required by the IRS for all independent contractors.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Last 4 of SSN</Label>
+                  <Input
+                    value={ssnLast4}
+                    onChange={(e) => setSsnLast4(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    placeholder="1234"
+                    maxLength={4}
+                    data-testid="input-ssn-last4"
+                  />
+                </div>
+                <div>
+                  <Label>Tax Classification</Label>
+                  <Select value={taxClassification} onValueChange={setTaxClassification}>
+                    <SelectTrigger data-testid="select-tax-classification">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="individual">Individual</SelectItem>
+                      <SelectItem value="sole_proprietor">Sole Proprietor</SelectItem>
+                      <SelectItem value="llc">LLC</SelectItem>
+                      <SelectItem value="corporation">Corporation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {(taxClassification === "llc" || taxClassification === "corporation" || taxClassification === "sole_proprietor") && (
+                <div>
+                  <Label>Business Name</Label>
+                  <Input value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Business name" data-testid="input-business-name" />
+                </div>
+              )}
+              <div>
+                <Label>Tax Address</Label>
+                <Input value={taxAddress} onChange={(e) => setTaxAddress(e.target.value)} placeholder="Street address" data-testid="input-tax-address" />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>City</Label>
+                  <Input value={taxCity} onChange={(e) => setTaxCity(e.target.value)} placeholder="City" data-testid="input-tax-city" />
+                </div>
+                <div>
+                  <Label>State</Label>
+                  <Input value={taxState} onChange={(e) => setTaxState(e.target.value)} placeholder="IL" maxLength={2} data-testid="input-tax-state" />
+                </div>
+                <div>
+                  <Label>ZIP</Label>
+                  <Input value={taxZip} onChange={(e) => setTaxZip(e.target.value)} placeholder="60601" data-testid="input-tax-zip" />
+                </div>
+              </div>
+              <Button
+                className="w-full"
+                disabled={ssnLast4.length !== 4 || onboardMutation.isPending}
+                onClick={() => onboardMutation.mutate()}
+                data-testid="button-save-tax-info"
+              >
+                {onboardMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Save Tax Information
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function CertificationUploadsSection() {
+  const { toast } = useToast();
+  const [certName, setCertName] = useState("");
+  const [certIssuer, setCertIssuer] = useState("");
+  const [certExpiry, setCertExpiry] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const { data: contractorStatus, isLoading } = useQuery<any>({
+    queryKey: ["/api/it/tech/contractor-status"],
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: () => {
+      const formData = new FormData();
+      if (selectedFile) formData.append("document", selectedFile);
+      formData.append("certName", certName);
+      formData.append("certIssuer", certIssuer);
+      if (certExpiry) formData.append("certExpiry", certExpiry);
+      return fetch("/api/it/tech/certifications/upload", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      }).then(async r => { if (!r.ok) throw new Error((await r.json()).message); return r.json(); });
+    },
+    onSuccess: () => {
+      toast({ title: "Certification uploaded" });
+      setCertName("");
+      setCertIssuer("");
+      setCertExpiry("");
+      setSelectedFile(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tech/contractor-status"] });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (certId: string) => fetch(`/api/it/tech/certifications/${certId}`, {
+      method: "DELETE",
+      credentials: "include",
+    }).then(async r => { if (!r.ok) throw new Error((await r.json()).message); return r.json(); }),
+    onSuccess: () => {
+      toast({ title: "Certification removed" });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tech/contractor-status"] });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+
+  const docs = (contractorStatus?.certificationDocs as any[]) || [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <BadgeCheck className="h-5 w-5" /> Certification Documents
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Upload your certification documents (PDF or images) so companies can verify your qualifications. Verified certs appear with a checkmark.
+        </p>
+
+        {docs.length > 0 && (
+          <div className="space-y-2">
+            {docs.map((doc: any) => (
+              <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-2">
+                  {doc.verified ? (
+                    <BadgeCheck className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Clock className="h-4 w-4 text-yellow-500" />
+                  )}
+                  <div>
+                    <p className="font-medium text-sm">{doc.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {doc.issuer && `${doc.issuer} • `}
+                      {doc.expiry ? `Expires ${doc.expiry}` : "No expiry"}
+                      {doc.verified && " • Verified"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <a href={doc.filePath} target="_blank" rel="noopener noreferrer">
+                    <Button size="sm" variant="ghost"><Download className="h-3 w-3" /></Button>
+                  </a>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-red-500"
+                    onClick={() => deleteMutation.mutate(doc.id)}
+                    disabled={deleteMutation.isPending}
+                    data-testid={`button-delete-cert-${doc.id}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="border-t pt-4 space-y-3">
+          <h4 className="font-medium text-sm">Upload New Certification</h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Certification Name</Label>
+              <Input value={certName} onChange={(e) => setCertName(e.target.value)} placeholder="e.g., CompTIA A+" data-testid="input-cert-name" />
+            </div>
+            <div>
+              <Label>Issuing Organization</Label>
+              <Input value={certIssuer} onChange={(e) => setCertIssuer(e.target.value)} placeholder="e.g., CompTIA" data-testid="input-cert-issuer" />
+            </div>
+          </div>
+          <div>
+            <Label>Expiry Date (optional)</Label>
+            <Input type="date" value={certExpiry} onChange={(e) => setCertExpiry(e.target.value)} data-testid="input-cert-expiry" />
+          </div>
+          <div>
+            <Label>Document (PDF or Image)</Label>
+            <Input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              data-testid="input-cert-file"
+            />
+          </div>
+          <Button
+            className="w-full"
+            disabled={!certName.trim() || !selectedFile || uploadMutation.isPending}
+            onClick={() => uploadMutation.mutate()}
+            data-testid="button-upload-cert"
+          >
+            {uploadMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+            Upload Certification
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TaxFormsSection() {
+  const { toast } = useToast();
+
+  const { data: taxYears, isLoading } = useQuery<any>({
+    queryKey: ["/api/it/tech/tax-years"],
+  });
+
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+
+  const { data: taxData, isLoading: loadingTax } = useQuery<any>({
+    queryKey: ["/api/it/tech/1099", selectedYear],
+    enabled: !!selectedYear,
+  });
+
+  if (isLoading) return <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+
+  const years = taxYears?.years || [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Receipt className="h-5 w-5" /> Tax Forms (1099-NEC)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {years.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No completed jobs yet. Tax forms will appear here after you complete paid work.</p>
+        ) : (
+          <>
+            <div className="flex gap-2 flex-wrap">
+              {years.map((y: number) => (
+                <Button
+                  key={y}
+                  size="sm"
+                  variant={selectedYear === y ? "default" : "outline"}
+                  onClick={() => setSelectedYear(y)}
+                  data-testid={`button-tax-year-${y}`}
+                >
+                  {y}
+                </Button>
+              ))}
+            </div>
+
+            {selectedYear && (
+              <div>
+                {loadingTax ? (
+                  <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
+                ) : taxData ? (
+                  <div className="space-y-3" data-testid="text-1099-data">
+                    <div className={`p-3 rounded-lg ${taxData.requiresForm ? "bg-amber-50 dark:bg-amber-950 border-amber-200" : "bg-gray-50 dark:bg-gray-900"}`}>
+                      <p className="text-sm font-medium">
+                        {taxData.requiresForm ? "1099-NEC Required" : "1099-NEC Not Required (Under $600)"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">{taxData.message}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="p-3 border rounded-lg">
+                        <p className="text-muted-foreground text-xs">Box 1 - Nonemployee Compensation</p>
+                        <p className="text-xl font-bold text-emerald-600" data-testid="text-1099-amount">${taxData.box1_nonemployeeCompensation}</p>
+                      </div>
+                      <div className="p-3 border rounded-lg">
+                        <p className="text-muted-foreground text-xs">Total Jobs</p>
+                        <p className="text-xl font-bold">{taxData.totalJobs}</p>
+                      </div>
+                    </div>
+                    <div className="p-3 border rounded-lg text-sm">
+                      <p className="font-medium mb-1">Recipient</p>
+                      <p>{taxData.recipient.name}</p>
+                      <p>SSN: XXX-XX-{taxData.recipient.ssnLast4}</p>
+                      {taxData.recipient.address && <p>{taxData.recipient.address}, {taxData.recipient.city}, {taxData.recipient.state} {taxData.recipient.zip}</p>}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function PaymentHistorySection() {
   const { data: payHistory, isLoading } = useQuery<any>({
     queryKey: ["/api/it/tech/payment-history"],
@@ -917,11 +1373,12 @@ export default function ITTechDashboardPage() {
         </div>
 
         <Tabs defaultValue="available" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="available" data-testid="tab-available">Available ({availableTickets.length})</TabsTrigger>
             <TabsTrigger value="active" data-testid="tab-active">Active ({activeJobs.length})</TabsTrigger>
             <TabsTrigger value="completed" data-testid="tab-completed">Done ({completedJobs.length})</TabsTrigger>
             <TabsTrigger value="earnings" data-testid="tab-earnings">Earnings</TabsTrigger>
+            <TabsTrigger value="settings" data-testid="tab-settings">Settings</TabsTrigger>
           </TabsList>
 
           <TabsContent value="available" className="space-y-3">
@@ -1020,10 +1477,17 @@ export default function ITTechDashboardPage() {
                 </Card>
 
                 <PaymentHistorySection />
+
+                <TaxFormsSection />
               </>
             ) : (
               <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>
             )}
+          </TabsContent>
+
+          <TabsContent value="settings" className="space-y-4">
+            <ContractorOnboardingSection />
+            <CertificationUploadsSection />
           </TabsContent>
         </Tabs>
       </main>

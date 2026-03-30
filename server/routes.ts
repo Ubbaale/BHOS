@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -3785,6 +3785,7 @@ export async function registerRoutes(
 
   // Serve uploaded KYC files
   app.use("/uploads/kyc", express.static(path.join(process.cwd(), "uploads", "kyc")));
+  app.use("/uploads/it-certs", express.static(path.join(process.cwd(), "uploads", "it-certs")));
 
   app.get("/api/push/vapid-public-key", (_req, res) => {
     res.json({ publicKey: getVapidPublicKey() });
@@ -7271,6 +7272,9 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
           companyApproval: "disputed",
           companyApprovalNotes: reason,
           paymentStatus: "disputed",
+          disputeReason: reason,
+          disputedAt: new Date(),
+          mediationStatus: "none",
           updatedAt: new Date(),
         })
         .where(eq(itServiceTickets.id, req.params.id))
@@ -7287,6 +7291,518 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     } catch (error) {
       console.error("Dispute IT ticket error:", error);
       res.status(500).json({ message: "Failed to dispute" });
+    }
+  });
+
+  // ==========================================
+  // IT: Dispute Mediation (Admin)
+  // ==========================================
+  app.post("/api/it/tickets/:id/request-mediation", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.createdBy !== userId && ticket.assignedTo !== userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      if (ticket.companyApproval !== "disputed") {
+        return res.status(400).json({ message: "Ticket must be disputed to request mediation" });
+      }
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({ mediationStatus: "requested", updatedAt: new Date() })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Request mediation error:", error);
+      res.status(500).json({ message: "Failed to request mediation" });
+    }
+  });
+
+  app.post("/api/it/admin/tickets/:id/mediate", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+
+      const { resolution, notes, awardTo } = req.body;
+      if (!resolution || !["favor_company", "favor_tech", "split", "cancel"].includes(resolution)) {
+        return res.status(400).json({ message: "Invalid resolution. Must be favor_company, favor_tech, split, or cancel" });
+      }
+
+      let paymentStatus = "disputed";
+      let companyApproval = "disputed";
+      if (resolution === "favor_tech") {
+        paymentStatus = ticket.paymentTerms === "instant" ? "processing" : "scheduled";
+        companyApproval = "approved";
+      } else if (resolution === "favor_company") {
+        paymentStatus = "refunded";
+        companyApproval = "disputed";
+      } else if (resolution === "split") {
+        const totalPay = parseFloat(ticket.totalPay || "0");
+        const splitAmount = totalPay / 2;
+        const feePercent = ticket.platformFeePercent ? parseFloat(ticket.platformFeePercent) : 15;
+        const fee = Math.round(splitAmount * (feePercent / 100) * 100) / 100;
+        await db.update(itServiceTickets)
+          .set({
+            totalPay: String(splitAmount.toFixed(2)),
+            platformFee: String(fee.toFixed(2)),
+            techPayout: String((splitAmount - fee).toFixed(2)),
+          })
+          .where(eq(itServiceTickets.id, req.params.id));
+        paymentStatus = ticket.paymentTerms === "instant" ? "processing" : "scheduled";
+        companyApproval = "approved";
+      } else if (resolution === "cancel") {
+        paymentStatus = "refunded";
+        companyApproval = "disputed";
+      }
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          mediationStatus: "resolved",
+          mediationNotes: notes || "",
+          mediationResolution: resolution,
+          mediationResolvedAt: new Date(),
+          mediatorId: userId,
+          paymentStatus,
+          companyApproval,
+          updatedAt: new Date(),
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      if (ticket.assignedTo) {
+        notifyItCompanyOfTicketUpdate(
+          ticket.assignedTo, ticket.ticketNumber, ticket.title,
+          `Dispute resolved: ${resolution}. ${notes || ""}`, ""
+        ).catch(err => console.error("Failed to notify mediation:", err));
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Mediate dispute error:", error);
+      res.status(500).json({ message: "Failed to mediate dispute" });
+    }
+  });
+
+  // ==========================================
+  // IT Tech: Contractor Onboarding & 1099
+  // ==========================================
+  const IT_TECH_IC_AGREEMENT_VERSION = "1.0";
+  const IT_TECH_IC_AGREEMENT_TEXT = `INDEPENDENT CONTRACTOR AGREEMENT
+
+This Independent Contractor Agreement ("Agreement") is entered into between CareHub ("Company") and the undersigned independent contractor ("Contractor").
+
+1. INDEPENDENT CONTRACTOR RELATIONSHIP
+Contractor acknowledges that they are an independent contractor and not an employee of the Company. Nothing in this Agreement shall be construed to create an employer-employee, partnership, or joint venture relationship.
+
+2. SERVICES
+Contractor agrees to provide IT services and technical support through the CareHub IT Services platform. Contractor retains full discretion over when, where, and how to perform services, subject to client site requirements.
+
+3. WORK SCHEDULE
+Contractor has complete freedom to accept or decline service tickets and work for competing platforms simultaneously. Scheduled appointments must be honored once accepted.
+
+4. EQUIPMENT AND EXPENSES
+Contractor is responsible for providing and maintaining their own tools, equipment, transportation, and all other resources necessary to perform services. Company shall not reimburse Contractor for these expenses unless explicitly agreed upon in the service ticket.
+
+5. CERTIFICATIONS AND QUALIFICATIONS
+Contractor represents that all certifications, skills, and qualifications listed in their profile are current and valid. Misrepresentation of qualifications may result in immediate account deactivation and financial liability.
+
+6. COMPENSATION
+Contractor will be compensated per completed service ticket based on the rate agreed upon in each ticket. Platform fees are deducted before payout. Contractor is responsible for all taxes, including self-employment tax. Company will issue a 1099-NEC form for annual earnings exceeding $600.
+
+7. BACKGROUND CHECK AND COMPLIANCE
+Contractor consents to background checks and must maintain valid professional certifications. Failure to maintain compliance may result in immediate deactivation.
+
+8. CONFIDENTIALITY AND HIPAA
+Contractor agrees to keep confidential all client information, site details, patient data, and proprietary Company information encountered during the performance of services, in strict compliance with HIPAA and applicable privacy laws. Violation may result in legal action.
+
+9. LIABILITY AND INSURANCE
+Contractor is responsible for any damage caused to client property or systems during service delivery. Contractor is encouraged to maintain professional liability insurance.
+
+10. INDEMNIFICATION
+Contractor agrees to indemnify and hold harmless the Company from any claims, damages, or liabilities arising from Contractor's performance of services.
+
+11. TERMINATION
+Either party may terminate this Agreement at any time, with or without cause, by providing written notice. Company may immediately deactivate Contractor's account for safety violations, quality failures, or compliance issues.
+
+12. DISPUTE RESOLUTION
+Any disputes arising under this Agreement shall first be submitted to the platform's mediation process. If unresolved, disputes shall be resolved through binding arbitration in accordance with the rules of the American Arbitration Association.
+
+13. GOVERNING LAW
+This Agreement shall be governed by the laws of the state in which Contractor primarily operates.
+
+[NOTE: This is a template agreement. Consult with a licensed attorney before use in production.]`;
+
+  app.get("/api/it/tech/ic-agreement-text", requireAuth, (_req, res) => {
+    res.json({ version: IT_TECH_IC_AGREEMENT_VERSION, content: IT_TECH_IC_AGREEMENT_TEXT });
+  });
+
+  app.post("/api/it/tech/sign-ic-agreement", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const { fullLegalName } = req.body;
+
+      if (!fullLegalName || fullLegalName.trim().length < 2) {
+        return res.status(400).json({ message: "Full legal name is required for digital signature" });
+      }
+
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!techProfile) return res.status(404).json({ message: "IT tech profile not found" });
+
+      const crypto = await import("crypto");
+      const contentHash = crypto.createHash("sha256").update(IT_TECH_IC_AGREEMENT_TEXT).digest("hex");
+      const ipAddress = req.ip || req.socket.remoteAddress || "unknown";
+      const userAgent = req.headers["user-agent"] || "unknown";
+
+      await db.insert(legalAgreements).values({
+        userId,
+        agreementType: "it_tech_ic_agreement",
+        version: IT_TECH_IC_AGREEMENT_VERSION,
+        ipAddress,
+        userAgent,
+        content: IT_TECH_IC_AGREEMENT_TEXT,
+        signerName: fullLegalName.trim(),
+        contentHash,
+      });
+
+      await db.insert(itTechContractorAgreements).values({
+        techProfileId: techProfile.id,
+        agreementVersion: IT_TECH_IC_AGREEMENT_VERSION,
+        ipAddress,
+        userAgent,
+      });
+
+      await db.update(itTechProfiles)
+        .set({ icAgreementSignedAt: new Date() })
+        .where(eq(itTechProfiles.id, techProfile.id));
+
+      res.json({ message: "Independent Contractor Agreement signed successfully" });
+    } catch (error) {
+      console.error("Error signing IT tech IC agreement:", error);
+      res.status(500).json({ message: "Failed to sign agreement" });
+    }
+  });
+
+  app.post("/api/it/tech/contractor-onboarding", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const { ssnLast4, taxClassification, businessName, taxAddress, taxCity, taxState, taxZip } = req.body;
+
+      if (!ssnLast4 || ssnLast4.length !== 4 || !/^\d{4}$/.test(ssnLast4)) {
+        return res.status(400).json({ message: "Last 4 digits of SSN required (4 digits)" });
+      }
+
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!techProfile) return res.status(404).json({ message: "IT tech profile not found" });
+
+      const [updated] = await db.update(itTechProfiles)
+        .set({
+          ssnLast4,
+          taxClassification: taxClassification || "individual",
+          businessName: businessName || null,
+          taxAddress: taxAddress || null,
+          taxCity: taxCity || null,
+          taxState: taxState || null,
+          taxZip: taxZip || null,
+          w9ReceivedAt: new Date(),
+          isContractorOnboarded: true,
+        })
+        .where(eq(itTechProfiles.id, techProfile.id))
+        .returning();
+
+      res.json({ message: "Contractor onboarding complete", profile: updated });
+    } catch (error) {
+      console.error("Error IT tech contractor onboarding:", error);
+      res.status(500).json({ message: "Failed to complete contractor onboarding" });
+    }
+  });
+
+  app.get("/api/it/tech/tax-years", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!techProfile) return res.status(404).json({ message: "IT tech profile not found" });
+
+      const completedTickets = await db.select().from(itServiceTickets)
+        .where(and(eq(itServiceTickets.assignedTo, userId), eq(itServiceTickets.status, "completed")));
+
+      const yearsSet = new Set<number>();
+      completedTickets.forEach(t => {
+        if (t.checkOutTime) {
+          yearsSet.add(new Date(t.checkOutTime).getFullYear());
+        } else if (t.updatedAt) {
+          yearsSet.add(new Date(t.updatedAt).getFullYear());
+        }
+      });
+
+      const years = Array.from(yearsSet).sort((a, b) => b - a);
+      res.json({ years });
+    } catch (error) {
+      console.error("Error getting IT tech tax years:", error);
+      res.status(500).json({ message: "Failed to get tax years" });
+    }
+  });
+
+  app.get("/api/it/tech/1099/:year", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const taxYear = parseInt(req.params.year);
+
+      if (isNaN(taxYear) || taxYear < 2020 || taxYear > new Date().getFullYear()) {
+        return res.status(400).json({ message: "Invalid tax year" });
+      }
+
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!techProfile) return res.status(404).json({ message: "IT tech profile not found" });
+
+      if (!techProfile.isContractorOnboarded || !techProfile.ssnLast4) {
+        return res.status(400).json({ message: "Must complete contractor onboarding first" });
+      }
+
+      const completedTickets = await db.select().from(itServiceTickets)
+        .where(and(eq(itServiceTickets.assignedTo, userId), eq(itServiceTickets.status, "completed")));
+
+      const yearTickets = completedTickets.filter(t => {
+        const dt = t.checkOutTime ? new Date(t.checkOutTime) : (t.updatedAt ? new Date(t.updatedAt) : null);
+        return dt && dt.getFullYear() === taxYear;
+      });
+
+      const totalEarnings = yearTickets.reduce((sum, t) => sum + parseFloat(t.techPayout || "0"), 0);
+      const totalJobs = yearTickets.length;
+      const requiresForm = totalEarnings >= 600;
+
+      let [earningsRecord] = await db.select().from(itTechAnnualEarnings)
+        .where(and(eq(itTechAnnualEarnings.techProfileId, techProfile.id), eq(itTechAnnualEarnings.taxYear, taxYear)));
+
+      if (!earningsRecord) {
+        [earningsRecord] = await db.insert(itTechAnnualEarnings).values({
+          techProfileId: techProfile.id,
+          taxYear,
+          totalGrossEarnings: String(totalEarnings.toFixed(2)),
+          totalJobs,
+          form1099Generated: true,
+          form1099GeneratedAt: new Date(),
+          form1099DownloadCount: 1,
+        }).returning();
+      } else {
+        await db.update(itTechAnnualEarnings)
+          .set({
+            totalGrossEarnings: String(totalEarnings.toFixed(2)),
+            totalJobs,
+            form1099Generated: true,
+            form1099GeneratedAt: new Date(),
+            form1099DownloadCount: (earningsRecord.form1099DownloadCount || 0) + 1,
+            lastCalculatedAt: new Date(),
+          })
+          .where(eq(itTechAnnualEarnings.id, earningsRecord.id));
+      }
+
+      res.json({
+        taxYear,
+        requiresForm,
+        payer: {
+          name: "Care hub app LLC",
+          address: "123 Healthcare Way",
+          city: "Phoenix",
+          state: "AZ",
+          zip: "85001",
+          ein: "XX-XXXXXXX"
+        },
+        recipient: {
+          name: techProfile.businessName || techProfile.fullName,
+          ssnLast4: techProfile.ssnLast4,
+          address: techProfile.taxAddress || "",
+          city: techProfile.taxCity || "",
+          state: techProfile.taxState || "",
+          zip: techProfile.taxZip || ""
+        },
+        box1_nonemployeeCompensation: totalEarnings.toFixed(2),
+        totalJobs,
+        grossEarnings: totalEarnings.toFixed(2),
+        message: requiresForm
+          ? "This is your 1099-NEC data for tax filing purposes."
+          : "Your earnings were below $600. A 1099-NEC is not required, but you must still report this income."
+      });
+    } catch (error) {
+      console.error("Error generating IT tech 1099:", error);
+      res.status(500).json({ message: "Failed to generate 1099" });
+    }
+  });
+
+  // ==========================================
+  // IT Tech: Certification Document Uploads
+  // ==========================================
+  const certUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => {
+        const uploadDir = path.join(process.cwd(), "uploads", "it-certs");
+        fs.mkdirSync(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+      },
+      filename: (_req, file, cb) => {
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        const ext = path.extname(file.originalname);
+        cb(null, `cert-${uniqueSuffix}${ext}`);
+      },
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error("Only PDF and image files are allowed"));
+      }
+    },
+  });
+
+  app.post("/api/it/tech/certifications/upload", requireAuth, certUpload.single("document"), async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const file = req.file;
+      const { certName, certIssuer, certExpiry } = req.body;
+
+      if (!file) return res.status(400).json({ message: "No file uploaded" });
+      if (!certName) return res.status(400).json({ message: "Certification name is required" });
+
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!techProfile) return res.status(404).json({ message: "IT tech profile not found" });
+
+      const filePath = `/uploads/it-certs/${file.filename}`;
+      const existingDocs = (techProfile.certificationDocs as any[]) || [];
+      const newDoc = {
+        id: crypto.randomUUID(),
+        name: certName,
+        issuer: certIssuer || "",
+        expiry: certExpiry || null,
+        filePath,
+        fileName: file.originalname,
+        uploadedAt: new Date().toISOString(),
+        verified: false,
+      };
+
+      const [updated] = await db.update(itTechProfiles)
+        .set({ certificationDocs: [...existingDocs, newDoc] })
+        .where(eq(itTechProfiles.id, techProfile.id))
+        .returning();
+
+      res.json({ message: "Certification uploaded", doc: newDoc, profile: updated });
+    } catch (error) {
+      console.error("Error uploading certification:", error);
+      res.status(500).json({ message: "Failed to upload certification" });
+    }
+  });
+
+  app.delete("/api/it/tech/certifications/:certId", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!techProfile) return res.status(404).json({ message: "IT tech profile not found" });
+
+      const existingDocs = (techProfile.certificationDocs as any[]) || [];
+      const filtered = existingDocs.filter((d: any) => d.id !== req.params.certId);
+
+      if (filtered.length === existingDocs.length) {
+        return res.status(404).json({ message: "Certification not found" });
+      }
+
+      const [updated] = await db.update(itTechProfiles)
+        .set({ certificationDocs: filtered })
+        .where(eq(itTechProfiles.id, techProfile.id))
+        .returning();
+
+      res.json({ message: "Certification removed", profile: updated });
+    } catch (error) {
+      console.error("Error removing certification:", error);
+      res.status(500).json({ message: "Failed to remove certification" });
+    }
+  });
+
+  app.get("/api/it/tech/:id/certifications", requireAuth, async (req, res) => {
+    try {
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.id, req.params.id));
+      if (!techProfile) return res.status(404).json({ message: "Tech profile not found" });
+
+      const docs = ((techProfile.certificationDocs as any[]) || []).map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        issuer: d.issuer,
+        expiry: d.expiry,
+        verified: d.verified,
+        verifiedAt: d.verifiedAt,
+        filePath: d.filePath,
+        uploadedAt: d.uploadedAt,
+      }));
+
+      res.json({
+        certifications: techProfile.certifications || [],
+        certificationDocs: docs,
+        fullName: techProfile.fullName,
+      });
+    } catch (error) {
+      console.error("Error getting tech certifications:", error);
+      res.status(500).json({ message: "Failed to get certifications" });
+    }
+  });
+
+  app.post("/api/it/admin/certifications/:certId/verify", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+
+      const { techProfileId } = req.body;
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.id, techProfileId));
+      if (!techProfile) return res.status(404).json({ message: "Tech profile not found" });
+
+      const docs = (techProfile.certificationDocs as any[]) || [];
+      const updatedDocs = docs.map((d: any) => {
+        if (d.id === req.params.certId) {
+          return { ...d, verified: true, verifiedAt: new Date().toISOString(), verifiedBy: userId };
+        }
+        return d;
+      });
+
+      const [updated] = await db.update(itTechProfiles)
+        .set({ certificationDocs: updatedDocs })
+        .where(eq(itTechProfiles.id, techProfileId))
+        .returning();
+
+      res.json({ message: "Certification verified", profile: updated });
+    } catch (error) {
+      console.error("Error verifying certification:", error);
+      res.status(500).json({ message: "Failed to verify certification" });
+    }
+  });
+
+  app.get("/api/it/tech/contractor-status", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!techProfile) return res.status(404).json({ message: "IT tech profile not found" });
+
+      res.json({
+        isContractorOnboarded: techProfile.isContractorOnboarded || false,
+        icAgreementSignedAt: techProfile.icAgreementSignedAt,
+        ssnLast4: techProfile.ssnLast4 ? `****${techProfile.ssnLast4}` : null,
+        taxClassification: techProfile.taxClassification,
+        businessName: techProfile.businessName,
+        taxAddress: techProfile.taxAddress,
+        taxCity: techProfile.taxCity,
+        taxState: techProfile.taxState,
+        taxZip: techProfile.taxZip,
+        w9ReceivedAt: techProfile.w9ReceivedAt,
+        certificationDocs: techProfile.certificationDocs,
+      });
+    } catch (error) {
+      console.error("Error getting contractor status:", error);
+      res.status(500).json({ message: "Failed to get contractor status" });
     }
   });
 

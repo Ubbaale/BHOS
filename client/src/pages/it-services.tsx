@@ -70,6 +70,8 @@ import {
   FolderOpen,
   CheckCircle,
   Car,
+  BadgeCheck,
+  Download,
 } from "lucide-react";
 import type { ItServiceTicket, ItTicketNote } from "@shared/schema";
 
@@ -582,6 +584,58 @@ const etaColors: Record<string, string> = {
   on_site: "bg-green-100 text-green-700",
 };
 
+function TechCertificationsViewer({ ticketAssignedTo }: { ticketAssignedTo: string }) {
+  const { data: techProfiles } = useQuery<any[]>({
+    queryKey: ["/api/it/admin/techs"],
+  });
+
+  const techProfile = techProfiles?.find((t: any) => t.userId === ticketAssignedTo);
+  if (!techProfile) return null;
+
+  const certDocs = (techProfile.certificationDocs as any[]) || [];
+  const certTags = techProfile.certifications || [];
+
+  if (certDocs.length === 0 && certTags.length === 0) return null;
+
+  return (
+    <Card className="bg-muted/50">
+      <CardContent className="p-4">
+        <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+          <BadgeCheck className="h-4 w-4" /> Tech Certifications
+        </h4>
+        {certTags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {certTags.map((cert: string) => (
+              <Badge key={cert} variant="secondary" className="text-xs">{cert}</Badge>
+            ))}
+          </div>
+        )}
+        {certDocs.length > 0 && (
+          <div className="space-y-1">
+            {certDocs.map((doc: any) => (
+              <div key={doc.id} className="flex items-center justify-between text-xs p-2 border rounded">
+                <div className="flex items-center gap-1">
+                  {doc.verified ? (
+                    <BadgeCheck className="h-3 w-3 text-green-600 shrink-0" />
+                  ) : (
+                    <Clock className="h-3 w-3 text-yellow-500 shrink-0" />
+                  )}
+                  <span className="font-medium">{doc.name}</span>
+                  {doc.issuer && <span className="text-muted-foreground">({doc.issuer})</span>}
+                  {doc.verified && <span className="text-green-600">Verified</span>}
+                </div>
+                <a href={doc.filePath} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" variant="ghost" className="h-6 px-1"><Download className="h-3 w-3" /></Button>
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => void }) {
   const { toast } = useToast();
   const [noteContent, setNoteContent] = useState("");
@@ -627,6 +681,15 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
       queryClient.invalidateQueries({ queryKey: ["/api/it/tickets", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["/api/it/tickets"] });
       toast({ title: "Work disputed", description: "The tech has been notified." });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const requestMediation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/it/tickets/${ticketId}/request-mediation`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets", ticketId] });
+      toast({ title: "Mediation requested", description: "A platform admin will review this dispute." });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -857,6 +920,10 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
             </Card>
           )}
 
+          {ticket.assignedTo && (
+            <TechCertificationsViewer ticketAssignedTo={ticket.assignedTo} />
+          )}
+
           {(ticket.payRate || ticket.totalPay) && (
             <Card className="bg-muted/50">
               <CardContent className="p-4">
@@ -1013,8 +1080,33 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
                   </div>
                 )}
                 {(ticket as any).companyApproval === "disputed" && (
-                  <div className="border-t mt-3 pt-2">
+                  <div className="border-t mt-3 pt-2 space-y-2">
                     <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Disputed: {(ticket as any).companyApprovalNotes}</p>
+                    {(ticket as any).mediationStatus === "none" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => requestMediation.mutate()}
+                        disabled={requestMediation.isPending}
+                        data-testid="button-request-mediation"
+                      >
+                        {requestMediation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                        Request Admin Mediation
+                      </Button>
+                    )}
+                    {(ticket as any).mediationStatus === "requested" && (
+                      <p className="text-xs text-yellow-600 flex items-center gap-1">
+                        <Clock className="h-3 w-3" /> Mediation requested - waiting for admin review
+                      </p>
+                    )}
+                    {(ticket as any).mediationStatus === "resolved" && (
+                      <div className="bg-blue-50 dark:bg-blue-950 rounded-lg p-2 text-xs">
+                        <p className="font-medium text-blue-700 dark:text-blue-300">
+                          Mediation resolved: {(ticket as any).mediationResolution?.replace("_", " ")}
+                        </p>
+                        {(ticket as any).mediationNotes && <p className="text-muted-foreground mt-1">{(ticket as any).mediationNotes}</p>}
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>

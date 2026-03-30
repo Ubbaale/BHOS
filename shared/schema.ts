@@ -811,6 +811,13 @@ export const itServiceTickets = pgTable("it_service_tickets", {
   companyApproval: text("company_approval").default("none"),
   companyApprovalAt: timestamp("company_approval_at"),
   companyApprovalNotes: text("company_approval_notes"),
+  disputeReason: text("dispute_reason"),
+  disputedAt: timestamp("disputed_at"),
+  mediationStatus: text("mediation_status").default("none"),
+  mediationNotes: text("mediation_notes"),
+  mediationResolvedAt: timestamp("mediation_resolved_at"),
+  mediatorId: varchar("mediator_id"),
+  mediationResolution: text("mediation_resolution"),
   cancellationReason: text("cancellation_reason"),
   cancelledBy: varchar("cancelled_by"),
   cancelledAt: timestamp("cancelled_at"),
@@ -910,6 +917,17 @@ export const itTechProfiles = pgTable("it_tech_profiles", {
   lateCheckIns: integer("late_check_ins").default(0),
   onTimeCheckIns: integer("on_time_check_ins").default(0),
   isActive: boolean("is_active").default(true),
+  isContractorOnboarded: boolean("is_contractor_onboarded").default(false),
+  icAgreementSignedAt: timestamp("ic_agreement_signed_at"),
+  ssnLast4: text("ssn_last_4"),
+  taxClassification: text("tax_classification").default("individual"),
+  businessName: text("business_name"),
+  taxAddress: text("tax_address"),
+  taxCity: text("tax_city"),
+  taxState: text("tax_state"),
+  taxZip: text("tax_zip"),
+  w9ReceivedAt: timestamp("w9_received_at"),
+  certificationDocs: jsonb("certification_docs").default([]),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -989,3 +1007,29 @@ export const insertItWorkOrderTemplateSchema = z.object({
 });
 export type InsertItWorkOrderTemplate = z.infer<typeof insertItWorkOrderTemplateSchema>;
 export type ItWorkOrderTemplate = typeof itWorkOrderTemplates.$inferSelect;
+
+export const itTechAnnualEarnings = pgTable("it_tech_annual_earnings", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  techProfileId: varchar("tech_profile_id").references(() => itTechProfiles.id).notNull(),
+  taxYear: integer("tax_year").notNull(),
+  totalGrossEarnings: numeric("total_gross_earnings").default("0"),
+  totalJobs: integer("total_jobs").default(0),
+  form1099Generated: boolean("form_1099_generated").default(false),
+  form1099GeneratedAt: timestamp("form_1099_generated_at"),
+  form1099DownloadCount: integer("form_1099_download_count").default(0),
+  lastCalculatedAt: timestamp("last_calculated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ItTechAnnualEarnings = typeof itTechAnnualEarnings.$inferSelect;
+
+export const itTechContractorAgreements = pgTable("it_tech_contractor_agreements", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  techProfileId: varchar("tech_profile_id").references(() => itTechProfiles.id).notNull(),
+  agreementVersion: text("agreement_version").notNull().default("1.0"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  signedAt: timestamp("signed_at").defaultNow(),
+});
+
+export type ItTechContractorAgreement = typeof itTechContractorAgreements.$inferSelect;
