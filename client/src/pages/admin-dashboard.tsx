@@ -134,6 +134,33 @@ export default function AdminDashboard() {
     },
   });
 
+  const approveDriverMutation = useMutation({
+    mutationFn: async ({ driverId }: { driverId: number }) => {
+      const response = await apiRequest("POST", `/api/drivers/${driverId}/approve`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drivers/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setActionDialogOpen(false);
+      toast({ title: "Driver approved successfully" });
+    },
+  });
+
+  const rejectDriverMutation = useMutation({
+    mutationFn: async ({ driverId, reason }: { driverId: number; reason?: string }) => {
+      const response = await apiRequest("POST", `/api/drivers/${driverId}/reject`, { reason });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drivers/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setActionDialogOpen(false);
+      setActionReason("");
+      toast({ title: "Driver rejected" });
+    },
+  });
+
   const updatePatientStatusMutation = useMutation({
     mutationFn: async ({ phone, status, reason }: { phone: string; status: string; reason?: string }) => {
       const response = await apiRequest("PATCH", `/api/admin/patients/${encodeURIComponent(phone)}/status`, { status, reason });
@@ -205,7 +232,11 @@ export default function AdminDashboard() {
   });
 
   const handleAction = () => {
-    if (actionType === "suspend_driver" && selectedDriver) {
+    if (actionType === "approve_driver" && selectedDriver) {
+      approveDriverMutation.mutate({ driverId: selectedDriver.id });
+    } else if (actionType === "reject_driver" && selectedDriver) {
+      rejectDriverMutation.mutate({ driverId: selectedDriver.id, reason: actionReason });
+    } else if (actionType === "suspend_driver" && selectedDriver) {
       updateDriverStatusMutation.mutate({ driverId: selectedDriver.id, status: "suspended", reason: actionReason });
     } else if (actionType === "unsuspend_driver" && selectedDriver) {
       updateDriverStatusMutation.mutate({ driverId: selectedDriver.id, status: "active" });
@@ -492,6 +523,37 @@ export default function AdminDashboard() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          {driver.applicationStatus === "pending" && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="bg-green-600 hover:bg-green-700"
+                                onClick={() => {
+                                  setSelectedDriver(driver);
+                                  setActionType("approve_driver");
+                                  setActionDialogOpen(true);
+                                }}
+                                data-testid={`button-approve-driver-${driver.id}`}
+                              >
+                                <CheckCircle className="w-4 h-4 mr-1" />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  setSelectedDriver(driver);
+                                  setActionType("reject_driver");
+                                  setActionDialogOpen(true);
+                                }}
+                                data-testid={`button-reject-driver-${driver.id}`}
+                              >
+                                <XCircle className="w-4 h-4 mr-1" />
+                                Reject
+                              </Button>
+                            </>
+                          )}
                           {driver.accountStatus !== "suspended" ? (
                             <Button
                               size="sm"
@@ -931,6 +993,8 @@ export default function AdminDashboard() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
+              {actionType === "approve_driver" && "Approve Driver"}
+              {actionType === "reject_driver" && "Reject Driver"}
               {actionType === "suspend_driver" && "Suspend Driver"}
               {actionType === "unsuspend_driver" && "Unsuspend Driver"}
               {actionType === "block_patient" && "Block Patient"}
@@ -939,6 +1003,8 @@ export default function AdminDashboard() {
               {actionType === "refund_ride" && "Refund Customer"}
             </DialogTitle>
             <DialogDescription>
+              {actionType === "approve_driver" && `Approve ${selectedDriver?.fullName} as a driver? They will be able to accept rides.`}
+              {actionType === "reject_driver" && `Reject ${selectedDriver?.fullName}'s driver application?`}
               {actionType.includes("suspend") && `Are you sure you want to ${actionType.replace("_", " ")} ${selectedDriver?.fullName}?`}
               {actionType.includes("patient") && `Are you sure you want to ${actionType.replace("_", " ")} ${selectedPatient?.patientPhone}?`}
               {actionType === "cancel_ride" && `Are you sure you want to cancel ride #${selectedRide?.id}?`}
@@ -979,7 +1045,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
-          {(actionType === "suspend_driver" || actionType === "block_patient" || actionType === "cancel_ride" || actionType === "refund_ride") && (
+          {(actionType === "reject_driver" || actionType === "suspend_driver" || actionType === "block_patient" || actionType === "cancel_ride" || actionType === "refund_ride") && (
             <div className="py-4 space-y-4">
               <div>
                 <Label htmlFor="reason">Reason {actionType === "refund_ride" && "(required)"}</Label>
@@ -1018,9 +1084,11 @@ export default function AdminDashboard() {
               Cancel
             </Button>
             <Button
-              variant={actionType.includes("unsuspend") || actionType.includes("unblock") || actionType === "refund_ride" ? "default" : "destructive"}
+              variant={actionType === "approve_driver" || actionType.includes("unsuspend") || actionType.includes("unblock") || actionType === "refund_ride" ? "default" : "destructive"}
               onClick={handleAction}
               disabled={
+                approveDriverMutation.isPending ||
+                rejectDriverMutation.isPending ||
                 updateDriverStatusMutation.isPending || 
                 updatePatientStatusMutation.isPending || 
                 cancelRideMutation.isPending || 
