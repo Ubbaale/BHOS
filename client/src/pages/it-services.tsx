@@ -91,6 +91,9 @@ const ticketSchema = z.object({
   equipmentNeeded: z.string().optional(),
   payType: z.enum(["hourly", "fixed"]).optional(),
   payRate: z.string().optional(),
+  paymentTerms: z.enum(["instant", "net7", "net14", "net30"]).optional(),
+  budgetCap: z.string().optional(),
+  overtimeRate: z.string().optional(),
 });
 
 const categoryIcons: Record<string, typeof Monitor> = {
@@ -162,6 +165,9 @@ function CreateTicketDialog({ onCreated }: { onCreated: () => void }) {
       equipmentNeeded: "",
       payType: "hourly",
       payRate: "",
+      paymentTerms: "instant",
+      budgetCap: "",
+      overtimeRate: "",
     },
   });
 
@@ -434,6 +440,69 @@ function CreateTicketDialog({ onCreated }: { onCreated: () => void }) {
                   </FormItem>
                 )} />
               </div>
+
+              <FormField control={form.control} name="paymentTerms" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Payment Terms</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || "instant"}>
+                    <FormControl><SelectTrigger data-testid="select-payment-terms"><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="instant">Instant — 15% platform fee</SelectItem>
+                      <SelectItem value="net7">Net 7 days — 12% platform fee</SelectItem>
+                      <SelectItem value="net14">Net 14 days — 10% platform fee</SelectItem>
+                      <SelectItem value="net30">Net 30 days — 8% platform fee</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {field.value === "instant" && "Tech gets paid immediately after you approve the work. 15% fee."}
+                    {field.value === "net7" && "Payment releases 7 days after approval. Lower 12% fee."}
+                    {field.value === "net14" && "Payment releases 14 days after approval. 10% fee."}
+                    {field.value === "net30" && "Payment releases 30 days after approval. Lowest 8% fee."}
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              {form.watch("payType") === "hourly" && (
+                <FormField control={form.control} name="budgetCap" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Budget Cap ($) <span className="text-muted-foreground font-normal">— optional</span></FormLabel>
+                    <FormControl><Input {...field} type="number" step="0.01" placeholder="e.g. 300.00 max budget" data-testid="input-budget-cap" /></FormControl>
+                    <p className="text-xs text-muted-foreground">Maximum total you'll pay for labor. If tech exceeds this, overage requires your approval.</p>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
+
+              {form.watch("payType") === "fixed" && (
+                <FormField control={form.control} name="overtimeRate" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Overtime Rate ($/hr) <span className="text-muted-foreground font-normal">— optional</span></FormLabel>
+                    <FormControl><Input {...field} type="number" step="0.01" placeholder="e.g. 50.00/hr for extra time" data-testid="input-overtime-rate" /></FormControl>
+                    <p className="text-xs text-muted-foreground">If the tech works beyond the estimated duration, this hourly rate applies to extra time (requires your approval).</p>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
+
+              {form.watch("payRate") && parseFloat(form.watch("payRate") || "0") > 0 && (
+                <div className="bg-muted/50 rounded-lg p-3 border">
+                  <p className="text-sm font-medium mb-1">Estimated Escrow Amount</p>
+                  <p className="text-lg font-bold text-green-600" data-testid="text-escrow-estimate">
+                    ${(() => {
+                      const rate = parseFloat(form.watch("payRate") || "0");
+                      const payType = form.watch("payType") || "hourly";
+                      if (payType === "fixed") return rate.toFixed(2);
+                      const cap = form.watch("budgetCap");
+                      if (cap && parseFloat(cap) > 0) return parseFloat(cap).toFixed(2);
+                      const dur = form.watch("estimatedDuration");
+                      const hrs: Record<string, number> = { "30min": 0.5, "1hr": 1, "2hr": 2, "4hr": 4, "full_day": 8 };
+                      return (rate * (hrs[dur || ""] || 2)).toFixed(2);
+                    })()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">This amount will be held in escrow until you approve the completed work.</p>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2">
@@ -569,6 +638,42 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
       queryClient.invalidateQueries({ queryKey: ["/api/it/tickets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/it/tickets/stats/summary"] });
       toast({ title: "Ticket cancelled" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const approveOverage = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/it/tickets/${ticketId}/approve-overage`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets"] });
+      toast({ title: "Overage approved", description: "The extra time has been added to the total." });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const rejectOverage = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/it/tickets/${ticketId}/reject-overage`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets"] });
+      toast({ title: "Overage rejected", description: "Only the original amount will be paid." });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const fundEscrow = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/it/tickets/${ticketId}/fund-escrow`),
+    onSuccess: async (resp) => {
+      const data = await resp.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets"] });
+      if (data.clientSecret) {
+        toast({ title: "Escrow initiated", description: `$${data.escrowAmount.toFixed(2)} payment created. Confirming escrow...` });
+        await apiRequest("POST", `/api/it/tickets/${ticketId}/confirm-escrow`);
+        queryClient.invalidateQueries({ queryKey: ["/api/it/tickets", ticketId] });
+        toast({ title: "Escrow funded!", description: "Funds are held securely until you approve the work." });
+      }
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -797,14 +902,93 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Payment status</span>
                       <Badge variant="outline" className={
-                        ticket.paymentStatus === "paid" || ticket.paymentStatus === "approved" ? "text-green-600" :
-                        ticket.paymentStatus === "disputed" ? "text-red-600" : "text-yellow-600"
+                        ticket.paymentStatus === "completed" || ticket.paymentStatus === "processing" ? "text-green-600" :
+                        ticket.paymentStatus === "disputed" ? "text-red-600" :
+                        ticket.paymentStatus === "scheduled" ? "text-blue-600" : "text-yellow-600"
                       }>
                         {ticket.paymentStatus}
                       </Badge>
                     </div>
                   )}
+                  {(ticket as any).paymentTerms && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Payment terms</span>
+                      <span className="font-medium text-sm">
+                        {(ticket as any).paymentTerms === "instant" ? "Instant" :
+                         (ticket as any).paymentTerms === "net7" ? "Net 7 days" :
+                         (ticket as any).paymentTerms === "net14" ? "Net 14 days" : "Net 30 days"}
+                        <span className="text-muted-foreground ml-1">({(ticket as any).platformFeePercent || 15}% fee)</span>
+                      </span>
+                    </div>
+                  )}
+                  {(ticket as any).escrowAmount && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Escrow</span>
+                      <span className="font-medium">
+                        ${Number((ticket as any).escrowAmount).toFixed(2)}
+                        <Badge variant="outline" className={`ml-2 ${
+                          (ticket as any).escrowStatus === "funded" ? "text-green-600" :
+                          (ticket as any).escrowStatus === "releasing" ? "text-blue-600" :
+                          (ticket as any).escrowStatus === "released" ? "text-green-600" : "text-yellow-600"
+                        }`}>
+                          {(ticket as any).escrowStatus || "not funded"}
+                        </Badge>
+                      </span>
+                    </div>
+                  )}
+                  {(ticket as any).payoutDate && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Payout date</span>
+                      <span className="font-medium text-sm">{new Date((ticket as any).payoutDate).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                  {(ticket as any).budgetCap && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Budget cap</span>
+                      <span className="font-medium">${Number((ticket as any).budgetCap).toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
+
+                {(ticket as any).overageAmount && parseFloat((ticket as any).overageAmount) > 0 && (
+                  <div className="border-t mt-3 pt-3 space-y-2">
+                    <div className="bg-orange-50 dark:bg-orange-950 rounded-lg p-3">
+                      <p className="text-sm font-medium flex items-center gap-2 text-orange-700 dark:text-orange-300">
+                        <AlertCircle className="h-4 w-4" /> Overage Detected
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Tech worked {Number((ticket as any).overageHours).toFixed(1)} extra hours beyond the estimate.
+                      </p>
+                      <p className="text-sm font-bold mt-1">Overage amount: ${Number((ticket as any).overageAmount).toFixed(2)}</p>
+                      {!(ticket as any).overageApproved && (
+                        <div className="flex gap-2 mt-2">
+                          <Button size="sm" variant="default" onClick={() => approveOverage.mutate()} disabled={approveOverage.isPending} data-testid="button-approve-overage">
+                            {approveOverage.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle className="h-3 w-3 mr-1" />}
+                            Approve Overage (+${Number((ticket as any).overageAmount).toFixed(2)})
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => rejectOverage.mutate()} disabled={rejectOverage.isPending} data-testid="button-reject-overage">
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+                      {(ticket as any).overageApproved && (
+                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Overage approved</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {(ticket as any).escrowStatus === "none" && (ticket as any).escrowAmount && parseFloat((ticket as any).escrowAmount) > 0 && ticket.status === "open" && (
+                  <div className="border-t mt-3 pt-3 space-y-2">
+                    <p className="text-sm font-medium">Fund Escrow</p>
+                    <p className="text-xs text-muted-foreground">Fund ${Number((ticket as any).escrowAmount).toFixed(2)} to hold in escrow. This ensures the tech gets paid when you approve their work.</p>
+                    <Button size="sm" onClick={() => fundEscrow.mutate()} disabled={fundEscrow.isPending} data-testid="button-fund-escrow">
+                      {fundEscrow.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <DollarSign className="h-3 w-3 mr-1" />}
+                      Fund Escrow (${Number((ticket as any).escrowAmount).toFixed(2)})
+                    </Button>
+                  </div>
+                )}
+
                 {(ticket as any).companyApproval === "pending" && (
                   <div className="border-t mt-3 pt-3 space-y-2">
                     <p className="text-sm font-medium">Approve this work?</p>
@@ -1140,6 +1324,17 @@ export default function ITServicesPage() {
                                 <DollarSign className="h-3 w-3" />
                                 ${ticket.payRate}/{ticket.payType === "fixed" ? "flat" : "hr"}
                               </span>
+                            )}
+                            {(ticket as any).paymentTerms && (ticket as any).paymentTerms !== "instant" && (
+                              <Badge variant="outline" className="text-xs">
+                                {(ticket as any).paymentTerms === "net7" ? "Net 7" : (ticket as any).paymentTerms === "net14" ? "Net 14" : "Net 30"}
+                              </Badge>
+                            )}
+                            {(ticket as any).escrowStatus === "funded" && (
+                              <Badge variant="outline" className="text-xs text-green-600">Escrow Funded</Badge>
+                            )}
+                            {(ticket as any).overageAmount && parseFloat((ticket as any).overageAmount) > 0 && !(ticket as any).overageApproved && (
+                              <Badge variant="outline" className="text-xs text-orange-600">Overage Pending</Badge>
                             )}
                             {ticket.etaStatus && ticket.status === "in_progress" && (
                               <Badge className={etaColors[ticket.etaStatus || "none"]} variant="secondary">

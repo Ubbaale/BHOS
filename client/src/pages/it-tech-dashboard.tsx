@@ -508,6 +508,23 @@ function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
             {ticket.techPayout && (
               <div className="border-t pt-1 mt-1">
                 <p className="flex items-center gap-2 font-medium"><DollarSign className="h-4 w-4 text-green-600" /> Your payout: ${Number(ticket.techPayout).toFixed(2)}</p>
+                {(ticket as any).paymentTerms && (ticket as any).paymentTerms !== "instant" && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                    Payment terms: {(ticket as any).paymentTerms === "net7" ? "Net 7" : (ticket as any).paymentTerms === "net14" ? "Net 14" : "Net 30"} days
+                    {(ticket as any).platformFeePercent && ` (${(ticket as any).platformFeePercent}% fee)`}
+                  </p>
+                )}
+                {(ticket as any).payoutDate && (
+                  <p className="text-xs text-blue-600 flex items-center gap-1 mt-0.5">
+                    <Clock className="h-3 w-3" /> Payout: {new Date((ticket as any).payoutDate).toLocaleDateString()}
+                  </p>
+                )}
+                {(ticket as any).overageAmount && parseFloat((ticket as any).overageAmount) > 0 && (
+                  <p className="text-xs text-orange-500 flex items-center gap-1 mt-0.5">
+                    <AlertCircle className="h-3 w-3" /> Overage: ${Number((ticket as any).overageAmount).toFixed(2)}
+                    ({(ticket as any).overageApproved ? "approved" : "pending approval"})
+                  </p>
+                )}
                 {(ticket as any).companyApproval === "pending" && (
                   <p className="text-xs text-orange-500 flex items-center gap-1 mt-1"><Clock className="h-3 w-3" /> Awaiting company approval</p>
                 )}
@@ -643,6 +660,71 @@ function CompletedTicketCard({ ticket }: { ticket: ItServiceTicket }) {
               <RatingDialog ticketId={ticket.id} type="tech" onRated={() => queryClient.invalidateQueries({ queryKey: ["/api/it/tech/my-jobs"] })} />
             )}
           </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PaymentHistorySection() {
+  const { data: payHistory, isLoading } = useQuery<any>({
+    queryKey: ["/api/it/tech/payment-history"],
+  });
+
+  if (isLoading) return <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!payHistory || !payHistory.payments?.length) return null;
+
+  const termLabels: Record<string, string> = { instant: "Instant", net7: "Net 7", net14: "Net 14", net30: "Net 30" };
+  const statusColors: Record<string, string> = {
+    pending: "text-yellow-600",
+    scheduled: "text-blue-600",
+    processing: "text-green-600",
+    completed: "text-green-600",
+    disputed: "text-red-600",
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <DollarSign className="h-5 w-5" /> Payment History
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="text-center p-2 bg-emerald-50 dark:bg-emerald-950 rounded-lg">
+            <p className="text-lg font-bold text-emerald-600">${payHistory.totalEarned}</p>
+            <p className="text-xs text-muted-foreground">Total Earned</p>
+          </div>
+          <div className="text-center p-2 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
+            <p className="text-lg font-bold text-yellow-600">${payHistory.pendingPayout}</p>
+            <p className="text-xs text-muted-foreground">Pending</p>
+          </div>
+          <div className="text-center p-2 bg-green-50 dark:bg-green-950 rounded-lg">
+            <p className="text-lg font-bold text-green-600">${payHistory.completedPayout}</p>
+            <p className="text-xs text-muted-foreground">Paid Out</p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {payHistory.payments.map((p: any) => (
+            <div key={p.id} className="flex items-center justify-between p-2 border rounded-lg text-sm">
+              <div>
+                <p className="font-medium">{p.ticketNumber}: {p.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  {p.hoursWorked && `${Number(p.hoursWorked).toFixed(1)}h`}
+                  {p.paymentTerms && ` • ${termLabels[p.paymentTerms] || p.paymentTerms}`}
+                  {p.payoutDate && ` • Due ${new Date(p.payoutDate).toLocaleDateString()}`}
+                </p>
+                {p.overageAmount && parseFloat(p.overageAmount) > 0 && (
+                  <p className="text-xs text-orange-500">+${Number(p.overageAmount).toFixed(2)} overage ({p.overageApproved ? "approved" : "pending"})</p>
+                )}
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-green-600">${Number(p.techPayout).toFixed(2)}</p>
+                <p className={`text-xs ${statusColors[p.paymentStatus] || "text-gray-500"}`}>{p.paymentStatus}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>
@@ -936,6 +1018,8 @@ export default function ITTechDashboardPage() {
                     </div>
                   </CardContent>
                 </Card>
+
+                <PaymentHistorySection />
               </>
             ) : (
               <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>

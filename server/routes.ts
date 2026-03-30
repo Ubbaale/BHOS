@@ -6226,6 +6226,39 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
+  const PAYMENT_TERM_FEES: Record<string, number> = {
+    instant: 15,
+    net7: 12,
+    net14: 10,
+    net30: 8,
+  };
+
+  const DURATION_HOURS: Record<string, number> = {
+    "30min": 0.5,
+    "1hr": 1,
+    "2hr": 2,
+    "4hr": 4,
+    "full_day": 8,
+  };
+
+  function calculateEscrowAmount(payType: string, payRate: number, estimatedDuration?: string, budgetCap?: number): number {
+    if (payType === "fixed") return payRate;
+    if (budgetCap && budgetCap > 0) return budgetCap;
+    const hours = estimatedDuration ? (DURATION_HOURS[estimatedDuration] || 2) : 2;
+    return payRate * hours;
+  }
+
+  function calculatePayoutDate(approvalDate: Date, paymentTerms: string): Date {
+    const d = new Date(approvalDate);
+    switch (paymentTerms) {
+      case "net7": d.setDate(d.getDate() + 7); break;
+      case "net14": d.setDate(d.getDate() + 14); break;
+      case "net30": d.setDate(d.getDate() + 30); break;
+      default: break;
+    }
+    return d;
+  }
+
   app.post("/api/it/tickets", requireAuth, async (req, res) => {
     try {
       const parsed = insertItServiceTicketSchema.safeParse(req.body);
@@ -6238,10 +6271,27 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       const userTickets = await db.select().from(itServiceTickets).where(eq(itServiceTickets.createdBy, userId));
       const ticketNumber = `IT-${String(userTickets.length + 1).padStart(5, '0')}`;
 
+      const paymentTerms = parsed.data.paymentTerms || "instant";
+      const feePercent = PAYMENT_TERM_FEES[paymentTerms] || 15;
+
+      const payRate = parsed.data.payRate ? parseFloat(parsed.data.payRate) : 0;
+      const budgetCapVal = parsed.data.budgetCap ? parseFloat(parsed.data.budgetCap) : undefined;
+      const escrowAmt = payRate > 0 ? calculateEscrowAmount(
+        parsed.data.payType || "hourly",
+        payRate,
+        parsed.data.estimatedDuration,
+        budgetCapVal
+      ) : 0;
+
       const [ticket] = await db.insert(itServiceTickets).values({
         ...parsed.data,
         createdBy: userId,
         ticketNumber,
+        paymentTerms,
+        platformFeePercent: String(feePercent),
+        escrowAmount: escrowAmt > 0 ? String(escrowAmt.toFixed(2)) : undefined,
+        budgetCap: budgetCapVal ? String(budgetCapVal.toFixed(2)) : undefined,
+        overtimeRate: parsed.data.overtimeRate || undefined,
         scheduledDate: parsed.data.scheduledDate ? new Date(parsed.data.scheduledDate) : undefined,
       }).returning();
 
@@ -6705,32 +6755,61 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
 
       const now = new Date();
       const hoursWorked = ((now.getTime() - new Date(ticket.checkInTime).getTime()) / 3600000).toFixed(2);
+      const hoursNum = parseFloat(hoursWorked);
 
       const payRate = ticket.payRate ? parseFloat(ticket.payRate) : 0;
+      const feePercent = ticket.platformFeePercent ? parseFloat(ticket.platformFeePercent) : 15;
       let laborPay = 0;
+      let overageAmt = 0;
+      let overageHrs = 0;
+      let hasOverage = false;
+
       if (ticket.payType === "fixed") {
         laborPay = payRate;
+        const estHours = ticket.estimatedDuration ? (DURATION_HOURS[ticket.estimatedDuration] || 2) : 0;
+        if (estHours > 0 && hoursNum > estHours) {
+          overageHrs = hoursNum - estHours;
+          const otRate = ticket.overtimeRate ? parseFloat(ticket.overtimeRate) : payRate / (estHours || 1);
+          overageAmt = Math.round(otRate * overageHrs * 100) / 100;
+          hasOverage = true;
+        }
       } else {
-        laborPay = payRate * parseFloat(hoursWorked);
+        laborPay = payRate * hoursNum;
+        const budgetCap = ticket.budgetCap ? parseFloat(ticket.budgetCap) : 0;
+        if (budgetCap > 0 && laborPay > budgetCap) {
+          overageAmt = Math.round((laborPay - budgetCap) * 100) / 100;
+          overageHrs = overageAmt / payRate;
+          laborPay = budgetCap;
+          hasOverage = true;
+        }
       }
 
       const mileagePay = ticket.mileagePay ? parseFloat(ticket.mileagePay) : 0;
       const delayCmp = ticket.delayCompensation ? parseFloat(ticket.delayCompensation) : 0;
-      const totalPay = Math.round((laborPay + mileagePay + delayCmp) * 100) / 100;
-      const platformFee = Math.round(totalPay * 0.10 * 100) / 100;
+      const basePay = Math.round((laborPay + mileagePay + delayCmp) * 100) / 100;
+      const totalPay = basePay;
+      const platformFee = Math.round(totalPay * (feePercent / 100) * 100) / 100;
       const techPayout = Math.round((totalPay - platformFee) * 100) / 100;
 
+      const setData: Record<string, any> = {
+        checkOutTime: now,
+        hoursWorked: hoursWorked,
+        totalPay: String(totalPay.toFixed(2)),
+        platformFee: String(platformFee.toFixed(2)),
+        techPayout: String(techPayout.toFixed(2)),
+        paymentStatus: totalPay > 0 ? "pending" : "unpaid",
+        companyApproval: "pending",
+        updatedAt: now,
+      };
+
+      if (hasOverage) {
+        setData.overageAmount = String(overageAmt.toFixed(2));
+        setData.overageHours = String(overageHrs.toFixed(2));
+        setData.overageApproved = false;
+      }
+
       const [updated] = await db.update(itServiceTickets)
-        .set({
-          checkOutTime: now,
-          hoursWorked: hoursWorked,
-          totalPay: String(totalPay.toFixed(2)),
-          platformFee: String(platformFee.toFixed(2)),
-          techPayout: String(techPayout.toFixed(2)),
-          paymentStatus: totalPay > 0 ? "pending" : "unpaid",
-          companyApproval: "pending",
-          updatedAt: now,
-        })
+        .set(setData)
         .where(eq(itServiceTickets.id, req.params.id))
         .returning();
 
@@ -6741,12 +6820,13 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
           .where(eq(itTechProfiles.userId, userId));
       }
 
+      const overageNote = hasOverage ? ` (overage: $${overageAmt.toFixed(2)} pending approval)` : "";
       notifyItCompanyOfTicketUpdate(
         ticket.createdBy, ticket.ticketNumber, ticket.title,
-        "tech checked out - awaiting your approval", ""
+        `tech checked out - awaiting your approval${overageNote}`, ""
       ).catch(err => console.error("Failed to notify checkout:", err));
 
-      res.json(updated);
+      res.json({ ...updated, hasOverage, overageAmount: overageAmt, overageHours: overageHrs });
     } catch (error) {
       console.error("Check-out error:", error);
       res.status(500).json({ message: "Failed to check out" });
@@ -6902,14 +6982,145 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       }
 
       const { notes } = req.body || {};
+      const now = new Date();
+      const payTerms = ticket.paymentTerms || "instant";
+      const payoutDt = calculatePayoutDate(now, payTerms);
+
+      const newPayStatus = payTerms === "instant" ? "processing" : "scheduled";
+
       const [updated] = await db.update(itServiceTickets)
         .set({
           companyApproval: "approved",
-          companyApprovalAt: new Date(),
+          companyApprovalAt: now,
           companyApprovalNotes: notes || null,
-          paymentStatus: "approved",
+          paymentStatus: newPayStatus,
+          payoutDate: payoutDt,
+          escrowStatus: ticket.escrowStatus === "funded" ? "releasing" : ticket.escrowStatus,
           status: ticket.status === "resolved" ? "closed" : ticket.status,
-          closedAt: ticket.status === "resolved" ? new Date() : ticket.closedAt,
+          closedAt: ticket.status === "resolved" ? now : ticket.closedAt,
+          updatedAt: now,
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      const payMsg = payTerms === "instant"
+        ? "payment processing now"
+        : `payment scheduled for ${payoutDt.toLocaleDateString()}`;
+
+      if (ticket.assignedTo) {
+        notifyItCompanyOfTicketUpdate(
+          ticket.assignedTo, ticket.ticketNumber, ticket.title,
+          `work approved by company - ${payMsg}`, ""
+        ).catch(err => console.error("Failed to notify approval:", err));
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Approve IT ticket error:", error);
+      res.status(500).json({ message: "Failed to approve" });
+    }
+  });
+
+  app.post("/api/it/tickets/:id/fund-escrow", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.createdBy !== userId) return res.status(403).json({ message: "Not authorized" });
+      if (ticket.escrowStatus === "funded") return res.status(400).json({ message: "Escrow already funded" });
+
+      const escrowAmt = ticket.escrowAmount ? parseFloat(ticket.escrowAmount) : 0;
+      if (escrowAmt <= 0) return res.status(400).json({ message: "No escrow amount set" });
+
+      const stripeClient = getUncachableStripeClient();
+
+      const paymentIntent = await stripeClient.paymentIntents.create({
+        amount: Math.round(escrowAmt * 100),
+        currency: "usd",
+        metadata: {
+          type: "it_escrow",
+          ticketId: ticket.id,
+          ticketNumber: ticket.ticketNumber,
+          userId,
+        },
+        capture_method: "manual",
+        description: `IT Service Escrow - ${ticket.ticketNumber}: ${ticket.title}`,
+      });
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          stripePaymentIntentId: paymentIntent.id,
+          escrowStatus: "pending",
+          updatedAt: new Date(),
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      res.json({
+        ticket: updated,
+        clientSecret: paymentIntent.client_secret,
+        escrowAmount: escrowAmt,
+      });
+    } catch (error) {
+      console.error("Fund escrow error:", error);
+      res.status(500).json({ message: "Failed to create escrow payment" });
+    }
+  });
+
+  app.post("/api/it/tickets/:id/confirm-escrow", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.createdBy !== userId) return res.status(403).json({ message: "Not authorized" });
+
+      if (ticket.stripePaymentIntentId) {
+        const stripeClient = getUncachableStripeClient();
+        const pi = await stripeClient.paymentIntents.retrieve(ticket.stripePaymentIntentId);
+        if (pi.status !== "requires_capture" && pi.status !== "succeeded") {
+          return res.status(400).json({ message: `Payment not confirmed. Status: ${pi.status}` });
+        }
+      }
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          escrowStatus: "funded",
+          updatedAt: new Date(),
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Confirm escrow error:", error);
+      res.status(500).json({ message: "Failed to confirm escrow" });
+    }
+  });
+
+  app.post("/api/it/tickets/:id/approve-overage", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.createdBy !== userId) return res.status(403).json({ message: "Not authorized" });
+
+      if (!ticket.overageAmount || parseFloat(ticket.overageAmount) <= 0) {
+        return res.status(400).json({ message: "No overage to approve" });
+      }
+
+      const overageAmt = parseFloat(ticket.overageAmount);
+      const currentTotal = parseFloat(ticket.totalPay || "0");
+      const feePercent = ticket.platformFeePercent ? parseFloat(ticket.platformFeePercent) : 15;
+      const newTotal = Math.round((currentTotal + overageAmt) * 100) / 100;
+      const newFee = Math.round(newTotal * (feePercent / 100) * 100) / 100;
+      const newPayout = Math.round((newTotal - newFee) * 100) / 100;
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          overageApproved: true,
+          totalPay: String(newTotal.toFixed(2)),
+          platformFee: String(newFee.toFixed(2)),
+          techPayout: String(newPayout.toFixed(2)),
           updatedAt: new Date(),
         })
         .where(eq(itServiceTickets.id, req.params.id))
@@ -6918,14 +7129,130 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       if (ticket.assignedTo) {
         notifyItCompanyOfTicketUpdate(
           ticket.assignedTo, ticket.ticketNumber, ticket.title,
-          "work approved by company - payment authorized", ""
-        ).catch(err => console.error("Failed to notify approval:", err));
+          `overage of $${overageAmt.toFixed(2)} approved - total updated to $${newTotal.toFixed(2)}`, ""
+        ).catch(err => console.error("Failed to notify overage approval:", err));
       }
 
       res.json(updated);
     } catch (error) {
-      console.error("Approve IT ticket error:", error);
-      res.status(500).json({ message: "Failed to approve" });
+      console.error("Approve overage error:", error);
+      res.status(500).json({ message: "Failed to approve overage" });
+    }
+  });
+
+  app.post("/api/it/tickets/:id/reject-overage", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.createdBy !== userId) return res.status(403).json({ message: "Not authorized" });
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          overageApproved: false,
+          overageAmount: "0",
+          overageHours: "0",
+          updatedAt: new Date(),
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Reject overage error:", error);
+      res.status(500).json({ message: "Failed to reject overage" });
+    }
+  });
+
+  app.get("/api/it/payment-terms", (_req, res) => {
+    res.json({
+      terms: [
+        { value: "instant", label: "Instant (upon approval)", feePercent: 15, description: "Tech gets paid immediately after you approve" },
+        { value: "net7", label: "Net 7 days", feePercent: 12, description: "Payment released 7 days after approval" },
+        { value: "net14", label: "Net 14 days", feePercent: 10, description: "Payment released 14 days after approval" },
+        { value: "net30", label: "Net 30 days", feePercent: 8, description: "Payment released 30 days after approval" },
+      ],
+    });
+  });
+
+  app.get("/api/it/company/payment-history", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const tickets = await db.select().from(itServiceTickets)
+        .where(eq(itServiceTickets.createdBy, userId))
+        .orderBy(desc(itServiceTickets.updatedAt));
+
+      const paid = tickets.filter(t => ["processing", "completed", "scheduled", "approved"].includes(t.paymentStatus || ""));
+      const totalSpent = paid.reduce((s, t) => s + parseFloat(t.totalPay || "0"), 0);
+      const totalFees = paid.reduce((s, t) => s + parseFloat(t.platformFee || "0"), 0);
+      const pendingEscrow = tickets.filter(t => t.escrowStatus === "funded" && t.paymentStatus === "pending")
+        .reduce((s, t) => s + parseFloat(t.escrowAmount || "0"), 0);
+
+      res.json({
+        totalSpent: totalSpent.toFixed(2),
+        totalFees: totalFees.toFixed(2),
+        pendingEscrow: pendingEscrow.toFixed(2),
+        tickets: paid.map(t => ({
+          id: t.id,
+          ticketNumber: t.ticketNumber,
+          title: t.title,
+          totalPay: t.totalPay,
+          platformFee: t.platformFee,
+          techPayout: t.techPayout,
+          paymentTerms: t.paymentTerms,
+          paymentStatus: t.paymentStatus,
+          payoutDate: t.payoutDate,
+          escrowStatus: t.escrowStatus,
+          companyApproval: t.companyApproval,
+          approvedAt: t.companyApprovalAt,
+          overageAmount: t.overageAmount,
+          overageApproved: t.overageApproved,
+        })),
+      });
+    } catch (error) {
+      console.error("Get company payment history error:", error);
+      res.status(500).json({ message: "Failed to get payment history" });
+    }
+  });
+
+  app.get("/api/it/tech/payment-history", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const tickets = await db.select().from(itServiceTickets)
+        .where(eq(itServiceTickets.assignedTo, userId))
+        .orderBy(desc(itServiceTickets.updatedAt));
+
+      const paid = tickets.filter(t => t.techPayout && parseFloat(t.techPayout) > 0);
+      const totalEarned = paid.reduce((s, t) => s + parseFloat(t.techPayout || "0"), 0);
+      const pendingPayout = paid.filter(t => ["pending", "scheduled", "processing"].includes(t.paymentStatus || ""))
+        .reduce((s, t) => s + parseFloat(t.techPayout || "0"), 0);
+      const completedPayout = paid.filter(t => t.paymentStatus === "completed")
+        .reduce((s, t) => s + parseFloat(t.techPayout || "0"), 0);
+
+      res.json({
+        totalEarned: totalEarned.toFixed(2),
+        pendingPayout: pendingPayout.toFixed(2),
+        completedPayout: completedPayout.toFixed(2),
+        payments: paid.map(t => ({
+          id: t.id,
+          ticketNumber: t.ticketNumber,
+          title: t.title,
+          hoursWorked: t.hoursWorked,
+          totalPay: t.totalPay,
+          platformFee: t.platformFee,
+          techPayout: t.techPayout,
+          paymentTerms: t.paymentTerms,
+          paymentStatus: t.paymentStatus,
+          payoutDate: t.payoutDate,
+          companyApproval: t.companyApproval,
+          overageAmount: t.overageAmount,
+          overageApproved: t.overageApproved,
+          checkOutTime: t.checkOutTime,
+        })),
+      });
+    } catch (error) {
+      console.error("Get tech payment history error:", error);
+      res.status(500).json({ message: "Failed to get payment history" });
     }
   });
 
