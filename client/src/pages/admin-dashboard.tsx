@@ -79,10 +79,6 @@ export default function AdminDashboard() {
     queryKey: ["/api/it/admin/techs"],
   });
 
-  const { data: disputedTickets = [], isLoading: disputesLoading } = useQuery<any[]>({
-    queryKey: ["/api/it/admin/disputed-tickets"],
-  });
-
   const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
   const [complaintReviewStatus, setComplaintReviewStatus] = useState("");
   const [complaintAdminNotes, setComplaintAdminNotes] = useState("");
@@ -91,26 +87,6 @@ export default function AdminDashboard() {
   const [enforcementAction, setEnforcementAction] = useState("");
   const [enforcementReason, setEnforcementReason] = useState("");
   const [suspendDays, setSuspendDays] = useState("");
-  const [selectedDispute, setSelectedDispute] = useState<any>(null);
-  const [mediationResolution, setMediationResolution] = useState("");
-  const [mediationNotes, setMediationNotes] = useState("");
-
-  const mediateMutation = useMutation({
-    mutationFn: async ({ ticketId, resolution, notes }: { ticketId: string; resolution: string; notes: string }) => {
-      const response = await apiRequest("POST", `/api/it/admin/tickets/${ticketId}/mediate`, { resolution, notes });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/it/admin/disputed-tickets"] });
-      toast({ title: "Dispute resolved" });
-      setSelectedDispute(null);
-      setMediationResolution("");
-      setMediationNotes("");
-    },
-    onError: (error: any) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
 
   const reviewComplaintMutation = useMutation({
     mutationFn: async ({ id, status, adminNotes }: { id: string; status: string; adminNotes: string }) => {
@@ -393,9 +369,6 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="it-complaints" data-testid="tab-it-complaints">
             IT Complaints ({allComplaints.length})
-          </TabsTrigger>
-          <TabsTrigger value="it-disputes" data-testid="tab-it-disputes">
-            Disputes {disputedTickets.filter((t: any) => t.mediationStatus === "requested").length > 0 ? `(${disputedTickets.filter((t: any) => t.mediationStatus === "requested").length})` : ""}
           </TabsTrigger>
         </TabsList>
 
@@ -877,197 +850,7 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="it-disputes">
-          <Card>
-            <CardHeader>
-              <CardTitle>IT Ticket Disputes & Mediation</CardTitle>
-              <CardDescription>Review and resolve disputes between companies and technicians</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ticket</TableHead>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Tech</TableHead>
-                    <TableHead>Dispute Reason</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Mediation</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {disputesLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                        Loading disputes...
-                      </TableCell>
-                    </TableRow>
-                  ) : disputedTickets.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                        No disputed tickets
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    disputedTickets.map((ticket: any) => (
-                      <TableRow key={ticket.id} data-testid={`row-dispute-${ticket.id}`}>
-                        <TableCell>
-                          <div className="font-medium text-sm">{ticket.ticketNumber}</div>
-                          <div className="text-xs text-muted-foreground truncate max-w-[150px]">{ticket.title}</div>
-                        </TableCell>
-                        <TableCell className="text-sm">{ticket.companyName || "N/A"}</TableCell>
-                        <TableCell className="text-sm">{ticket.techName || "N/A"}</TableCell>
-                        <TableCell className="max-w-[200px] truncate text-sm">
-                          {ticket.disputeReason || "No reason given"}
-                        </TableCell>
-                        <TableCell className="text-sm font-medium">
-                          ${Number(ticket.totalPay || 0).toFixed(2)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={
-                            ticket.mediationStatus === "requested" ? "default" :
-                            ticket.mediationStatus === "resolved" ? "secondary" : "outline"
-                          } className="text-xs">
-                            {ticket.mediationStatus === "requested" ? "Pending" :
-                             ticket.mediationStatus === "resolved" ? "Resolved" : "Not Requested"}
-                          </Badge>
-                          {ticket.mediationResolution && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {ticket.mediationResolution.replace("_", " ")}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {ticket.mediationStatus !== "resolved" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedDispute(ticket);
-                                setMediationResolution("");
-                                setMediationNotes("");
-                              }}
-                              data-testid={`button-mediate-${ticket.id}`}
-                            >
-                              <Shield className="h-3 w-3 mr-1" /> Mediate
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setSelectedDispute(ticket)}
-                              data-testid={`button-view-dispute-${ticket.id}`}
-                            >
-                              <Eye className="h-3 w-3 mr-1" /> View
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
-
-      {/* Dispute Mediation Dialog */}
-      <Dialog open={!!selectedDispute} onOpenChange={(open) => !open && setSelectedDispute(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" /> Dispute Mediation
-            </DialogTitle>
-            <DialogDescription>
-              Ticket: {selectedDispute?.ticketNumber} — {selectedDispute?.title}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedDispute && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Company</Label>
-                  <p className="font-medium">{selectedDispute.companyName}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Tech</Label>
-                  <p className="font-medium">{selectedDispute.techName}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Total Pay</Label>
-                  <p className="font-medium">${Number(selectedDispute.totalPay || 0).toFixed(2)}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Hours Worked</Label>
-                  <p className="font-medium">{selectedDispute.hoursWorked ? `${Number(selectedDispute.hoursWorked).toFixed(1)}h` : "N/A"}</p>
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Dispute Reason</Label>
-                <p className="text-sm p-2 bg-red-50 dark:bg-red-950 rounded border">{selectedDispute.disputeReason || "No reason provided"}</p>
-              </div>
-              {selectedDispute.companyApprovalNotes && (
-                <div>
-                  <Label className="text-xs text-muted-foreground">Company Notes</Label>
-                  <p className="text-sm">{selectedDispute.companyApprovalNotes}</p>
-                </div>
-              )}
-
-              {selectedDispute.mediationStatus === "resolved" ? (
-                <div className="space-y-2">
-                  <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg border">
-                    <p className="text-sm font-medium">Resolution: {selectedDispute.mediationResolution?.replace("_", " ")}</p>
-                    {selectedDispute.mediationNotes && <p className="text-sm text-muted-foreground mt-1">{selectedDispute.mediationNotes}</p>}
-                    {selectedDispute.mediationResolvedAt && <p className="text-xs text-muted-foreground mt-1">Resolved: {format(new Date(selectedDispute.mediationResolvedAt), "MMM d, yyyy h:mm a")}</p>}
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <Label>Resolution</Label>
-                    <Select value={mediationResolution} onValueChange={setMediationResolution}>
-                      <SelectTrigger data-testid="select-mediation-resolution">
-                        <SelectValue placeholder="Select resolution" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="favor_tech">Favor Tech — Full payment to tech</SelectItem>
-                        <SelectItem value="favor_company">Favor Company — Full refund</SelectItem>
-                        <SelectItem value="split">Split — 50/50 payout</SelectItem>
-                        <SelectItem value="cancel">Cancel — Void the ticket</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Admin Notes</Label>
-                    <Textarea
-                      value={mediationNotes}
-                      onChange={(e) => setMediationNotes(e.target.value)}
-                      placeholder="Explain the reasoning for this resolution..."
-                      data-testid="input-mediation-notes"
-                    />
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      onClick={() => mediateMutation.mutate({
-                        ticketId: selectedDispute.id,
-                        resolution: mediationResolution,
-                        notes: mediationNotes,
-                      })}
-                      disabled={!mediationResolution || mediateMutation.isPending}
-                      data-testid="button-submit-mediation"
-                    >
-                      {mediateMutation.isPending ? "Resolving..." : "Resolve Dispute"}
-                    </Button>
-                  </DialogFooter>
-                </>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* Complaint Review Dialog */}
       <Dialog open={!!selectedComplaint} onOpenChange={(open) => !open && setSelectedComplaint(null)}>
