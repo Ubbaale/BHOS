@@ -6016,6 +6016,156 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
   // IT SERVICES - TICKETING & DISPATCH SYSTEM
   // ==========================================
 
+  const US_CITY_COORDS: Record<string, { lat: string; lng: string }> = {
+    "new york,ny": { lat: "40.7128", lng: "-74.0060" },
+    "los angeles,ca": { lat: "34.0522", lng: "-118.2437" },
+    "chicago,il": { lat: "41.8781", lng: "-87.6298" },
+    "houston,tx": { lat: "29.7604", lng: "-95.3698" },
+    "phoenix,az": { lat: "33.4484", lng: "-112.0740" },
+    "philadelphia,pa": { lat: "39.9526", lng: "-75.1652" },
+    "san antonio,tx": { lat: "29.4241", lng: "-98.4936" },
+    "san diego,ca": { lat: "32.7157", lng: "-117.1611" },
+    "dallas,tx": { lat: "32.7767", lng: "-96.7970" },
+    "san jose,ca": { lat: "37.3382", lng: "-121.8863" },
+    "austin,tx": { lat: "30.2672", lng: "-97.7431" },
+    "jacksonville,fl": { lat: "30.3322", lng: "-81.6557" },
+    "san francisco,ca": { lat: "37.7749", lng: "-122.4194" },
+    "columbus,oh": { lat: "39.9612", lng: "-82.9988" },
+    "indianapolis,in": { lat: "39.7684", lng: "-86.1581" },
+    "charlotte,nc": { lat: "35.2271", lng: "-80.8431" },
+    "seattle,wa": { lat: "47.6062", lng: "-122.3321" },
+    "denver,co": { lat: "39.7392", lng: "-104.9903" },
+    "washington,dc": { lat: "38.9072", lng: "-77.0369" },
+    "nashville,tn": { lat: "36.1627", lng: "-86.7816" },
+    "boston,ma": { lat: "42.3601", lng: "-71.0589" },
+    "atlanta,ga": { lat: "33.7490", lng: "-84.3880" },
+    "miami,fl": { lat: "25.7617", lng: "-80.1918" },
+    "tampa,fl": { lat: "27.9506", lng: "-82.4572" },
+    "orlando,fl": { lat: "28.5383", lng: "-81.3792" },
+    "detroit,mi": { lat: "42.3314", lng: "-83.0458" },
+    "minneapolis,mn": { lat: "44.9778", lng: "-93.2650" },
+    "cleveland,oh": { lat: "41.4993", lng: "-81.6944" },
+    "portland,or": { lat: "45.5152", lng: "-122.6784" },
+    "las vegas,nv": { lat: "36.1699", lng: "-115.1398" },
+    "memphis,tn": { lat: "35.1495", lng: "-90.0490" },
+    "louisville,ky": { lat: "38.2527", lng: "-85.7585" },
+    "baltimore,md": { lat: "39.2904", lng: "-76.6122" },
+    "milwaukee,wi": { lat: "43.0389", lng: "-87.9065" },
+    "albuquerque,nm": { lat: "35.0844", lng: "-106.6504" },
+    "tucson,az": { lat: "32.2226", lng: "-110.9747" },
+    "fresno,ca": { lat: "36.7378", lng: "-119.7871" },
+    "sacramento,ca": { lat: "38.5816", lng: "-121.4944" },
+    "kansas city,mo": { lat: "39.0997", lng: "-94.5786" },
+    "raleigh,nc": { lat: "35.7796", lng: "-78.6382" },
+    "omaha,ne": { lat: "41.2565", lng: "-95.9345" },
+    "pittsburgh,pa": { lat: "40.4406", lng: "-79.9959" },
+    "cincinnati,oh": { lat: "39.1031", lng: "-84.5120" },
+    "st. louis,mo": { lat: "38.6270", lng: "-90.1994" },
+    "buffalo,ny": { lat: "42.8864", lng: "-78.8784" },
+  };
+
+  const US_STATE_COORDS: Record<string, { lat: string; lng: string }> = {
+    "al": { lat: "32.3182", lng: "-86.9023" }, "ak": { lat: "64.2008", lng: "-152.4937" },
+    "az": { lat: "34.0489", lng: "-111.0937" }, "ar": { lat: "35.2010", lng: "-91.8318" },
+    "ca": { lat: "36.7783", lng: "-119.4179" }, "co": { lat: "39.5501", lng: "-105.7821" },
+    "ct": { lat: "41.6032", lng: "-73.0877" }, "de": { lat: "38.9108", lng: "-75.5277" },
+    "fl": { lat: "27.6648", lng: "-81.5158" }, "ga": { lat: "32.1656", lng: "-82.9001" },
+    "hi": { lat: "19.8968", lng: "-155.5828" }, "id": { lat: "44.0682", lng: "-114.7420" },
+    "il": { lat: "40.6331", lng: "-89.3985" }, "in": { lat: "40.2672", lng: "-86.1349" },
+    "ia": { lat: "41.8780", lng: "-93.0977" }, "ks": { lat: "39.0119", lng: "-98.4842" },
+    "ky": { lat: "37.8393", lng: "-84.2700" }, "la": { lat: "30.9843", lng: "-91.9623" },
+    "me": { lat: "45.2538", lng: "-69.4455" }, "md": { lat: "39.0458", lng: "-76.6413" },
+    "ma": { lat: "42.4072", lng: "-71.3824" }, "mi": { lat: "44.3148", lng: "-85.6024" },
+    "mn": { lat: "46.7296", lng: "-94.6859" }, "ms": { lat: "32.3547", lng: "-89.3985" },
+    "mo": { lat: "37.9643", lng: "-91.8318" }, "mt": { lat: "46.8797", lng: "-110.3626" },
+    "ne": { lat: "41.4925", lng: "-99.9018" }, "nv": { lat: "38.8026", lng: "-116.4194" },
+    "nh": { lat: "43.1939", lng: "-71.5724" }, "nj": { lat: "40.0583", lng: "-74.4057" },
+    "nm": { lat: "34.5199", lng: "-105.8701" }, "ny": { lat: "40.7128", lng: "-74.0060" },
+    "nc": { lat: "35.7596", lng: "-79.0193" }, "nd": { lat: "47.5515", lng: "-101.0020" },
+    "oh": { lat: "40.4173", lng: "-82.9071" }, "ok": { lat: "35.0078", lng: "-97.0929" },
+    "or": { lat: "43.8041", lng: "-120.5542" }, "pa": { lat: "41.2033", lng: "-77.1945" },
+    "ri": { lat: "41.5801", lng: "-71.4774" }, "sc": { lat: "33.8361", lng: "-81.1637" },
+    "sd": { lat: "43.9695", lng: "-99.9018" }, "tn": { lat: "35.5175", lng: "-86.5804" },
+    "tx": { lat: "31.9686", lng: "-99.9018" }, "ut": { lat: "39.3210", lng: "-111.0937" },
+    "vt": { lat: "44.5588", lng: "-72.5778" }, "va": { lat: "37.4316", lng: "-78.6569" },
+    "wa": { lat: "47.7511", lng: "-120.7401" }, "wv": { lat: "38.5976", lng: "-80.4549" },
+    "wi": { lat: "43.7844", lng: "-88.7879" }, "wy": { lat: "43.0760", lng: "-107.2903" },
+    "dc": { lat: "38.9072", lng: "-77.0369" },
+  };
+
+  function geocodeCityState(city?: string | null, state?: string | null): { lat: string; lng: string } | null {
+    if (city && state) {
+      const key = `${city.toLowerCase().trim()},${state.toLowerCase().trim()}`;
+      if (US_CITY_COORDS[key]) return US_CITY_COORDS[key];
+    }
+    if (state) {
+      const stateKey = state.toLowerCase().trim();
+      if (US_STATE_COORDS[stateKey]) return US_STATE_COORDS[stateKey];
+    }
+    return null;
+  }
+
+  app.get("/api/it/tickets/map", async (_req, res) => {
+    try {
+      const openTickets = await db.select({
+        id: itServiceTickets.id,
+        title: itServiceTickets.title,
+        category: itServiceTickets.category,
+        priority: itServiceTickets.priority,
+        status: itServiceTickets.status,
+        siteCity: itServiceTickets.siteCity,
+        siteState: itServiceTickets.siteState,
+        siteLat: itServiceTickets.siteLat,
+        siteLng: itServiceTickets.siteLng,
+        payType: itServiceTickets.payType,
+        payRate: itServiceTickets.payRate,
+        scheduledDate: itServiceTickets.scheduledDate,
+      })
+        .from(itServiceTickets)
+        .where(
+          and(
+            eq(itServiceTickets.isTemplate, false),
+            // Only show open/assigned tickets (active ones)
+          )
+        );
+
+      const ticketsWithCoords = openTickets
+        .filter(t => ["open", "assigned", "in_progress"].includes(t.status))
+        .map(t => {
+          let lat = t.siteLat;
+          let lng = t.siteLng;
+          if (!lat || !lng) {
+            const coords = geocodeCityState(t.siteCity, t.siteState);
+            if (coords) {
+              lat = coords.lat;
+              lng = coords.lng;
+            }
+          }
+          if (!lat || !lng) return null;
+          return {
+            id: t.id,
+            title: t.title,
+            category: t.category,
+            priority: t.priority,
+            status: t.status,
+            city: t.siteCity,
+            state: t.siteState,
+            lat,
+            lng,
+            payType: t.payType,
+            payRate: t.payRate,
+            scheduledDate: t.scheduledDate,
+          };
+        })
+        .filter(Boolean);
+
+      res.json(ticketsWithCoords);
+    } catch (error) {
+      console.error("Error fetching IT tickets for map:", error);
+      res.status(500).json({ message: "Failed to fetch IT tickets" });
+    }
+  });
+
   app.post("/api/it/companies", requireAuth, async (req, res) => {
     try {
       const parsed = insertItCompanySchema.safeParse(req.body);

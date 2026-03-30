@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Clock, DollarSign, Building2, ExternalLink, Car, User, Accessibility } from "lucide-react";
+import { MapPin, Clock, DollarSign, Building2, ExternalLink, Car, User, Accessibility, Wrench, Server } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 import type { Job, Ride } from "@shared/schema";
@@ -63,8 +63,24 @@ const greenMarkerIcon = createMarkerIcon("#22c55e");
 const blueMarkerIcon = createMarkerIcon("#3b82f6");
 const purpleMarkerIcon = createMarkerIcon("#a855f7"); // For ride requests (pickup)
 const orangeMarkerIcon = createMarkerIcon("#f97316"); // For ride destinations (dropoff)
+const redMarkerIcon = createMarkerIcon("#ef4444"); // For IT service tickets
 
 type CombinedJob = Job & { isExternal?: boolean };
+
+interface ITTicketMapItem {
+  id: string;
+  title: string;
+  category: string;
+  priority: string;
+  status: string;
+  city: string | null;
+  state: string | null;
+  lat: string;
+  lng: string;
+  payType: string | null;
+  payRate: string | null;
+  scheduledDate: string | null;
+}
 
 // Ride marker types
 interface RideMarker {
@@ -90,8 +106,9 @@ function MapController({ selectedJob }: { selectedJob: CombinedJob | null }) {
 export default function JobMap() {
   const [selectedJob, setSelectedJob] = useState<CombinedJob | null>(null);
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<ITTicketMapItem | null>(null);
   const [externalJobs, setExternalJobs] = useState<CombinedJob[]>([]);
-  const [activeTab, setActiveTab] = useState<"jobs" | "rides">("jobs");
+  const [activeTab, setActiveTab] = useState<"jobs" | "rides" | "it">("jobs");
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
   const ridesWsRef = useRef<WebSocket | null>(null);
@@ -103,7 +120,12 @@ export default function JobMap() {
   // Fetch active rides for the map
   const { data: activeRides = [], isLoading: ridesLoading } = useQuery<Ride[]>({
     queryKey: ["/api/rides/all"],
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30000,
+  });
+
+  const { data: itTickets = [] } = useQuery<ITTicketMapItem[]>({
+    queryKey: ["/api/it/tickets/map"],
+    refetchInterval: 60000,
   });
 
   useEffect(() => {
@@ -333,10 +355,10 @@ export default function JobMap() {
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-semibold mb-4">
-            Available Healthcare Shifts
+            Live Activity Map
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            View healthcare shifts and active ride requests in real-time across the nation.
+            View healthcare shifts, ride requests, and IT service jobs in real-time across the nation.
           </p>
         </div>
 
@@ -387,6 +409,43 @@ export default function JobMap() {
                       >
                         Apply in App
                       </a>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+
+              {/* IT Service Ticket Markers */}
+              {itTickets.map((ticket) => (
+                <Marker
+                  key={`it-${ticket.id}`}
+                  position={[parseFloat(ticket.lat), parseFloat(ticket.lng)]}
+                  icon={redMarkerIcon}
+                  eventHandlers={{
+                    click: () => {
+                      setSelectedTicket(ticket);
+                      setSelectedJob(null);
+                      setSelectedRide(null);
+                      setActiveTab("it");
+                    },
+                  }}
+                >
+                  <Popup>
+                    <div className="p-1">
+                      <p className="font-semibold flex items-center gap-1">
+                        <Wrench className="w-3 h-3" />
+                        {ticket.title}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {ticket.city}{ticket.state ? `, ${ticket.state}` : ""}
+                      </p>
+                      <p className="text-xs mt-1">
+                        {ticket.category} • {ticket.priority} priority
+                      </p>
+                      {ticket.payRate && (
+                        <p className="text-xs font-medium text-primary mt-1">
+                          ${ticket.payRate}/{ticket.payType === "hourly" ? "hr" : "fixed"}
+                        </p>
+                      )}
                     </div>
                   </Popup>
                 </Marker>
@@ -472,10 +531,14 @@ export default function JobMap() {
                 <div className="w-3 h-3 rounded-full bg-orange-500" />
                 <span className="text-xs">Ride Dropoff</span>
               </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-full bg-red-500" />
+                <span className="text-xs">IT Jobs</span>
+              </div>
             </div>
 
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "jobs" | "rides")} className="w-full">
-              <TabsList className="w-full grid grid-cols-2 mb-4">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "jobs" | "rides" | "it")} className="w-full">
+              <TabsList className="w-full grid grid-cols-3 mb-4">
                 <TabsTrigger value="jobs" className="flex items-center gap-2" data-testid="tab-shifts">
                   <Building2 className="w-4 h-4" />
                   Shifts ({jobs.length})
@@ -483,6 +546,10 @@ export default function JobMap() {
                 <TabsTrigger value="rides" className="flex items-center gap-2" data-testid="tab-rides">
                   <Car className="w-4 h-4" />
                   Rides ({activeRideCount})
+                </TabsTrigger>
+                <TabsTrigger value="it" className="flex items-center gap-2" data-testid="tab-it">
+                  <Wrench className="w-4 h-4" />
+                  IT ({itTickets.length})
                 </TabsTrigger>
               </TabsList>
 
@@ -707,6 +774,110 @@ export default function JobMap() {
                         </Card>
                       );
                     })
+                )}
+              </TabsContent>
+
+              <TabsContent value="it" className="space-y-4 mt-0">
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                  <span className="text-sm text-muted-foreground">Priority:</span>
+                  <Badge variant="secondary" className="bg-red-500 text-white no-default-hover-elevate">
+                    Critical
+                  </Badge>
+                  <Badge variant="secondary" className="bg-amber-500 text-white no-default-hover-elevate">
+                    High
+                  </Badge>
+                  <Badge variant="secondary" className="bg-blue-500 text-white no-default-hover-elevate">
+                    Medium
+                  </Badge>
+                  <Badge variant="secondary" className="bg-gray-500 text-white no-default-hover-elevate">
+                    Low
+                  </Badge>
+                </div>
+
+                {itTickets.length === 0 ? (
+                  <Card>
+                    <CardContent className="p-6 text-center text-muted-foreground">
+                      No open IT service tickets at the moment.
+                    </CardContent>
+                  </Card>
+                ) : (
+                  itTickets.map((ticket) => {
+                    const priorityColor: Record<string, string> = {
+                      critical: "bg-red-500",
+                      high: "bg-amber-500",
+                      medium: "bg-blue-500",
+                      low: "bg-gray-500",
+                    };
+                    const categoryLabels: Record<string, string> = {
+                      network: "Network",
+                      hardware: "Hardware",
+                      software: "Software",
+                      printer: "Printer",
+                      ehr_system: "EHR System",
+                      security: "Security",
+                      phone_system: "Phone System",
+                      email: "Email",
+                      backup: "Backup",
+                      general: "General",
+                    };
+                    return (
+                      <Card
+                        key={`it-${ticket.id}`}
+                        className={`cursor-pointer hover-elevate transition-all ${
+                          selectedTicket?.id === ticket.id ? "ring-2 ring-primary" : ""
+                        }`}
+                        onClick={() => {
+                          setSelectedTicket(ticket);
+                          setSelectedJob(null);
+                          setSelectedRide(null);
+                        }}
+                        data-testid={`card-it-${ticket.id}`}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-4 mb-3">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <Wrench className="w-4 h-4 text-muted-foreground" />
+                                <span className="text-sm text-muted-foreground">
+                                  {categoryLabels[ticket.category] || ticket.category}
+                                </span>
+                              </div>
+                              <h3 className="font-semibold">{ticket.title}</h3>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className={`${priorityColor[ticket.priority] || "bg-gray-500"} text-white no-default-hover-elevate`}
+                            >
+                              {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
+                            </Badge>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-3">
+                            <span className="flex items-center gap-1">
+                              <MapPin className="w-4 h-4" />
+                              {ticket.city}{ticket.state ? `, ${ticket.state}` : "N/A"}
+                            </span>
+                            {ticket.scheduledDate && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                {format(new Date(ticket.scheduledDate), "MMM d, yyyy")}
+                              </span>
+                            )}
+                            {ticket.payRate && (
+                              <span className="flex items-center gap-1 font-semibold text-foreground">
+                                <DollarSign className="w-4 h-4" />
+                                ${ticket.payRate}{ticket.payType === "hourly" ? "/hr" : " fixed"}
+                              </span>
+                            )}
+                          </div>
+
+                          <Badge variant="outline" className="text-xs">
+                            {ticket.status === "open" ? "Open" : ticket.status === "assigned" ? "Assigned" : "In Progress"}
+                          </Badge>
+                        </CardContent>
+                      </Card>
+                    );
+                  })
                 )}
               </TabsContent>
             </Tabs>

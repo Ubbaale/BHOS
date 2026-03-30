@@ -775,6 +775,8 @@ export const itServiceTickets = pgTable("it_service_tickets", {
   siteCity: text("site_city"),
   siteState: text("site_state"),
   siteZipCode: text("site_zip_code"),
+  siteLat: text("site_lat"),
+  siteLng: text("site_lng"),
   contactOnSite: text("contact_on_site"),
   contactPhone: text("contact_phone"),
   specialInstructions: text("special_instructions"),
