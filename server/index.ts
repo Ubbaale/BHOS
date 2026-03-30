@@ -30,6 +30,7 @@ declare module "express-session" {
     username: string;
     role: string;
     driverId?: number;
+    permissions?: string[];
   }
 }
 

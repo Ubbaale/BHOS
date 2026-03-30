@@ -1,27 +1,30 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import BackToHome from "@/components/BackToHome";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Ride, DriverProfile, PatientAccount, IncidentReport, ItTechComplaint } from "@shared/schema";
+import { ADMIN_PERMISSIONS, PERMISSION_PRESETS } from "@shared/schema";
 import {
   Car, Users, AlertTriangle, DollarSign, Activity,
   Ban, CheckCircle, XCircle, Eye, Clock, Phone, Mail,
   MapPin, Calendar, ChevronLeft, Shield, FileText, RotateCcw,
-  UserPlus, TrendingUp, CreditCard, Unlock, BarChart3
+  UserPlus, TrendingUp, CreditCard, Unlock, BarChart3,
+  LayoutDashboard, Navigation, Headphones, Settings, Monitor,
+  Menu, X, LogOut, Home, ChevronRight
 } from "lucide-react";
 
 interface AdminStats {
@@ -64,10 +67,25 @@ interface AdminUser {
   tosAcceptedAt: string | null;
   tosVersion: string | null;
   privacyPolicyAcceptedAt: string | null;
+  permissions: string[] | null;
 }
+
+const NAV_ITEMS = [
+  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard" },
+  { key: "rides", label: "Rides", icon: Navigation, permission: "rides" },
+  { key: "drivers", label: "Drivers", icon: Car, permission: "drivers" },
+  { key: "patients", label: "Patients", icon: Users, permission: "patients" },
+  { key: "earnings", label: "Earnings", icon: TrendingUp, permission: "earnings" },
+  { key: "accounts", label: "Accounts", icon: Shield, permission: "accounts" },
+  { key: "incidents", label: "Incidents", icon: AlertTriangle, permission: "incidents" },
+  { key: "it-complaints", label: "IT Services", icon: Monitor, permission: "it_services" },
+] as const;
 
 export default function AdminDashboard() {
   const { toast } = useToast();
+  const { user: authUser, logout } = useAuth();
+  const [activeSection, setActiveSection] = useState("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<DriverProfile | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<PatientAccount | null>(null);
@@ -86,7 +104,18 @@ export default function AdminDashboard() {
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountPassword, setNewAccountPassword] = useState("");
   const [newAccountRole, setNewAccountRole] = useState("user");
+  const [newAccountPreset, setNewAccountPreset] = useState("full_admin");
+  const [newAccountPermissions, setNewAccountPermissions] = useState<string[]>([...ADMIN_PERMISSIONS]);
   const [userRoleFilter, setUserRoleFilter] = useState("all");
+  const [editPermissionsUser, setEditPermissionsUser] = useState<AdminUser | null>(null);
+  const [editPermissions, setEditPermissions] = useState<string[]>([]);
+
+  const userPermissions = authUser?.permissions || [];
+  const hasPermission = (perm: string) => {
+    if (!userPermissions.length) return true;
+    return userPermissions.includes(perm);
+  };
+  const visibleNavItems = NAV_ITEMS.filter(item => hasPermission(item.permission));
 
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
     queryKey: ["/api/admin/stats"],
@@ -125,7 +154,7 @@ export default function AdminDashboard() {
   });
 
   const createAccountMutation = useMutation({
-    mutationFn: async (data: { email: string; fullName: string; password: string; role: string }) => {
+    mutationFn: async (data: { email: string; fullName: string; password: string; role: string; permissions?: string[] }) => {
       const response = await apiRequest("POST", "/api/admin/create-account", data);
       return response.json();
     },
@@ -137,10 +166,27 @@ export default function AdminDashboard() {
       setNewAccountName("");
       setNewAccountPassword("");
       setNewAccountRole("user");
+      setNewAccountPreset("full_admin");
+      setNewAccountPermissions([...ADMIN_PERMISSIONS]);
       toast({ title: "Account created successfully" });
     },
     onError: (error: any) => {
       toast({ title: "Error creating account", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updatePermissionsMutation = useMutation({
+    mutationFn: async ({ userId, permissions }: { userId: string; permissions: string[] }) => {
+      const response = await apiRequest("PATCH", `/api/admin/users/${userId}/permissions`, { permissions });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setEditPermissionsUser(null);
+      toast({ title: "Permissions updated" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -386,101 +432,185 @@ export default function AdminDashboard() {
     );
   }
 
+  const permissionLabels: Record<string, string> = {
+    dashboard: "Dashboard Overview",
+    rides: "Ride Management",
+    drivers: "Driver Management",
+    patients: "Patient Management",
+    earnings: "Earnings & Finance",
+    accounts: "Account Management",
+    incidents: "Incident Reports",
+    it_services: "IT Services",
+    dispatch: "Dispatch View",
+  };
+
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      <div className="mb-4">
-        <BackToHome />
-      </div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Manage rides, drivers, patients, and incidents</p>
-        </div>
-        <Link href="/">
-          <Button variant="outline" data-testid="button-back-home">
-            <ChevronLeft className="w-4 h-4 mr-2" />
-            Back to Home
+    <div className="flex h-screen overflow-hidden bg-background">
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <aside className={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-card border-r transform transition-transform duration-200 ease-in-out flex flex-col ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+        <div className="p-4 border-b flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <Shield className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-sm">CareHub Admin</h2>
+              <p className="text-xs text-muted-foreground truncate max-w-[140px]">{authUser?.username}</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarOpen(false)} data-testid="button-close-sidebar">
+            <X className="w-4 h-4" />
           </Button>
-        </Link>
-      </div>
+        </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <Activity className="w-8 h-8 text-blue-500" />
-              <div>
-                <p className="text-2xl font-bold">{stats?.activeRides || 0}</p>
-                <p className="text-sm text-muted-foreground">Active Rides</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <Car className="w-8 h-8 text-green-500" />
-              <div>
-                <p className="text-2xl font-bold">{stats?.activeDrivers || 0}</p>
-                <p className="text-sm text-muted-foreground">Active Drivers</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <DollarSign className="w-8 h-8 text-emerald-500" />
-              <div>
-                <p className="text-2xl font-bold">${stats?.totalRevenue || "0"}</p>
-                <p className="text-sm text-muted-foreground">Platform Revenue</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-8 h-8 text-orange-500" />
-              <div>
-                <p className="text-2xl font-bold">{stats?.openIncidents || 0}</p>
-                <p className="text-sm text-muted-foreground">Open Incidents</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+          {visibleNavItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeSection === item.key;
+            let count: number | undefined;
+            if (item.key === "rides") count = allRides.length;
+            if (item.key === "drivers") count = allDrivers.length;
+            if (item.key === "patients") count = allPatients.length;
+            if (item.key === "accounts") count = allUsers.length;
+            if (item.key === "incidents") count = allIncidents.length;
+            if (item.key === "it-complaints") count = allComplaints.length;
+            return (
+              <button
+                key={item.key}
+                onClick={() => { setActiveSection(item.key); setSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}
+                data-testid={`nav-${item.key}`}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span className="flex-1 text-left">{item.label}</span>
+                {count !== undefined && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${isActive ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
 
-      <Tabs defaultValue="rides" className="space-y-4">
-        <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="rides" data-testid="tab-rides">
-            Rides ({allRides.length})
-          </TabsTrigger>
-          <TabsTrigger value="drivers" data-testid="tab-drivers">
-            Drivers ({allDrivers.length})
-          </TabsTrigger>
-          <TabsTrigger value="patients" data-testid="tab-patients">
-            Patients ({allPatients.length})
-          </TabsTrigger>
-          <TabsTrigger value="earnings" data-testid="tab-earnings">
-            <TrendingUp className="w-4 h-4 mr-1" />
-            Earnings
-          </TabsTrigger>
-          <TabsTrigger value="accounts" data-testid="tab-accounts">
-            <Users className="w-4 h-4 mr-1" />
-            Accounts ({allUsers.length})
-          </TabsTrigger>
-          <TabsTrigger value="incidents" data-testid="tab-incidents">
-            Incidents ({allIncidents.length})
-          </TabsTrigger>
-          <TabsTrigger value="it-complaints" data-testid="tab-it-complaints">
-            IT Complaints ({allComplaints.length})
-          </TabsTrigger>
-        </TabsList>
+        <div className="p-2 border-t space-y-1">
+          <Link href="/">
+            <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors" data-testid="nav-home">
+              <Home className="w-4 h-4" />
+              <span>Back to Home</span>
+            </button>
+          </Link>
+          <button
+            onClick={() => logout()}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            data-testid="nav-logout"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </aside>
 
-        {/* Rides Tab */}
-        <TabsContent value="rides">
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <header className="h-14 border-b bg-card flex items-center px-4 gap-3 flex-shrink-0">
+          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarOpen(true)} data-testid="button-open-sidebar">
+            <Menu className="w-5 h-5" />
+          </Button>
+          <h1 className="text-lg font-semibold" data-testid="text-section-title">
+            {NAV_ITEMS.find(i => i.key === activeSection)?.label || "Dashboard"}
+          </h1>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          {activeSection === "dashboard" && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {hasPermission("rides") && (
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setActiveSection("rides")}>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-3">
+                        <Activity className="w-8 h-8 text-blue-500" />
+                        <div>
+                          <p className="text-2xl font-bold">{stats?.activeRides || 0}</p>
+                          <p className="text-sm text-muted-foreground">Active Rides</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                {hasPermission("drivers") && (
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setActiveSection("drivers")}>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-3">
+                        <Car className="w-8 h-8 text-green-500" />
+                        <div>
+                          <p className="text-2xl font-bold">{stats?.activeDrivers || 0}</p>
+                          <p className="text-sm text-muted-foreground">Active Drivers</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                {hasPermission("earnings") && (
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setActiveSection("earnings")}>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-3">
+                        <DollarSign className="w-8 h-8 text-emerald-500" />
+                        <div>
+                          <p className="text-2xl font-bold">${stats?.totalRevenue || "0"}</p>
+                          <p className="text-sm text-muted-foreground">Platform Revenue</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                {hasPermission("incidents") && (
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setActiveSection("incidents")}>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-3">
+                        <AlertTriangle className="w-8 h-8 text-orange-500" />
+                        <div>
+                          <p className="text-2xl font-bold">{stats?.openIncidents || 0}</p>
+                          <p className="text-sm text-muted-foreground">Open Incidents</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Total Rides</p>
+                    <p className="text-3xl font-bold">{stats?.totalRides || 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{stats?.completedRides || 0} completed, {stats?.cancelledRides || 0} cancelled</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Total Drivers</p>
+                    <p className="text-3xl font-bold">{stats?.totalDrivers || 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{stats?.pendingDrivers || 0} pending review</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Total Patients</p>
+                    <p className="text-3xl font-bold">{stats?.totalPatients || 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{stats?.blockedPatients || 0} blocked</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "rides" && hasPermission("rides") && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -581,10 +711,9 @@ export default function AdminDashboard() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
+          )}
 
-        {/* Drivers Tab */}
-        <TabsContent value="drivers">
+          {activeSection === "drivers" && hasPermission("drivers") && (
           <Card>
             <CardHeader>
               <CardTitle>All Drivers</CardTitle>
@@ -718,10 +847,9 @@ export default function AdminDashboard() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
+          )}
 
-        {/* Patients Tab */}
-        <TabsContent value="patients">
+          {activeSection === "patients" && hasPermission("patients") && (
           <Card>
             <CardHeader>
               <CardTitle>Patient Accounts</CardTitle>
@@ -796,10 +924,9 @@ export default function AdminDashboard() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
+          )}
 
-        {/* Incidents Tab */}
-        <TabsContent value="incidents">
+          {activeSection === "incidents" && hasPermission("incidents") && (
           <Card>
             <CardHeader>
               <CardTitle>Incident Reports</CardTitle>
@@ -878,10 +1005,9 @@ export default function AdminDashboard() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
+          )}
 
-        {/* IT Complaints Tab */}
-        <TabsContent value="it-complaints">
+          {activeSection === "it-complaints" && hasPermission("it_services") && (
           <Card>
             <CardHeader>
               <CardTitle>IT Tech Complaints</CardTitle>
@@ -978,9 +1104,9 @@ export default function AdminDashboard() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
+          )}
 
-        <TabsContent value="earnings">
+          {activeSection === "earnings" && hasPermission("earnings") && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Card>
@@ -1116,9 +1242,9 @@ export default function AdminDashboard() {
               </Card>
             )}
           </div>
-        </TabsContent>
+          )}
 
-        <TabsContent value="accounts">
+          {activeSection === "accounts" && hasPermission("accounts") && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -1155,8 +1281,8 @@ export default function AdminDashboard() {
                   <TableRow>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
+                    <TableHead>Access</TableHead>
                     <TableHead>Email Verified</TableHead>
-                    <TableHead>TOS Accepted</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1173,17 +1299,37 @@ export default function AdminDashboard() {
                         <Badge variant={user.role === "admin" ? "default" : "outline"}>{user.role}</Badge>
                       </TableCell>
                       <TableCell>
+                        {user.role === "admin" ? (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {(!user.permissions || user.permissions.length === 0) ? (
+                              <Badge variant="outline" className="text-xs">Full Access</Badge>
+                            ) : (
+                              user.permissions.slice(0, 3).map(p => (
+                                <Badge key={p} variant="secondary" className="text-xs">{p}</Badge>
+                              ))
+                            )}
+                            {user.permissions && user.permissions.length > 3 && (
+                              <Badge variant="secondary" className="text-xs">+{user.permissions.length - 3}</Badge>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-1"
+                              onClick={() => { setEditPermissionsUser(user); setEditPermissions(user.permissions || []); }}
+                              data-testid={`button-edit-perms-${user.id}`}
+                            >
+                              <Settings className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         {user.emailVerified ? (
                           <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Verified</Badge>
                         ) : (
                           <Badge variant="destructive">Unverified</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {user.tosAcceptedAt ? (
-                          <span className="text-sm text-green-600">{format(new Date(user.tosAcceptedAt), "MMM d, yyyy")}</span>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Not accepted</span>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
@@ -1225,8 +1371,9 @@ export default function AdminDashboard() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+          )}
+        </div>
+      </main>
 
       {/* Complaint Review Dialog */}
       <Dialog open={!!selectedComplaint} onOpenChange={(open) => !open && setSelectedComplaint(null)}>
@@ -1839,13 +1986,13 @@ export default function AdminDashboard() {
       </Dialog>
 
       <Dialog open={createAccountOpen} onOpenChange={setCreateAccountOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="w-5 h-5" />
               Create New Account
             </DialogTitle>
-            <DialogDescription>Create an account for any user type</DialogDescription>
+            <DialogDescription>Create an account and set what they can access</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
@@ -1862,7 +2009,13 @@ export default function AdminDashboard() {
             </div>
             <div>
               <Label>Role</Label>
-              <Select value={newAccountRole} onValueChange={setNewAccountRole}>
+              <Select value={newAccountRole} onValueChange={(val) => {
+                setNewAccountRole(val);
+                if (val === "admin") {
+                  setNewAccountPreset("full_admin");
+                  setNewAccountPermissions([...ADMIN_PERMISSIONS]);
+                }
+              }}>
                 <SelectTrigger data-testid="select-new-role">
                   <SelectValue />
                 </SelectTrigger>
@@ -1877,15 +2030,117 @@ export default function AdminDashboard() {
                 </SelectContent>
               </Select>
             </div>
+            {newAccountRole === "admin" && (
+              <div className="space-y-3 border rounded-lg p-3">
+                <Label>Access Level</Label>
+                <Select value={newAccountPreset} onValueChange={(val) => {
+                  setNewAccountPreset(val);
+                  const preset = PERMISSION_PRESETS[val];
+                  if (preset && val !== "custom") {
+                    setNewAccountPermissions([...preset.permissions]);
+                  }
+                }}>
+                  <SelectTrigger data-testid="select-preset">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(PERMISSION_PRESETS).map(([key, preset]) => (
+                      <SelectItem key={key} value={key}>{preset.label} — {preset.description}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Permissions</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ADMIN_PERMISSIONS.map((perm) => (
+                      <label key={perm} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={newAccountPermissions.includes(perm)}
+                          onCheckedChange={(checked) => {
+                            setNewAccountPreset("custom");
+                            setNewAccountPermissions(prev =>
+                              checked ? [...prev, perm] : prev.filter(p => p !== perm)
+                            );
+                          }}
+                          data-testid={`check-perm-${perm}`}
+                        />
+                        {permissionLabels[perm] || perm}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateAccountOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => createAccountMutation.mutate({ email: newAccountEmail, fullName: newAccountName, password: newAccountPassword, role: newAccountRole })}
+              onClick={() => createAccountMutation.mutate({
+                email: newAccountEmail,
+                fullName: newAccountName,
+                password: newAccountPassword,
+                role: newAccountRole,
+                permissions: newAccountRole === "admin" ? newAccountPermissions : undefined
+              })}
               disabled={!newAccountEmail || !newAccountName || !newAccountPassword || createAccountMutation.isPending}
               data-testid="button-submit-create-account"
             >
               {createAccountMutation.isPending ? "Creating..." : "Create Account"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editPermissionsUser} onOpenChange={(open) => !open && setEditPermissionsUser(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Permissions</DialogTitle>
+            <DialogDescription>
+              {editPermissionsUser?.username} — choose what this admin can access
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-2 block">Quick Presets</Label>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(PERMISSION_PRESETS).filter(([k]) => k !== "custom").map(([key, preset]) => (
+                  <Button
+                    key={key}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditPermissions([...preset.permissions])}
+                    data-testid={`preset-${key}`}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {ADMIN_PERMISSIONS.map((perm) => (
+                <label key={perm} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={editPermissions.includes(perm)}
+                    onCheckedChange={(checked) => {
+                      setEditPermissions(prev =>
+                        checked ? [...prev, perm] : prev.filter(p => p !== perm)
+                      );
+                    }}
+                    data-testid={`edit-perm-${perm}`}
+                  />
+                  {permissionLabels[perm] || perm}
+                </label>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditPermissionsUser(null)}>Cancel</Button>
+            <Button
+              onClick={() => editPermissionsUser && updatePermissionsMutation.mutate({ userId: editPermissionsUser.id, permissions: editPermissions })}
+              disabled={updatePermissionsMutation.isPending}
+              data-testid="button-save-permissions"
+            >
+              {updatePermissionsMutation.isPending ? "Saving..." : "Save Permissions"}
             </Button>
           </DialogFooter>
         </DialogContent>

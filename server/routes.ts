@@ -393,6 +393,26 @@ export async function registerRoutes(
     next();
   };
 
+  const requirePermission = (...perms: string[]) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+      if (!req.session.userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      if (req.session.role !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const userPerms = req.session.permissions || [];
+      if (userPerms.length === 0) {
+        return next();
+      }
+      const hasPermission = perms.some(p => userPerms.includes(p));
+      if (!hasPermission) {
+        return res.status(403).json({ message: "You don't have permission to access this resource" });
+      }
+      next();
+    };
+  };
+
   // Seed test accounts endpoint (one-time setup, admin only in production)
   app.get("/api/setup/seed-test-accounts", async (req, res) => {
     try {
@@ -762,6 +782,7 @@ export async function registerRoutes(
       req.session.userId = user.id;
       req.session.username = user.username;
       req.session.role = user.role || "user";
+      req.session.permissions = user.permissions || [];
       if (driverId) {
         req.session.driverId = driverId;
       }
@@ -782,7 +803,8 @@ export async function registerRoutes(
           user: { 
             id: user.id, 
             username: user.username, 
-            role: user.role 
+            role: user.role,
+            permissions: user.permissions || []
           },
           driver: driverProfile ? {
             id: driverProfile.id,
@@ -930,7 +952,8 @@ export async function registerRoutes(
       user: {
         id: user.id,
         username: user.username,
-        role: user.role
+        role: user.role,
+        permissions: user.permissions || []
       },
       driver: driverProfile ? {
         id: driverProfile.id,
@@ -5063,7 +5086,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
   
   // Get all rides for admin (with optional filters)
   // Protected: Only admins can view all rides
-  app.get("/api/admin/rides", requireAdmin, async (req, res) => {
+  app.get("/api/admin/rides", requireAdmin, requirePermission("rides", "dispatch"), async (req, res) => {
     try {
       const allRides = await storage.getAllRides();
       const { status, driverId, patientPhone } = req.query;
@@ -5131,7 +5154,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
   
-  app.get("/api/admin/earnings", requireAdmin, async (req, res) => {
+  app.get("/api/admin/earnings", requireAdmin, requirePermission("earnings"), async (req, res) => {
     try {
       const allRides = await storage.getAllRides();
       const completedRides = allRides.filter(r => r.status === "completed");
@@ -5184,7 +5207,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
-  app.get("/api/admin/users", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/users", requireAdmin, requirePermission("accounts"), async (_req, res) => {
     try {
       const allUsers = await storage.getAllUsers();
       const safeUsers = allUsers.map(({ password, ...u }) => u);
@@ -5195,9 +5218,9 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
-  app.post("/api/admin/create-account", requireAdmin, async (req, res) => {
+  app.post("/api/admin/create-account", requireAdmin, requirePermission("accounts"), async (req, res) => {
     try {
-      const { email, fullName, password, role } = req.body;
+      const { email, fullName, password, role, permissions } = req.body;
       if (!email || !fullName || !password || !role) {
         return res.status(400).json({ message: "Email, full name, password, and role are required" });
       }
@@ -5210,7 +5233,8 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
         return res.status(400).json({ message: "An account with this email already exists" });
       }
       const hashedPassword = await bcrypt.hash(password, 10);
-      const user = await storage.createUser({ username: email, password: hashedPassword, role });
+      const userPermissions = role === "admin" && Array.isArray(permissions) ? permissions : [];
+      const user = await storage.createUser({ username: email, password: hashedPassword, role, permissions: userPermissions });
 
       if (role === "user" || role === "patient") {
         try {
@@ -5231,7 +5255,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
-  app.patch("/api/admin/users/:id/role", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/users/:id/role", requireAdmin, requirePermission("accounts"), async (req, res) => {
     try {
       const { role } = req.body;
       const validRoles = ["user", "patient", "employer", "driver", "admin", "it_company", "it_tech"];
@@ -5248,7 +5272,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
-  app.patch("/api/admin/users/:id/verify-email", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/users/:id/verify-email", requireAdmin, requirePermission("accounts"), async (req, res) => {
     try {
       const { id } = req.params;
       const [user] = await db.update(users).set({ emailVerified: true }).where(eq(users.id, id)).returning();
@@ -5261,7 +5285,24 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
-  app.get("/api/admin/patients", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/users/:id/permissions", requireAdmin, requirePermission("accounts"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { permissions: newPermissions } = req.body;
+      if (!Array.isArray(newPermissions)) {
+        return res.status(400).json({ message: "Permissions must be an array" });
+      }
+      const [user] = await db.update(users).set({ permissions: newPermissions }).where(eq(users.id, id)).returning();
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const { password: _, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Error updating permissions:", error);
+      res.status(500).json({ message: "Failed to update permissions" });
+    }
+  });
+
+  app.get("/api/admin/patients", requireAdmin, requirePermission("patients"), async (req, res) => {
     try {
       const accounts = await storage.getAllPatientAccounts();
       res.json(accounts);
@@ -5273,7 +5314,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
   
   // Update patient account status (suspend/unsuspend/block/unblock)
   // Protected: Only admins can update patient status
-  app.patch("/api/admin/patients/:phone/status", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/patients/:phone/status", requireAdmin, requirePermission("patients"), async (req, res) => {
     try {
       const { phone } = req.params;
       const { status, reason } = req.body;
@@ -5292,7 +5333,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
   
   // Update driver account status (suspend/unsuspend/deactivate)
   // Protected: Only admins can update driver status
-  app.patch("/api/admin/drivers/:id/status", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/drivers/:id/status", requireAdmin, requirePermission("drivers", "dispatch"), async (req, res) => {
     try {
       const driverId = parseInt(req.params.id);
       const { status, reason } = req.body;
@@ -5311,7 +5352,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
   
   // Admin cancel a ride
   // Protected: Only admins can force cancel rides
-  app.post("/api/admin/rides/:id/cancel", requireAdmin, async (req, res) => {
+  app.post("/api/admin/rides/:id/cancel", requireAdmin, requirePermission("rides", "dispatch"), async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { reason } = req.body;
@@ -5408,7 +5449,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
   
   // Get all incident reports (admin)
   // Protected: Only admins can view incidents
-  app.get("/api/admin/incidents", requireAdmin, async (req, res) => {
+  app.get("/api/admin/incidents", requireAdmin, requirePermission("incidents"), async (req, res) => {
     try {
       const incidents = await storage.getAllIncidentReports();
       res.json(incidents);
@@ -5448,7 +5489,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
   
   // Update incident report (admin)
   // Protected: Only admins can update incidents
-  app.patch("/api/admin/incidents/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/incidents/:id", requireAdmin, requirePermission("incidents"), async (req, res) => {
     try {
       const incidentId = parseInt(req.params.id);
       const { status, adminNotes, assignedTo, resolution } = req.body;
@@ -5671,7 +5712,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
   });
 
   // Admin endpoint to refund a completed ride (for disputes)
-  app.post("/api/admin/rides/:id/refund", requireAdmin, async (req, res) => {
+  app.post("/api/admin/rides/:id/refund", requireAdmin, requirePermission("rides", "earnings"), async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
       const { reason, refundAmount } = req.body;
@@ -6752,7 +6793,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
-  app.get("/api/it/admin/techs", requireAdmin, async (_req, res) => {
+  app.get("/api/it/admin/techs", requireAdmin, requirePermission("it_services"), async (_req, res) => {
     try {
       const techs = await db.select().from(itTechProfiles).orderBy(desc(itTechProfiles.createdAt));
       res.json(techs);
@@ -8030,7 +8071,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
-  app.get("/api/it/admin/complaints", requireAdmin, async (_req, res) => {
+  app.get("/api/it/admin/complaints", requireAdmin, requirePermission("it_services"), async (_req, res) => {
     try {
       const allComplaints = await db.select().from(itTechComplaints).orderBy(desc(itTechComplaints.createdAt));
 
@@ -8052,7 +8093,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
-  app.post("/api/it/admin/complaints/:id/review", requireAdmin, async (req, res) => {
+  app.post("/api/it/admin/complaints/:id/review", requireAdmin, requirePermission("it_services"), async (req, res) => {
     try {
       const adminId = (req as any).session?.userId;
       const { status, adminNotes, adminAction } = req.body;
