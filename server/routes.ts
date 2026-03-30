@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements, itTechComplaints, itTechEnforcementLog } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, isNull } from "drizzle-orm";
+import { eq, desc, and, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { sendIssueNotification, sendRideBookedForPatientEmail, sendPasswordResetCode, sendEmailVerificationCode, FileAttachment } from "./email";
 import { saveSubscription, removeSubscription, getVapidPublicKey, notifyDriversOfNewRide, notifyPatientOfRideUpdate, notifyItTechsOfNewTicket, notifyItCompanyOfTicketUpdate } from "./push";
@@ -7315,6 +7315,42 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
   // ==========================================
   // IT: Dispute Mediation (Admin)
   // ==========================================
+  app.get("/api/it/admin/disputed-tickets", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+
+      const tickets = await db.select().from(itServiceTickets)
+        .where(
+          or(
+            eq(itServiceTickets.companyApproval, "disputed"),
+            sql`${itServiceTickets.mediationStatus} IN ('requested', 'resolved')`
+          )
+        )
+        .orderBy(sql`${itServiceTickets.updatedAt} DESC`);
+
+      const enriched = await Promise.all(tickets.map(async (t) => {
+        let companyName = "";
+        let techName = "";
+        if (t.createdBy) {
+          const [creator] = await db.select().from(users).where(eq(users.id, t.createdBy));
+          companyName = creator?.username || "";
+        }
+        if (t.assignedTo) {
+          const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, t.assignedTo));
+          techName = techProfile?.fullName || "";
+        }
+        return { ...t, companyName, techName };
+      }));
+
+      res.json(enriched);
+    } catch (error) {
+      console.error("Fetch disputed tickets error:", error);
+      res.status(500).json({ message: "Failed to fetch disputed tickets" });
+    }
+  });
+
   app.post("/api/it/tickets/:id/request-mediation", requireAuth, async (req, res) => {
     try {
       const userId = (req as any).session?.userId;
@@ -7348,10 +7384,19 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
       if (!ticket) return res.status(404).json({ message: "Ticket not found" });
 
+      if (ticket.mediationStatus === "resolved") {
+        return res.status(409).json({ message: "This dispute has already been resolved" });
+      }
+      if (ticket.companyApproval !== "disputed") {
+        return res.status(400).json({ message: "Ticket must be in disputed state to mediate" });
+      }
+
       const { resolution, notes, awardTo } = req.body;
       if (!resolution || !["favor_company", "favor_tech", "split", "cancel"].includes(resolution)) {
         return res.status(400).json({ message: "Invalid resolution. Must be favor_company, favor_tech, split, or cancel" });
       }
+
+      const originalTotalPay = parseFloat(ticket.totalPay || "0");
 
       let paymentStatus = "disputed";
       let companyApproval = "disputed";
@@ -7362,8 +7407,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
         paymentStatus = "refunded";
         companyApproval = "disputed";
       } else if (resolution === "split") {
-        const totalPay = parseFloat(ticket.totalPay || "0");
-        const splitAmount = totalPay / 2;
+        const splitAmount = originalTotalPay / 2;
         const feePercent = ticket.platformFeePercent ? parseFloat(ticket.platformFeePercent) : 15;
         const fee = Math.round(splitAmount * (feePercent / 100) * 100) / 100;
         await db.update(itServiceTickets)
