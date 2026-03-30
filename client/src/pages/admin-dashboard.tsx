@@ -20,7 +20,8 @@ import type { Ride, DriverProfile, PatientAccount, IncidentReport, ItTechComplai
 import {
   Car, Users, AlertTriangle, DollarSign, Activity,
   Ban, CheckCircle, XCircle, Eye, Clock, Phone, Mail,
-  MapPin, Calendar, ChevronLeft, Shield, FileText, RotateCcw
+  MapPin, Calendar, ChevronLeft, Shield, FileText, RotateCcw,
+  UserPlus, TrendingUp, CreditCard, Unlock, BarChart3
 } from "lucide-react";
 
 interface AdminStats {
@@ -39,6 +40,32 @@ interface AdminStats {
   totalIncidents: number;
 }
 
+interface EarningsData {
+  totalRevenue: string;
+  totalFares: string;
+  totalDriverPayouts: string;
+  totalTips: string;
+  totalTolls: string;
+  totalCancellationFees: string;
+  totalRefunds: string;
+  completedRides: number;
+  cancelledRides: number;
+  totalRides: number;
+  averageFare: string;
+  ridesByMonth: Record<string, { rides: number; revenue: number; fares: number; driverPayouts: number }>;
+  paymentStatusBreakdown: { pending: number; paid: number; failed: number; refunded: number };
+}
+
+interface AdminUser {
+  id: string;
+  username: string;
+  role: string;
+  emailVerified: boolean;
+  tosAcceptedAt: string | null;
+  tosVersion: string | null;
+  privacyPolicyAcceptedAt: string | null;
+}
+
 export default function AdminDashboard() {
   const { toast } = useToast();
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
@@ -52,6 +79,14 @@ export default function AdminDashboard() {
   const [rideStatusFilter, setRideStatusFilter] = useState<string>("all");
   const [driverDetailOpen, setDriverDetailOpen] = useState(false);
   const [detailDriver, setDetailDriver] = useState<DriverProfile | null>(null);
+  const [rideDetailOpen, setRideDetailOpen] = useState(false);
+  const [detailRide, setDetailRide] = useState<Ride | null>(null);
+  const [createAccountOpen, setCreateAccountOpen] = useState(false);
+  const [newAccountEmail, setNewAccountEmail] = useState("");
+  const [newAccountName, setNewAccountName] = useState("");
+  const [newAccountPassword, setNewAccountPassword] = useState("");
+  const [newAccountRole, setNewAccountRole] = useState("user");
+  const [userRoleFilter, setUserRoleFilter] = useState("all");
 
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
     queryKey: ["/api/admin/stats"],
@@ -79,6 +114,62 @@ export default function AdminDashboard() {
 
   const { data: allItTechs = [] } = useQuery<any[]>({
     queryKey: ["/api/it/admin/techs"],
+  });
+
+  const { data: earnings } = useQuery<EarningsData>({
+    queryKey: ["/api/admin/earnings"],
+  });
+
+  const { data: allUsers = [] } = useQuery<AdminUser[]>({
+    queryKey: ["/api/admin/users"],
+  });
+
+  const createAccountMutation = useMutation({
+    mutationFn: async (data: { email: string; fullName: string; password: string; role: string }) => {
+      const response = await apiRequest("POST", "/api/admin/create-account", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setCreateAccountOpen(false);
+      setNewAccountEmail("");
+      setNewAccountName("");
+      setNewAccountPassword("");
+      setNewAccountRole("user");
+      toast({ title: "Account created successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error creating account", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const verifyEmailMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest("PATCH", `/api/admin/users/${userId}/verify-email`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Email verified" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateRoleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
+      const response = await apiRequest("PATCH", `/api/admin/users/${userId}/role`, { role });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Role updated" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
@@ -362,7 +453,7 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs defaultValue="rides" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="rides" data-testid="tab-rides">
             Rides ({allRides.length})
           </TabsTrigger>
@@ -371,6 +462,14 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="patients" data-testid="tab-patients">
             Patients ({allPatients.length})
+          </TabsTrigger>
+          <TabsTrigger value="earnings" data-testid="tab-earnings">
+            <TrendingUp className="w-4 h-4 mr-1" />
+            Earnings
+          </TabsTrigger>
+          <TabsTrigger value="accounts" data-testid="tab-accounts">
+            <Users className="w-4 h-4 mr-1" />
+            Accounts ({allUsers.length})
           </TabsTrigger>
           <TabsTrigger value="incidents" data-testid="tab-incidents">
             Incidents ({allIncidents.length})
@@ -432,9 +531,17 @@ export default function AdminDashboard() {
                       <TableCell>{ride.createdAt ? format(new Date(ride.createdAt), "MMM d, HH:mm") : "-"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => { setDetailRide(ride); setRideDetailOpen(true); }}
+                            data-testid={`button-detail-ride-${ride.id}`}
+                          >
+                            <FileText className="w-4 h-4" />
+                          </Button>
                           <Link href={`/track/${ride.id}`}>
                             <Button size="sm" variant="outline" data-testid={`button-view-ride-${ride.id}`}>
-                              <Eye className="w-4 h-4" />
+                              <MapPin className="w-4 h-4" />
                             </Button>
                           </Link>
                           {!["completed", "cancelled"].includes(ride.status) && (
@@ -867,6 +974,253 @@ export default function AdminDashboard() {
                       </TableRow>
                     ))
                   )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="earnings">
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-sm text-muted-foreground">Total Fares Collected</p>
+                  <p className="text-2xl font-bold text-green-600" data-testid="text-total-fares">${earnings?.totalFares || "0"}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-sm text-muted-foreground">Platform Revenue</p>
+                  <p className="text-2xl font-bold text-emerald-600" data-testid="text-platform-revenue">${earnings?.totalRevenue || "0"}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-sm text-muted-foreground">Driver Payouts</p>
+                  <p className="text-2xl font-bold text-blue-600" data-testid="text-driver-payouts">${earnings?.totalDriverPayouts || "0"}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-sm text-muted-foreground">Average Fare</p>
+                  <p className="text-2xl font-bold" data-testid="text-avg-fare">${earnings?.averageFare || "0"}</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-sm text-muted-foreground">Tips Collected</p>
+                  <p className="text-xl font-bold text-purple-600" data-testid="text-total-tips">${earnings?.totalTips || "0"}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-sm text-muted-foreground">Tolls</p>
+                  <p className="text-xl font-bold" data-testid="text-total-tolls">${earnings?.totalTolls || "0"}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-sm text-muted-foreground">Cancellation Fees</p>
+                  <p className="text-xl font-bold text-orange-600" data-testid="text-cancel-fees">${earnings?.totalCancellationFees || "0"}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-sm text-muted-foreground">Refunds Issued</p>
+                  <p className="text-xl font-bold text-red-600" data-testid="text-total-refunds">${earnings?.totalRefunds || "0"}</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Status Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-muted/50 rounded-md p-3 text-center">
+                    <p className="text-2xl font-bold text-yellow-600" data-testid="text-payments-pending">{earnings?.paymentStatusBreakdown?.pending || 0}</p>
+                    <p className="text-sm text-muted-foreground">Pending</p>
+                  </div>
+                  <div className="bg-muted/50 rounded-md p-3 text-center">
+                    <p className="text-2xl font-bold text-green-600" data-testid="text-payments-paid">{earnings?.paymentStatusBreakdown?.paid || 0}</p>
+                    <p className="text-sm text-muted-foreground">Paid</p>
+                  </div>
+                  <div className="bg-muted/50 rounded-md p-3 text-center">
+                    <p className="text-2xl font-bold text-red-600" data-testid="text-payments-failed">{earnings?.paymentStatusBreakdown?.failed || 0}</p>
+                    <p className="text-sm text-muted-foreground">Failed</p>
+                  </div>
+                  <div className="bg-muted/50 rounded-md p-3 text-center">
+                    <p className="text-2xl font-bold text-orange-600" data-testid="text-payments-refunded">{earnings?.paymentStatusBreakdown?.refunded || 0}</p>
+                    <p className="text-sm text-muted-foreground">Refunded</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Ride Summary</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="bg-muted/50 rounded-md p-3">
+                    <p className="text-2xl font-bold" data-testid="text-total-rides">{earnings?.totalRides || 0}</p>
+                    <p className="text-sm text-muted-foreground">Total Rides</p>
+                  </div>
+                  <div className="bg-muted/50 rounded-md p-3">
+                    <p className="text-2xl font-bold text-green-600" data-testid="text-completed-rides">{earnings?.completedRides || 0}</p>
+                    <p className="text-sm text-muted-foreground">Completed</p>
+                  </div>
+                  <div className="bg-muted/50 rounded-md p-3">
+                    <p className="text-2xl font-bold text-red-600" data-testid="text-cancelled-rides">{earnings?.cancelledRides || 0}</p>
+                    <p className="text-sm text-muted-foreground">Cancelled</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {earnings?.ridesByMonth && Object.keys(earnings.ridesByMonth).length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Monthly Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Month</TableHead>
+                        <TableHead>Rides</TableHead>
+                        <TableHead>Total Fares</TableHead>
+                        <TableHead>Platform Revenue</TableHead>
+                        <TableHead>Driver Payouts</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(earnings.ridesByMonth).sort(([a], [b]) => b.localeCompare(a)).map(([month, data]) => (
+                        <TableRow key={month} data-testid={`row-month-${month}`}>
+                          <TableCell className="font-medium">{month}</TableCell>
+                          <TableCell>{data.rides}</TableCell>
+                          <TableCell>${data.fares.toFixed(2)}</TableCell>
+                          <TableCell className="text-green-600">${data.revenue.toFixed(2)}</TableCell>
+                          <TableCell className="text-blue-600">${data.driverPayouts.toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="accounts">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <CardTitle>All Accounts</CardTitle>
+                  <CardDescription>Manage user accounts, roles, and create new accounts</CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Select value={userRoleFilter} onValueChange={setUserRoleFilter}>
+                    <SelectTrigger className="w-36" data-testid="select-role-filter">
+                      <SelectValue placeholder="Filter by role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Roles</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="user">User</SelectItem>
+                      <SelectItem value="patient">Patient</SelectItem>
+                      <SelectItem value="driver">Driver</SelectItem>
+                      <SelectItem value="employer">Employer</SelectItem>
+                      <SelectItem value="it_company">IT Company</SelectItem>
+                      <SelectItem value="it_tech">IT Tech</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={() => setCreateAccountOpen(true)} data-testid="button-create-account">
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Create Account
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Email Verified</TableHead>
+                    <TableHead>TOS Accepted</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allUsers
+                    .filter(u => userRoleFilter === "all" || u.role === userRoleFilter)
+                    .map((user) => (
+                    <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+                      <TableCell>
+                        <div className="font-medium">{user.username}</div>
+                        <div className="text-xs text-muted-foreground font-mono">{user.id.slice(0, 8)}...</div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={user.role === "admin" ? "default" : "outline"}>{user.role}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {user.emailVerified ? (
+                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Verified</Badge>
+                        ) : (
+                          <Badge variant="destructive">Unverified</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {user.tosAcceptedAt ? (
+                          <span className="text-sm text-green-600">{format(new Date(user.tosAcceptedAt), "MMM d, yyyy")}</span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Not accepted</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          {!user.emailVerified && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => verifyEmailMutation.mutate(user.id)}
+                              disabled={verifyEmailMutation.isPending}
+                              data-testid={`button-verify-email-${user.id}`}
+                            >
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              Verify
+                            </Button>
+                          )}
+                          <Select
+                            value={user.role}
+                            onValueChange={(role) => updateRoleMutation.mutate({ userId: user.id, role })}
+                          >
+                            <SelectTrigger className="w-28 h-8 text-xs" data-testid={`select-role-${user.id}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="user">User</SelectItem>
+                              <SelectItem value="patient">Patient</SelectItem>
+                              <SelectItem value="driver">Driver</SelectItem>
+                              <SelectItem value="employer">Employer</SelectItem>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="it_company">IT Company</SelectItem>
+                              <SelectItem value="it_tech">IT Tech</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </CardContent>
@@ -1363,6 +1717,176 @@ export default function AdminDashboard() {
                 Approve Driver
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rideDetailOpen} onOpenChange={(open) => { setRideDetailOpen(open); if (!open) setDetailRide(null); }}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Car className="w-5 h-5" />
+              Ride #{detailRide?.id} — Details
+            </DialogTitle>
+            <DialogDescription>Full ride information and fare breakdown</DialogDescription>
+          </DialogHeader>
+          {detailRide && (
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-semibold text-sm mb-2">Patient & Booking</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-md p-3">
+                  <div><span className="text-muted-foreground">Patient:</span> <span className="font-medium">{detailRide.patientName}</span></div>
+                  <div><span className="text-muted-foreground">Phone:</span> <span className="font-medium">{detailRide.patientPhone}</span></div>
+                  <div><span className="text-muted-foreground">Email:</span> <span className="font-medium">{detailRide.patientEmail || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Status:</span> {getStatusBadge(detailRide.status)}</div>
+                  <div><span className="text-muted-foreground">Payment Type:</span> <span className="font-medium">{detailRide.paymentType}</span></div>
+                  <div><span className="text-muted-foreground">Payment Status:</span> <Badge variant={detailRide.paymentStatus === "completed" || detailRide.paymentStatus === "paid" ? "default" : "outline"}>{detailRide.paymentStatus || "pending"}</Badge></div>
+                  <div><span className="text-muted-foreground">Vehicle Type:</span> <span className="font-medium">{detailRide.requiredVehicleType || "Any"}</span></div>
+                  <div><span className="text-muted-foreground">Round Trip:</span> <span className="font-medium">{detailRide.isRoundTrip ? "Yes" : "No"}</span></div>
+                  {detailRide.bookedByOther && (
+                    <>
+                      <div><span className="text-muted-foreground">Booked By:</span> <span className="font-medium">{detailRide.bookerName} ({detailRide.bookerRelation})</span></div>
+                      <div><span className="text-muted-foreground">Booker Phone:</span> <span className="font-medium">{detailRide.bookerPhone}</span></div>
+                    </>
+                  )}
+                  <div><span className="text-muted-foreground">Appointment:</span> <span className="font-medium">{detailRide.appointmentTime ? format(new Date(detailRide.appointmentTime), "MMM d, yyyy HH:mm") : "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Created:</span> <span className="font-medium">{detailRide.createdAt ? format(new Date(detailRide.createdAt), "MMM d, yyyy HH:mm") : "N/A"}</span></div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-sm mb-2">Route</h4>
+                <div className="grid grid-cols-1 gap-3 text-sm bg-muted/50 rounded-md p-3">
+                  <div><span className="text-muted-foreground">Pickup:</span> <span className="font-medium">{detailRide.pickupAddress}</span></div>
+                  <div><span className="text-muted-foreground">Dropoff:</span> <span className="font-medium">{detailRide.dropoffAddress}</span></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><span className="text-muted-foreground">Distance:</span> <span className="font-medium">{detailRide.distanceMiles || detailRide.actualDistanceMiles || "N/A"} mi</span></div>
+                    <div><span className="text-muted-foreground">Traffic:</span> <span className="font-medium">{detailRide.trafficCondition || "N/A"}</span></div>
+                  </div>
+                  {detailRide.notes && <div><span className="text-muted-foreground">Notes:</span> <span className="font-medium">{detailRide.notes}</span></div>}
+                  {detailRide.medicalNotes && <div><span className="text-muted-foreground">Medical Notes:</span> <span className="font-medium">{detailRide.medicalNotes}</span></div>}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-sm mb-2">Fare Breakdown</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-md p-3">
+                  <div><span className="text-muted-foreground">Estimated Fare:</span> <span className="font-medium">${detailRide.estimatedFare || "0"}</span></div>
+                  <div><span className="text-muted-foreground">Final Fare:</span> <span className="font-medium text-green-600">${detailRide.finalFare || "0"}</span></div>
+                  <div><span className="text-muted-foreground">Base Fare:</span> <span className="font-medium">${detailRide.baseFare || "0"}</span></div>
+                  <div><span className="text-muted-foreground">Surge Multiplier:</span> <span className="font-medium">{detailRide.surgeMultiplier || "1.0"}x</span></div>
+                  <div><span className="text-muted-foreground">Platform Fee ({detailRide.platformFeePercent || "15"}%):</span> <span className="font-medium">${detailRide.platformFee || "0"}</span></div>
+                  <div><span className="text-muted-foreground">Driver Earnings:</span> <span className="font-medium text-blue-600">${detailRide.driverEarnings || "0"}</span></div>
+                  <div><span className="text-muted-foreground">Tip:</span> <span className="font-medium">${detailRide.tipAmount || "0"}</span></div>
+                  <div><span className="text-muted-foreground">Tolls:</span> <span className="font-medium">${detailRide.actualTolls || detailRide.estimatedTolls || "0"}</span></div>
+                  <div><span className="text-muted-foreground">Paid Amount:</span> <span className="font-medium">${detailRide.paidAmount || "0"}</span></div>
+                  {detailRide.cancellationFee && <div><span className="text-muted-foreground">Cancellation Fee:</span> <span className="font-medium text-red-600">${detailRide.cancellationFee}</span></div>}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-sm mb-2">Trip Timeline</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-md p-3">
+                  <div><span className="text-muted-foreground">Driver ID:</span> <span className="font-medium">{detailRide.driverId || "Not assigned"}</span></div>
+                  <div><span className="text-muted-foreground">ETA:</span> <span className="font-medium">{detailRide.estimatedArrivalTime ? format(new Date(detailRide.estimatedArrivalTime), "HH:mm") : "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Actual Pickup:</span> <span className="font-medium">{detailRide.actualPickupTime ? format(new Date(detailRide.actualPickupTime), "HH:mm") : "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Actual Dropoff:</span> <span className="font-medium">{detailRide.actualDropoffTime ? format(new Date(detailRide.actualDropoffTime), "HH:mm") : "N/A"}</span></div>
+                  {detailRide.waitTimeMinutes && <div><span className="text-muted-foreground">Wait Time:</span> <span className="font-medium">{detailRide.waitTimeMinutes} min</span></div>}
+                  {detailRide.delayMinutes && detailRide.delayMinutes > 0 && (
+                    <div><span className="text-muted-foreground">Delay:</span> <span className="font-medium text-orange-600">{detailRide.delayMinutes} min ({detailRide.delayReason || "unknown"})</span></div>
+                  )}
+                  {detailRide.cancelledAt && (
+                    <>
+                      <div><span className="text-muted-foreground">Cancelled At:</span> <span className="font-medium text-red-600">{format(new Date(detailRide.cancelledAt), "MMM d, HH:mm")}</span></div>
+                      <div><span className="text-muted-foreground">Cancelled By:</span> <span className="font-medium">{detailRide.cancelledBy}</span></div>
+                      {detailRide.cancellationReason && <div className="col-span-2"><span className="text-muted-foreground">Reason:</span> <span className="font-medium">{detailRide.cancellationReason}</span></div>}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {detailRide.insuranceProvider && (
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Insurance</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-md p-3">
+                    <div><span className="text-muted-foreground">Provider:</span> <span className="font-medium">{detailRide.insuranceProvider}</span></div>
+                    <div><span className="text-muted-foreground">Member ID:</span> <span className="font-medium">{detailRide.memberId || "N/A"}</span></div>
+                    <div><span className="text-muted-foreground">Group #:</span> <span className="font-medium">{detailRide.groupNumber || "N/A"}</span></div>
+                    <div><span className="text-muted-foreground">Prior Auth #:</span> <span className="font-medium">{detailRide.priorAuthNumber || "N/A"}</span></div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRideDetailOpen(false)} data-testid="button-close-ride-detail">Close</Button>
+            {detailRide && !["completed", "cancelled"].includes(detailRide.status) && (
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setRideDetailOpen(false);
+                  setSelectedRide(detailRide);
+                  setActionType("cancel_ride");
+                  setActionDialogOpen(true);
+                }}
+                data-testid="button-cancel-from-detail"
+              >
+                Cancel Ride
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createAccountOpen} onOpenChange={setCreateAccountOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5" />
+              Create New Account
+            </DialogTitle>
+            <DialogDescription>Create an account for any user type</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="newEmail">Email</Label>
+              <Input id="newEmail" type="email" value={newAccountEmail} onChange={(e) => setNewAccountEmail(e.target.value)} placeholder="user@example.com" data-testid="input-new-email" />
+            </div>
+            <div>
+              <Label htmlFor="newName">Full Name</Label>
+              <Input id="newName" value={newAccountName} onChange={(e) => setNewAccountName(e.target.value)} placeholder="John Smith" data-testid="input-new-name" />
+            </div>
+            <div>
+              <Label htmlFor="newPassword">Password</Label>
+              <Input id="newPassword" type="password" value={newAccountPassword} onChange={(e) => setNewAccountPassword(e.target.value)} placeholder="Min 8 chars, uppercase, number" data-testid="input-new-password" />
+            </div>
+            <div>
+              <Label>Role</Label>
+              <Select value={newAccountRole} onValueChange={setNewAccountRole}>
+                <SelectTrigger data-testid="select-new-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="patient">Patient</SelectItem>
+                  <SelectItem value="driver">Driver</SelectItem>
+                  <SelectItem value="employer">Employer</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="it_company">IT Company</SelectItem>
+                  <SelectItem value="it_tech">IT Tech</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateAccountOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => createAccountMutation.mutate({ email: newAccountEmail, fullName: newAccountName, password: newAccountPassword, role: newAccountRole })}
+              disabled={!newAccountEmail || !newAccountName || !newAccountPassword || createAccountMutation.isPending}
+              data-testid="button-submit-create-account"
+            >
+              {createAccountMutation.isPending ? "Creating..." : "Create Account"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

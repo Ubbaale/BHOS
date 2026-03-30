@@ -5131,8 +5131,136 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
   
-  // Get all patient accounts for admin
-  // Protected: Only admins can view patients
+  app.get("/api/admin/earnings", requireAdmin, async (req, res) => {
+    try {
+      const allRides = await storage.getAllRides();
+      const completedRides = allRides.filter(r => r.status === "completed");
+      const cancelledRides = allRides.filter(r => r.status === "cancelled");
+
+      const totalRevenue = completedRides.reduce((sum, r) => sum + parseFloat(r.platformFee || "0"), 0);
+      const totalFares = completedRides.reduce((sum, r) => sum + parseFloat(r.finalFare || r.estimatedFare || "0"), 0);
+      const totalDriverPayouts = completedRides.reduce((sum, r) => sum + parseFloat(r.driverEarnings || "0"), 0);
+      const totalTips = completedRides.reduce((sum, r) => sum + parseFloat(r.tipAmount || "0"), 0);
+      const totalTolls = completedRides.reduce((sum, r) => sum + parseFloat(r.actualTolls || r.estimatedTolls || "0"), 0);
+      const totalCancellationFees = cancelledRides.reduce((sum, r) => sum + parseFloat(r.cancellationFee || "0"), 0);
+      const refundedRides = allRides.filter(r => r.paymentStatus === "refunded");
+      const totalRefunds = refundedRides.reduce((sum, r) => sum + parseFloat(r.paidAmount || "0"), 0);
+
+      const ridesByMonth: Record<string, { rides: number; revenue: number; fares: number; driverPayouts: number }> = {};
+      completedRides.forEach(r => {
+        const month = r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 7) : "unknown";
+        if (!ridesByMonth[month]) ridesByMonth[month] = { rides: 0, revenue: 0, fares: 0, driverPayouts: 0 };
+        ridesByMonth[month].rides++;
+        ridesByMonth[month].revenue += parseFloat(r.platformFee || "0");
+        ridesByMonth[month].fares += parseFloat(r.finalFare || r.estimatedFare || "0");
+        ridesByMonth[month].driverPayouts += parseFloat(r.driverEarnings || "0");
+      });
+
+      const paymentStatusBreakdown = {
+        pending: allRides.filter(r => r.paymentStatus === "pending").length,
+        paid: allRides.filter(r => r.paymentStatus === "paid" || r.paymentStatus === "completed").length,
+        failed: allRides.filter(r => r.paymentStatus === "failed").length,
+        refunded: refundedRides.length,
+      };
+
+      res.json({
+        totalRevenue: totalRevenue.toFixed(2),
+        totalFares: totalFares.toFixed(2),
+        totalDriverPayouts: totalDriverPayouts.toFixed(2),
+        totalTips: totalTips.toFixed(2),
+        totalTolls: totalTolls.toFixed(2),
+        totalCancellationFees: totalCancellationFees.toFixed(2),
+        totalRefunds: totalRefunds.toFixed(2),
+        completedRides: completedRides.length,
+        cancelledRides: cancelledRides.length,
+        totalRides: allRides.length,
+        averageFare: completedRides.length > 0 ? (totalFares / completedRides.length).toFixed(2) : "0",
+        ridesByMonth,
+        paymentStatusBreakdown,
+      });
+    } catch (error) {
+      console.error("Error fetching earnings:", error);
+      res.status(500).json({ message: "Failed to fetch earnings" });
+    }
+  });
+
+  app.get("/api/admin/users", requireAdmin, async (_req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const safeUsers = allUsers.map(({ password, ...u }) => u);
+      res.json(safeUsers);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.post("/api/admin/create-account", requireAdmin, async (req, res) => {
+    try {
+      const { email, fullName, password, role } = req.body;
+      if (!email || !fullName || !password || !role) {
+        return res.status(400).json({ message: "Email, full name, password, and role are required" });
+      }
+      const validRoles = ["user", "patient", "employer", "driver", "admin", "it_company", "it_tech"];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ message: "Invalid role" });
+      }
+      const existingUser = await storage.getUserByUsername(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "An account with this email already exists" });
+      }
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await storage.createUser({ username: email, password: hashedPassword, role });
+
+      if (role === "user" || role === "patient") {
+        try {
+          await storage.createPatient({ userId: user.id, fullName, phone: "", email, mobilityNeeds: [], emergencyContactName: null, emergencyContactPhone: null, savedAddresses: [] });
+        } catch (e) { console.error("Failed to create patient profile:", e); }
+      }
+      if (role === "driver") {
+        try {
+          await storage.createDriver({ userId: user.id, fullName, phone: "", email, vehicleType: "sedan", vehiclePlate: "PENDING" });
+        } catch (e) { console.error("Failed to create driver profile:", e); }
+      }
+
+      const { password: _, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Error creating account:", error);
+      res.status(500).json({ message: "Failed to create account" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/role", requireAdmin, async (req, res) => {
+    try {
+      const { role } = req.body;
+      const validRoles = ["user", "patient", "employer", "driver", "admin", "it_company", "it_tech"];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ message: "Invalid role" });
+      }
+      const user = await storage.updateUserRole(req.params.id, role);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const { password: _, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Error updating user role:", error);
+      res.status(500).json({ message: "Failed to update role" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/verify-email", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const [user] = await db.update(users).set({ emailVerified: true }).where(eq(users.id, id)).returning();
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const { password: _, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Error verifying email:", error);
+      res.status(500).json({ message: "Failed to verify email" });
+    }
+  });
+
   app.get("/api/admin/patients", requireAdmin, async (req, res) => {
     try {
       const accounts = await storage.getAllPatientAccounts();
