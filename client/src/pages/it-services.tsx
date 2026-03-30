@@ -846,7 +846,7 @@ export default function ITServicesPage() {
             <Server className="h-16 w-16 mx-auto mb-6 text-primary" />
             <h1 className="text-4xl font-bold mb-4" data-testid="text-it-hero-title">IT Services for Healthcare</h1>
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Dispatch IT support to your healthcare facility. Submit tickets, track progress, and keep your technology running smoothly — just like FieldNation, built for healthcare.
+              Dispatch IT support to your healthcare facility or office. Submit tickets, track progress, and keep your technology running smoothly. This for SMBs and Facilities.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <Card>
