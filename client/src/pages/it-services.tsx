@@ -874,7 +874,7 @@ export default function ITServicesPage() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button size="lg" onClick={() => setLocation("/signup")} data-testid="button-it-onboard">
                 <Building2 className="mr-2 h-5 w-5" />
-                Onboard Your Company
+                Sign Up / Get Started
               </Button>
               <Button size="lg" variant="outline" onClick={() => setLocation("/login")} data-testid="button-it-signin">
                 <LogIn className="mr-2 h-5 w-5" />

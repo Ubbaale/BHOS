@@ -177,7 +177,7 @@ export default function ITCompanyOnboard() {
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-8">
             <Building2 className="h-12 w-12 mx-auto mb-4 text-primary" />
-            <h1 className="text-3xl font-bold mb-2" data-testid="text-onboard-title">Onboard Your Company</h1>
+            <h1 className="text-3xl font-bold mb-2" data-testid="text-onboard-title">Sign Up / Get Started</h1>
             <p className="text-muted-foreground">
               Register your healthcare company to start submitting IT service requests.
             </p>
