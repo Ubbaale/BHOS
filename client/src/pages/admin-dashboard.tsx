@@ -50,6 +50,8 @@ export default function AdminDashboard() {
   const [actionReason, setActionReason] = useState("");
   const [refundAmount, setRefundAmount] = useState<string>("");
   const [rideStatusFilter, setRideStatusFilter] = useState<string>("all");
+  const [driverDetailOpen, setDriverDetailOpen] = useState(false);
+  const [detailDriver, setDetailDriver] = useState<DriverProfile | null>(null);
 
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
     queryKey: ["/api/admin/stats"],
@@ -145,6 +147,9 @@ export default function AdminDashboard() {
       setActionDialogOpen(false);
       toast({ title: "Driver approved successfully" });
     },
+    onError: (error: any) => {
+      toast({ title: "Error approving driver", description: error.message, variant: "destructive" });
+    },
   });
 
   const rejectDriverMutation = useMutation({
@@ -158,6 +163,9 @@ export default function AdminDashboard() {
       setActionDialogOpen(false);
       setActionReason("");
       toast({ title: "Driver rejected" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error rejecting driver", description: error.message, variant: "destructive" });
     },
   });
 
@@ -523,13 +531,26 @@ export default function AdminDashboard() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setDetailDriver(driver);
+                              setDriverDetailOpen(true);
+                            }}
+                            data-testid={`button-view-driver-${driver.id}`}
+                          >
+                            <Eye className="w-4 h-4 mr-1" />
+                            Details
+                          </Button>
                           {driver.applicationStatus === "pending" && (
                             <>
                               <Button
                                 size="sm"
                                 variant="default"
                                 className="bg-green-600 hover:bg-green-700"
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setSelectedDriver(driver);
                                   setActionType("approve_driver");
                                   setActionDialogOpen(true);
@@ -542,7 +563,8 @@ export default function AdminDashboard() {
                               <Button
                                 size="sm"
                                 variant="destructive"
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setSelectedDriver(driver);
                                   setActionType("reject_driver");
                                   setActionDialogOpen(true);
@@ -1216,6 +1238,131 @@ export default function AdminDashboard() {
             >
               Save Changes
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={driverDetailOpen} onOpenChange={(open) => { setDriverDetailOpen(open); if (!open) setDetailDriver(null); }}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Car className="w-5 h-5" />
+              Driver Details — {detailDriver?.fullName}
+            </DialogTitle>
+            <DialogDescription>
+              Full onboarding and profile information
+            </DialogDescription>
+          </DialogHeader>
+          {detailDriver && (
+            <div className="space-y-6">
+              <div>
+                <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><Users className="w-4 h-4" /> Personal Info</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-md p-3">
+                  <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{detailDriver.fullName}</span></div>
+                  <div><span className="text-muted-foreground">Phone:</span> <span className="font-medium">{detailDriver.phone}</span></div>
+                  <div><span className="text-muted-foreground">Email:</span> <span className="font-medium">{detailDriver.email || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">User ID:</span> <span className="font-medium">{detailDriver.userId || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Application Status:</span> <Badge variant={detailDriver.applicationStatus === "approved" ? "default" : detailDriver.applicationStatus === "rejected" ? "destructive" : "outline"}>{detailDriver.applicationStatus}</Badge></div>
+                  <div><span className="text-muted-foreground">Account Status:</span> {getAccountStatusBadge(detailDriver.accountStatus || "active")}</div>
+                  {detailDriver.rejectionReason && <div className="col-span-2"><span className="text-muted-foreground">Rejection Reason:</span> <span className="font-medium text-red-600">{detailDriver.rejectionReason}</span></div>}
+                  {detailDriver.suspensionReason && <div className="col-span-2"><span className="text-muted-foreground">Suspension Reason:</span> <span className="font-medium text-red-600">{detailDriver.suspensionReason}</span></div>}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><Car className="w-4 h-4" /> Vehicle Info</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-md p-3">
+                  <div><span className="text-muted-foreground">Type:</span> <span className="font-medium">{detailDriver.vehicleType}</span></div>
+                  <div><span className="text-muted-foreground">Plate:</span> <span className="font-medium">{detailDriver.vehiclePlate}</span></div>
+                  <div><span className="text-muted-foreground">Year:</span> <span className="font-medium">{detailDriver.vehicleYear || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Make:</span> <span className="font-medium">{detailDriver.vehicleMake || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Model:</span> <span className="font-medium">{detailDriver.vehicleModel || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Color:</span> <span className="font-medium">{detailDriver.vehicleColor || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Wheelchair Accessible:</span> <span className="font-medium">{detailDriver.wheelchairAccessible ? "Yes" : "No"}</span></div>
+                  <div><span className="text-muted-foreground">Stretcher Capable:</span> <span className="font-medium">{detailDriver.stretcherCapable ? "Yes" : "No"}</span></div>
+                  <div><span className="text-muted-foreground">Inspection Date:</span> <span className="font-medium">{detailDriver.vehicleInspectionDate || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Inspection Expiry:</span> <span className="font-medium">{detailDriver.vehicleInspectionExpiry || "N/A"}</span></div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><Shield className="w-4 h-4" /> License & Insurance</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-md p-3">
+                  <div><span className="text-muted-foreground">License Number:</span> <span className="font-medium">{detailDriver.driversLicenseNumber || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">License State:</span> <span className="font-medium">{detailDriver.driversLicenseState || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">License Expiry:</span> <span className="font-medium">{detailDriver.driversLicenseExpiry || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Insurance Provider:</span> <span className="font-medium">{detailDriver.insuranceProvider || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Policy Number:</span> <span className="font-medium">{detailDriver.insurancePolicyNumber || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Insurance Expiry:</span> <span className="font-medium">{detailDriver.insuranceExpiry || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Background Check:</span> <span className="font-medium">{detailDriver.backgroundCheckStatus || "not_started"}</span></div>
+                  <div><span className="text-muted-foreground">Background Check Date:</span> <span className="font-medium">{detailDriver.backgroundCheckDate || "N/A"}</span></div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><FileText className="w-4 h-4" /> KYC & Documents</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-md p-3">
+                  <div><span className="text-muted-foreground">KYC Status:</span> <Badge variant={detailDriver.kycStatus === "approved" ? "default" : detailDriver.kycStatus === "rejected" ? "destructive" : "outline"}>{detailDriver.kycStatus}</Badge></div>
+                  <div><span className="text-muted-foreground">KYC Verified At:</span> <span className="font-medium">{detailDriver.kycVerifiedAt ? format(new Date(detailDriver.kycVerifiedAt), "MMM d, yyyy") : "N/A"}</span></div>
+                  {detailDriver.kycNotes && <div className="col-span-2"><span className="text-muted-foreground">KYC Notes:</span> <span className="font-medium">{detailDriver.kycNotes}</span></div>}
+                  <div><span className="text-muted-foreground">License Doc:</span> <span className="font-medium">{detailDriver.driversLicenseDoc ? "Uploaded" : "Not uploaded"}</span></div>
+                  <div><span className="text-muted-foreground">Registration Doc:</span> <span className="font-medium">{detailDriver.vehicleRegistrationDoc ? "Uploaded" : "Not uploaded"}</span></div>
+                  <div><span className="text-muted-foreground">Insurance Doc:</span> <span className="font-medium">{detailDriver.insuranceDoc ? "Uploaded" : "Not uploaded"}</span></div>
+                  <div><span className="text-muted-foreground">Profile Photo:</span> <span className="font-medium">{detailDriver.profilePhotoDoc ? "Uploaded" : "Not uploaded"}</span></div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><DollarSign className="w-4 h-4" /> Contractor & Financials</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-md p-3">
+                  <div><span className="text-muted-foreground">Contractor Onboarded:</span> <span className="font-medium">{detailDriver.isContractorOnboarded ? "Yes" : "No"}</span></div>
+                  <div><span className="text-muted-foreground">IC Agreement Signed:</span> <span className="font-medium">{detailDriver.contractorAgreementSignedAt ? format(new Date(detailDriver.contractorAgreementSignedAt), "MMM d, yyyy") : "Not signed"}</span></div>
+                  <div><span className="text-muted-foreground">SSN Last 4:</span> <span className="font-medium">{detailDriver.ssnLast4 ? `***${detailDriver.ssnLast4}` : "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Tax Classification:</span> <span className="font-medium">{detailDriver.taxClassification || "N/A"}</span></div>
+                  {detailDriver.businessName && <div><span className="text-muted-foreground">Business Name:</span> <span className="font-medium">{detailDriver.businessName}</span></div>}
+                  <div><span className="text-muted-foreground">Tax Address:</span> <span className="font-medium">{[detailDriver.taxAddress, detailDriver.taxCity, detailDriver.taxState, detailDriver.taxZip].filter(Boolean).join(", ") || "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">W-9 Received:</span> <span className="font-medium">{detailDriver.w9ReceivedAt ? format(new Date(detailDriver.w9ReceivedAt), "MMM d, yyyy") : "Not received"}</span></div>
+                  <div><span className="text-muted-foreground">Stripe Connect:</span> <span className="font-medium">{detailDriver.stripeConnectOnboarded ? "Connected" : "Not connected"}</span></div>
+                  <div><span className="text-muted-foreground">Payout Preference:</span> <span className="font-medium">{detailDriver.payoutPreference || "manual"}</span></div>
+                  <div><span className="text-muted-foreground">Total Earnings:</span> <span className="font-medium">${detailDriver.totalEarnings || "0"}</span></div>
+                  <div><span className="text-muted-foreground">Available Balance:</span> <span className="font-medium">${detailDriver.availableBalance || "0"}</span></div>
+                  <div><span className="text-muted-foreground">Pending Balance:</span> <span className="font-medium">${detailDriver.pendingBalance || "0"}</span></div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><Activity className="w-4 h-4" /> Performance</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-md p-3">
+                  <div><span className="text-muted-foreground">Rides Completed:</span> <span className="font-medium">{detailDriver.totalRidesCompleted || 0}</span></div>
+                  <div><span className="text-muted-foreground">Rides Cancelled:</span> <span className="font-medium">{detailDriver.totalRidesCancelled || 0}</span></div>
+                  <div><span className="text-muted-foreground">Average Rating:</span> <span className="font-medium">{detailDriver.averageRating ? `${parseFloat(detailDriver.averageRating).toFixed(1)} / 5` : "N/A"}</span></div>
+                  <div><span className="text-muted-foreground">Total Ratings:</span> <span className="font-medium">{detailDriver.totalRatings || 0}</span></div>
+                  <div><span className="text-muted-foreground">Available:</span> <span className="font-medium">{detailDriver.isAvailable ? "Yes" : "No"}</span></div>
+                  <div><span className="text-muted-foreground">Navigation Pref:</span> <span className="font-medium">{detailDriver.navigationPreference || "default"}</span></div>
+                  <div><span className="text-muted-foreground">Joined:</span> <span className="font-medium">{detailDriver.createdAt ? format(new Date(detailDriver.createdAt), "MMM d, yyyy") : "N/A"}</span></div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDriverDetailOpen(false)} data-testid="button-close-driver-detail">
+              Close
+            </Button>
+            {detailDriver?.applicationStatus === "pending" && (
+              <Button
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => {
+                  setDriverDetailOpen(false);
+                  setSelectedDriver(detailDriver);
+                  setActionType("approve_driver");
+                  setActionDialogOpen(true);
+                }}
+                data-testid="button-approve-from-detail"
+              >
+                <CheckCircle className="w-4 h-4 mr-1" />
+                Approve Driver
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
