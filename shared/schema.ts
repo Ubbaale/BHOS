@@ -12,7 +12,31 @@ export const users = pgTable("users", {
   tosAcceptedAt: timestamp("tos_accepted_at"),
   tosVersion: text("tos_version"),
   privacyPolicyAcceptedAt: timestamp("privacy_policy_accepted_at"),
+  permissions: text("permissions").array().default(sql`'{}'::text[]`),
 });
+
+export const ADMIN_PERMISSIONS = [
+  "dashboard",
+  "rides",
+  "drivers",
+  "patients",
+  "earnings",
+  "accounts",
+  "incidents",
+  "it_services",
+  "dispatch",
+] as const;
+
+export type AdminPermission = typeof ADMIN_PERMISSIONS[number];
+
+export const PERMISSION_PRESETS: Record<string, { label: string; description: string; permissions: AdminPermission[] }> = {
+  full_admin: { label: "Full Admin", description: "Access to everything", permissions: [...ADMIN_PERMISSIONS] },
+  finance: { label: "Finance", description: "Earnings and payment data only", permissions: ["dashboard", "earnings"] },
+  dispatcher: { label: "Dispatcher", description: "Rides and driver management", permissions: ["dashboard", "rides", "drivers", "dispatch"] },
+  support: { label: "Support", description: "Incidents, patients, and IT complaints", permissions: ["dashboard", "patients", "incidents", "it_services"] },
+  accounts_manager: { label: "Accounts Manager", description: "User account management", permissions: ["dashboard", "accounts"] },
+  custom: { label: "Custom", description: "Choose specific permissions", permissions: [] },
+};
 
 export const emailVerificationCodes = pgTable("email_verification_codes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
