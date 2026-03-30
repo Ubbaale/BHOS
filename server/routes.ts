@@ -758,25 +758,23 @@ export async function registerRoutes(
         }
       }
 
-      // Regenerate session to prevent session fixation attacks
-      const oldSession = req.session;
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error("Session regeneration error:", err);
-          return res.status(500).json({ message: "Login failed" });
-        }
-        
-        // Set session data on new session
-        req.session.userId = user.id;
-        req.session.username = user.username;
-        req.session.role = user.role || "user";
-        if (driverId) {
-          req.session.driverId = driverId;
-        }
+      // Set session data
+      req.session.userId = user.id;
+      req.session.username = user.username;
+      req.session.role = user.role || "user";
+      if (driverId) {
+        req.session.driverId = driverId;
+      }
 
-        // Clear rate limiting on successful login
-        if ((req as any).loginRateLimitKey) {
-          clearLoginAttempts((req as any).loginRateLimitKey);
+      // Clear rate limiting on successful login
+      if ((req as any).loginRateLimitKey) {
+        clearLoginAttempts((req as any).loginRateLimitKey);
+      }
+
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ message: "Login failed" });
         }
 
         res.json({ 
