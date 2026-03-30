@@ -584,6 +584,104 @@ const etaColors: Record<string, string> = {
   on_site: "bg-green-100 text-green-700",
 };
 
+const COMPLAINT_CATEGORY_LABELS: Record<string, string> = {
+  time_padding: "Time Padding",
+  no_show: "No Show",
+  poor_work: "Poor Quality Work",
+  unprofessional: "Unprofessional Behavior",
+  damage: "Property Damage",
+  safety_violation: "Safety Violation",
+  misrepresentation: "Misrepresentation of Skills",
+  other: "Other",
+};
+
+function ReportTechDialog({ techUserId, ticketId }: { techUserId: string; ticketId: string }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState("");
+  const [reason, setReason] = useState("");
+  const [description, setDescription] = useState("");
+
+  const reportMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", `/api/it/tech/${techUserId}/report`, {
+        ticketId,
+        category,
+        reason,
+        description,
+      }),
+    onSuccess: () => {
+      toast({ title: "Complaint submitted", description: "Your report has been filed and will be reviewed by an admin." });
+      setOpen(false);
+      setCategory("");
+      setReason("");
+      setDescription("");
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to submit report", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="destructive" data-testid="button-report-tech">
+          <AlertCircle className="h-3 w-3 mr-1" /> Report Tech
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Report Technician</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">Category</label>
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger data-testid="select-complaint-category">
+                <SelectValue placeholder="Select issue type" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(COMPLAINT_CATEGORY_LABELS).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Brief Reason</label>
+            <Input
+              placeholder="e.g., Tech padded 2 hours of idle time"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              data-testid="input-complaint-reason"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Detailed Description</label>
+            <Textarea
+              placeholder="Describe what happened in detail..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+              data-testid="input-complaint-description"
+            />
+          </div>
+          <Button
+            onClick={() => reportMutation.mutate()}
+            disabled={!category || !reason || !description || reportMutation.isPending}
+            variant="destructive"
+            className="w-full"
+            data-testid="button-submit-complaint"
+          >
+            {reportMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+            Submit Complaint
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function TechCertificationsViewer({ ticketAssignedTo }: { ticketAssignedTo: string }) {
   const { data: techProfiles } = useQuery<any[]>({
     queryKey: ["/api/it/admin/techs"],
@@ -922,6 +1020,12 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
 
           {ticket.assignedTo && (
             <TechCertificationsViewer ticketAssignedTo={ticket.assignedTo} />
+          )}
+
+          {ticket.assignedTo && (ticket.status === "in_progress" || ticket.status === "completed") && (
+            <div className="flex justify-end">
+              <ReportTechDialog techUserId={ticket.assignedTo} ticketId={ticket.id} />
+            </div>
           )}
 
           {(ticket.payRate || ticket.totalPay) && (

@@ -15,7 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { format } from "date-fns";
-import type { Ride, DriverProfile, PatientAccount, IncidentReport } from "@shared/schema";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import type { Ride, DriverProfile, PatientAccount, IncidentReport, ItTechComplaint } from "@shared/schema";
 import {
   Car, Users, AlertTriangle, DollarSign, Activity,
   Ban, CheckCircle, XCircle, Eye, Clock, Phone, Mail,
@@ -68,6 +69,55 @@ export default function AdminDashboard() {
 
   const { data: allIncidents = [] } = useQuery<IncidentReport[]>({
     queryKey: ["/api/admin/incidents"],
+  });
+
+  const { data: allComplaints = [] } = useQuery<any[]>({
+    queryKey: ["/api/it/admin/complaints"],
+  });
+
+  const { data: allItTechs = [] } = useQuery<any[]>({
+    queryKey: ["/api/it/admin/techs"],
+  });
+
+  const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
+  const [complaintReviewStatus, setComplaintReviewStatus] = useState("");
+  const [complaintAdminNotes, setComplaintAdminNotes] = useState("");
+  const [enforcementDialogOpen, setEnforcementDialogOpen] = useState(false);
+  const [selectedTechForAction, setSelectedTechForAction] = useState<any>(null);
+  const [enforcementAction, setEnforcementAction] = useState("");
+  const [enforcementReason, setEnforcementReason] = useState("");
+  const [suspendDays, setSuspendDays] = useState("");
+
+  const reviewComplaintMutation = useMutation({
+    mutationFn: async ({ id, status, adminNotes }: { id: string; status: string; adminNotes: string }) => {
+      const response = await apiRequest("POST", `/api/it/admin/complaints/${id}/review`, { status, adminNotes });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/admin/complaints"] });
+      toast({ title: "Complaint reviewed" });
+      setSelectedComplaint(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const enforceTechMutation = useMutation({
+    mutationFn: async ({ techId, action, reason, suspendDays, notes }: { techId: string; action: string; reason: string; suspendDays?: string; notes?: string }) => {
+      const response = await apiRequest("POST", `/api/it/admin/techs/${techId}/enforce`, { action, reason, suspendDays, notes });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/admin/techs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/admin/complaints"] });
+      toast({ title: "Enforcement action applied" });
+      setEnforcementDialogOpen(false);
+      setSelectedTechForAction(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const updateDriverStatusMutation = useMutation({
@@ -285,6 +335,9 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="incidents" data-testid="tab-incidents">
             Incidents ({allIncidents.length})
+          </TabsTrigger>
+          <TabsTrigger value="it-complaints" data-testid="tab-it-complaints">
+            IT Complaints ({allComplaints.length})
           </TabsTrigger>
         </TabsList>
 
@@ -635,7 +688,243 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* IT Complaints Tab */}
+        <TabsContent value="it-complaints">
+          <Card>
+            <CardHeader>
+              <CardTitle>IT Tech Complaints</CardTitle>
+              <CardDescription>Review and manage complaints filed against IT technicians</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Tech</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Reporter</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allComplaints.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        No complaints filed yet
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    allComplaints.map((complaint: any) => (
+                      <TableRow key={complaint.id} data-testid={`row-complaint-${complaint.id}`}>
+                        <TableCell className="text-xs">
+                          {complaint.createdAt ? format(new Date(complaint.createdAt), "MMM d, yyyy") : "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium text-sm">{complaint.techName}</div>
+                          <Badge variant="outline" className="text-xs mt-1">
+                            {complaint.techAccountStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-xs">
+                            {complaint.category?.replace("_", " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate text-sm">
+                          {complaint.reason}
+                        </TableCell>
+                        <TableCell className="text-sm">{complaint.reporterName}</TableCell>
+                        <TableCell>
+                          <Badge variant={
+                            complaint.status === "pending" ? "default" :
+                            complaint.status === "verified" ? "destructive" :
+                            complaint.status === "dismissed" ? "secondary" : "outline"
+                          } className="text-xs">
+                            {complaint.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedComplaint(complaint);
+                                setComplaintReviewStatus("");
+                                setComplaintAdminNotes("");
+                              }}
+                              data-testid={`button-review-complaint-${complaint.id}`}
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                            {complaint.techProfileId && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  const tech = allItTechs.find((t: any) => t.id === complaint.techProfileId);
+                                  if (tech) {
+                                    setSelectedTechForAction(tech);
+                                    setEnforcementAction("");
+                                    setEnforcementReason(complaint.reason || "");
+                                    setEnforcementDialogOpen(true);
+                                  }
+                                }}
+                                data-testid={`button-enforce-tech-${complaint.id}`}
+                              >
+                                <Ban className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      {/* Complaint Review Dialog */}
+      <Dialog open={!!selectedComplaint} onOpenChange={(open) => !open && setSelectedComplaint(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Review Complaint</DialogTitle>
+            <DialogDescription>
+              Filed against: {selectedComplaint?.techName} | Category: {selectedComplaint?.category?.replace("_", " ")}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedComplaint && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs text-muted-foreground">Reason</Label>
+                <p className="text-sm font-medium">{selectedComplaint.reason}</p>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Description</Label>
+                <p className="text-sm">{selectedComplaint.description}</p>
+              </div>
+              {selectedComplaint.evidence && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Evidence</Label>
+                  <p className="text-sm">{selectedComplaint.evidence}</p>
+                </div>
+              )}
+              {selectedComplaint.ticketTitle && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Related Ticket</Label>
+                  <p className="text-sm">{selectedComplaint.ticketTitle}</p>
+                </div>
+              )}
+              <div>
+                <Label>Review Decision</Label>
+                <Select value={complaintReviewStatus} onValueChange={setComplaintReviewStatus}>
+                  <SelectTrigger data-testid="select-complaint-review-status">
+                    <SelectValue placeholder="Select decision" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="verified">Verified - Complaint is valid</SelectItem>
+                    <SelectItem value="dismissed">Dismissed - Not valid</SelectItem>
+                    <SelectItem value="investigating">Investigating - Need more info</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Admin Notes</Label>
+                <Textarea
+                  value={complaintAdminNotes}
+                  onChange={(e) => setComplaintAdminNotes(e.target.value)}
+                  placeholder="Add notes about this review..."
+                  data-testid="input-complaint-admin-notes"
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={() => reviewComplaintMutation.mutate({
+                    id: selectedComplaint.id,
+                    status: complaintReviewStatus,
+                    adminNotes: complaintAdminNotes,
+                  })}
+                  disabled={!complaintReviewStatus || reviewComplaintMutation.isPending}
+                  data-testid="button-submit-complaint-review"
+                >
+                  Submit Review
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Tech Enforcement Dialog */}
+      <Dialog open={enforcementDialogOpen} onOpenChange={setEnforcementDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Take Action Against Tech</DialogTitle>
+            <DialogDescription>
+              Tech: {selectedTechForAction?.fullName} | Current Status: {selectedTechForAction?.accountStatus || "active"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Action</Label>
+              <Select value={enforcementAction} onValueChange={setEnforcementAction}>
+                <SelectTrigger data-testid="select-enforcement-action">
+                  <SelectValue placeholder="Select action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="warn">Warn - Issue a warning</SelectItem>
+                  <SelectItem value="suspend">Suspend - Temporarily block</SelectItem>
+                  <SelectItem value="ban">Ban - Permanently deactivate</SelectItem>
+                  <SelectItem value="reinstate">Reinstate - Restore to active</SelectItem>
+                  <SelectItem value="remove_hold">Remove Hold - Clear auto-hold</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {enforcementAction === "suspend" && (
+              <div>
+                <Label>Suspension Duration (days, leave empty for indefinite)</Label>
+                <Input
+                  type="number"
+                  value={suspendDays}
+                  onChange={(e) => setSuspendDays(e.target.value)}
+                  placeholder="e.g., 7"
+                  data-testid="input-suspend-days"
+                />
+              </div>
+            )}
+            <div>
+              <Label>Reason</Label>
+              <Textarea
+                value={enforcementReason}
+                onChange={(e) => setEnforcementReason(e.target.value)}
+                placeholder="Reason for this action..."
+                data-testid="input-enforcement-reason"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant={enforcementAction === "ban" ? "destructive" : "default"}
+                onClick={() => enforceTechMutation.mutate({
+                  techId: selectedTechForAction?.id,
+                  action: enforcementAction,
+                  reason: enforcementReason,
+                  suspendDays: enforcementAction === "suspend" ? suspendDays : undefined,
+                })}
+                disabled={!enforcementAction || !enforcementReason || enforceTechMutation.isPending}
+                data-testid="button-submit-enforcement"
+              >
+                {enforceTechMutation.isPending ? "Applying..." : `Apply ${enforcementAction?.replace("_", " ")}`}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Action Dialog */}
       <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>

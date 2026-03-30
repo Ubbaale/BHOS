@@ -928,6 +928,14 @@ export const itTechProfiles = pgTable("it_tech_profiles", {
   taxZip: text("tax_zip"),
   w9ReceivedAt: timestamp("w9_received_at"),
   certificationDocs: jsonb("certification_docs").default([]),
+  accountStatus: text("account_status").default("active"),
+  complaintCount: integer("complaint_count").default(0),
+  verifiedComplaintCount: integer("verified_complaint_count").default(0),
+  suspendedAt: timestamp("suspended_at"),
+  suspendedUntil: timestamp("suspended_until"),
+  suspensionReason: text("suspension_reason"),
+  bannedAt: timestamp("banned_at"),
+  banReason: text("ban_reason"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1033,3 +1041,37 @@ export const itTechContractorAgreements = pgTable("it_tech_contractor_agreements
 });
 
 export type ItTechContractorAgreement = typeof itTechContractorAgreements.$inferSelect;
+
+export const itTechComplaints = pgTable("it_tech_complaints", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  techUserId: varchar("tech_user_id").references(() => users.id).notNull(),
+  techProfileId: varchar("tech_profile_id").references(() => itTechProfiles.id).notNull(),
+  ticketId: varchar("ticket_id").references(() => itServiceTickets.id),
+  reportedBy: varchar("reported_by").references(() => users.id).notNull(),
+  reason: text("reason").notNull(),
+  category: text("category").notNull(),
+  description: text("description").notNull(),
+  evidence: text("evidence"),
+  status: text("status").default("pending"),
+  adminReviewedBy: varchar("admin_reviewed_by").references(() => users.id),
+  adminNotes: text("admin_notes"),
+  adminAction: text("admin_action"),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ItTechComplaint = typeof itTechComplaints.$inferSelect;
+
+export const itTechEnforcementLog = pgTable("it_tech_enforcement_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  techUserId: varchar("tech_user_id").references(() => users.id).notNull(),
+  techProfileId: varchar("tech_profile_id").references(() => itTechProfiles.id).notNull(),
+  action: text("action").notNull(),
+  reason: text("reason").notNull(),
+  previousStatus: text("previous_status"),
+  newStatus: text("new_status"),
+  performedBy: varchar("performed_by").references(() => users.id).notNull(),
+  complaintId: varchar("complaint_id").references(() => itTechComplaints.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});

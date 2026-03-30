@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements, itTechComplaints, itTechEnforcementLog } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -6542,6 +6542,26 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
         return res.status(403).json({ message: "Your application must be approved first" });
       }
 
+      const blockedStatuses = ["on_hold", "suspended", "banned"];
+      if (profile.accountStatus && blockedStatuses.includes(profile.accountStatus)) {
+        const statusMessages: Record<string, string> = {
+          on_hold: "Your account is on hold pending review. You cannot accept new tickets until the review is complete.",
+          suspended: "Your account is currently suspended. Please contact support.",
+          banned: "Your account has been permanently deactivated.",
+        };
+        return res.status(403).json({ message: statusMessages[profile.accountStatus] || "Account restricted" });
+      }
+
+      if (profile.suspendedUntil && new Date(profile.suspendedUntil) > new Date()) {
+        return res.status(403).json({ message: `Your account is suspended until ${new Date(profile.suspendedUntil).toLocaleDateString()}` });
+      }
+
+      if (profile.suspendedUntil && new Date(profile.suspendedUntil) <= new Date() && profile.accountStatus === "suspended") {
+        await db.update(itTechProfiles)
+          .set({ accountStatus: "active", suspendedAt: null, suspendedUntil: null, suspensionReason: null })
+          .where(eq(itTechProfiles.id, profile.id));
+      }
+
       const [updated] = await db.update(itServiceTickets)
         .set({ assignedTo: userId, status: "in_progress", updatedAt: new Date() })
         .where(and(
@@ -7803,6 +7823,265 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     } catch (error) {
       console.error("Error getting contractor status:", error);
       res.status(500).json({ message: "Failed to get contractor status" });
+    }
+  });
+
+  // ==========================================
+  // IT Tech: Complaint / Report System
+  // ==========================================
+  const COMPLAINT_CATEGORIES = ["time_padding", "no_show", "poor_work", "unprofessional", "damage", "safety_violation", "misrepresentation", "other"];
+  const AUTO_HOLD_THRESHOLD = 3;
+
+  app.post("/api/it/tech/:techUserId/report", requireAuth, async (req, res) => {
+    try {
+      const reporterId = (req as any).session?.userId;
+      const { techUserId } = req.params;
+      const { ticketId, reason, category, description, evidence } = req.body;
+
+      if (!reason || !category || !description || !ticketId) {
+        return res.status(400).json({ message: "Reason, category, description, and ticketId are required" });
+      }
+      if (!COMPLAINT_CATEGORIES.includes(category)) {
+        return res.status(400).json({ message: `Invalid category. Must be one of: ${COMPLAINT_CATEGORIES.join(", ")}` });
+      }
+
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, techUserId));
+      if (!techProfile) return res.status(404).json({ message: "Tech not found" });
+
+      if (reporterId === techUserId) {
+        return res.status(400).json({ message: "You cannot report yourself" });
+      }
+
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, ticketId));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.createdBy !== reporterId) {
+        return res.status(403).json({ message: "You can only report techs on your own tickets" });
+      }
+      if (ticket.assignedTo !== techUserId) {
+        return res.status(400).json({ message: "This tech is not assigned to this ticket" });
+      }
+
+      const [complaint] = await db.insert(itTechComplaints).values({
+        techUserId,
+        techProfileId: techProfile.id,
+        ticketId: ticketId || null,
+        reportedBy: reporterId,
+        reason,
+        category,
+        description,
+        evidence: evidence || null,
+        status: "pending",
+      }).returning();
+
+      const newComplaintCount = (techProfile.complaintCount || 0) + 1;
+      const updateData: any = { complaintCount: newComplaintCount };
+
+      if (newComplaintCount >= AUTO_HOLD_THRESHOLD && techProfile.accountStatus === "active") {
+        updateData.accountStatus = "on_hold";
+        updateData.suspendedAt = new Date();
+        updateData.suspensionReason = `Auto-hold: ${newComplaintCount} complaints received (threshold: ${AUTO_HOLD_THRESHOLD})`;
+
+        await db.insert(itTechEnforcementLog).values({
+          techUserId,
+          techProfileId: techProfile.id,
+          action: "auto_hold",
+          reason: `Auto-hold triggered: ${newComplaintCount} complaints reached threshold of ${AUTO_HOLD_THRESHOLD}`,
+          previousStatus: techProfile.accountStatus || "active",
+          newStatus: "on_hold",
+          performedBy: "system" as any,
+          complaintId: complaint.id,
+        });
+      }
+
+      await db.update(itTechProfiles)
+        .set(updateData)
+        .where(eq(itTechProfiles.id, techProfile.id));
+
+      res.json({ message: "Complaint submitted successfully", complaint });
+    } catch (error) {
+      console.error("Error reporting tech:", error);
+      res.status(500).json({ message: "Failed to submit complaint" });
+    }
+  });
+
+  app.get("/api/it/admin/complaints", requireAdmin, async (_req, res) => {
+    try {
+      const allComplaints = await db.select().from(itTechComplaints).orderBy(desc(itTechComplaints.createdAt));
+
+      const enriched = await Promise.all(allComplaints.map(async (c) => {
+        const [reporter] = await db.select().from(users).where(eq(users.id, c.reportedBy));
+        const [tech] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.id, c.techProfileId));
+        let ticketTitle = null;
+        if (c.ticketId) {
+          const [t] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, c.ticketId));
+          ticketTitle = t ? `${t.ticketNumber}: ${t.title}` : null;
+        }
+        return { ...c, reporterName: reporter?.username || "Unknown", techName: tech?.fullName || "Unknown", techAccountStatus: tech?.accountStatus || "unknown", ticketTitle };
+      }));
+
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error getting complaints:", error);
+      res.status(500).json({ message: "Failed to get complaints" });
+    }
+  });
+
+  app.post("/api/it/admin/complaints/:id/review", requireAdmin, async (req, res) => {
+    try {
+      const adminId = (req as any).session?.userId;
+      const { status, adminNotes, adminAction } = req.body;
+
+      if (!status || !["verified", "dismissed", "investigating"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status. Must be verified, dismissed, or investigating" });
+      }
+
+      const [complaint] = await db.select().from(itTechComplaints).where(eq(itTechComplaints.id, req.params.id));
+      if (!complaint) return res.status(404).json({ message: "Complaint not found" });
+
+      const [updated] = await db.update(itTechComplaints)
+        .set({
+          status,
+          adminReviewedBy: adminId,
+          adminNotes: adminNotes || null,
+          adminAction: adminAction || null,
+          reviewedAt: new Date(),
+        })
+        .where(eq(itTechComplaints.id, req.params.id))
+        .returning();
+
+      if (status === "verified") {
+        const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.id, complaint.techProfileId));
+        if (techProfile) {
+          await db.update(itTechProfiles)
+            .set({ verifiedComplaintCount: (techProfile.verifiedComplaintCount || 0) + 1 })
+            .where(eq(itTechProfiles.id, techProfile.id));
+        }
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error reviewing complaint:", error);
+      res.status(500).json({ message: "Failed to review complaint" });
+    }
+  });
+
+  app.post("/api/it/admin/techs/:id/enforce", requireAdmin, async (req, res) => {
+    try {
+      const adminId = (req as any).session?.userId;
+      const { action, reason, suspendDays, notes } = req.body;
+
+      if (!action || !["warn", "suspend", "ban", "reinstate", "remove_hold"].includes(action)) {
+        return res.status(400).json({ message: "Invalid action. Must be warn, suspend, ban, reinstate, or remove_hold" });
+      }
+      if (!reason) return res.status(400).json({ message: "Reason is required" });
+
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.id, req.params.id));
+      if (!techProfile) return res.status(404).json({ message: "Tech profile not found" });
+
+      const previousStatus = techProfile.accountStatus || "active";
+      let newStatus = previousStatus;
+      const updateData: any = {};
+
+      if (action === "warn") {
+        newStatus = "warning";
+        updateData.accountStatus = "warning";
+      } else if (action === "suspend") {
+        newStatus = "suspended";
+        updateData.accountStatus = "suspended";
+        updateData.suspendedAt = new Date();
+        updateData.suspensionReason = reason;
+        if (suspendDays) {
+          const until = new Date();
+          until.setDate(until.getDate() + parseInt(suspendDays));
+          updateData.suspendedUntil = until;
+        }
+      } else if (action === "ban") {
+        newStatus = "banned";
+        updateData.accountStatus = "banned";
+        updateData.bannedAt = new Date();
+        updateData.banReason = reason;
+        updateData.isActive = false;
+      } else if (action === "reinstate" || action === "remove_hold") {
+        newStatus = "active";
+        updateData.accountStatus = "active";
+        updateData.suspendedAt = null;
+        updateData.suspendedUntil = null;
+        updateData.suspensionReason = null;
+      }
+
+      await db.update(itTechProfiles)
+        .set(updateData)
+        .where(eq(itTechProfiles.id, techProfile.id));
+
+      await db.insert(itTechEnforcementLog).values({
+        techUserId: techProfile.userId,
+        techProfileId: techProfile.id,
+        action,
+        reason,
+        previousStatus,
+        newStatus,
+        performedBy: adminId,
+        notes: notes || null,
+      });
+
+      const [updated] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.id, req.params.id));
+      res.json({ message: `Tech ${action} action applied`, tech: updated });
+    } catch (error) {
+      console.error("Error enforcing tech:", error);
+      res.status(500).json({ message: "Failed to enforce action" });
+    }
+  });
+
+  app.get("/api/it/admin/techs/:id/enforcement-history", requireAdmin, async (req, res) => {
+    try {
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.id, req.params.id));
+      if (!techProfile) return res.status(404).json({ message: "Tech not found" });
+
+      const history = await db.select().from(itTechEnforcementLog)
+        .where(eq(itTechEnforcementLog.techProfileId, req.params.id))
+        .orderBy(desc(itTechEnforcementLog.createdAt));
+
+      const complaints = await db.select().from(itTechComplaints)
+        .where(eq(itTechComplaints.techProfileId, req.params.id))
+        .orderBy(desc(itTechComplaints.createdAt));
+
+      res.json({ techProfile, enforcementHistory: history, complaints });
+    } catch (error) {
+      console.error("Error getting enforcement history:", error);
+      res.status(500).json({ message: "Failed to get enforcement history" });
+    }
+  });
+
+  app.get("/api/it/tech/account-status", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [techProfile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, userId));
+      if (!techProfile) return res.status(404).json({ message: "Tech profile not found" });
+
+      const complaints = await db.select().from(itTechComplaints)
+        .where(eq(itTechComplaints.techUserId, userId))
+        .orderBy(desc(itTechComplaints.createdAt));
+
+      res.json({
+        accountStatus: techProfile.accountStatus || "active",
+        complaintCount: techProfile.complaintCount || 0,
+        verifiedComplaintCount: techProfile.verifiedComplaintCount || 0,
+        suspendedAt: techProfile.suspendedAt,
+        suspendedUntil: techProfile.suspendedUntil,
+        suspensionReason: techProfile.suspensionReason,
+        bannedAt: techProfile.bannedAt,
+        banReason: techProfile.banReason,
+        complaints: complaints.map(c => ({
+          id: c.id,
+          category: c.category,
+          reason: c.reason,
+          status: c.status,
+          createdAt: c.createdAt,
+        })),
+      });
+    } catch (error) {
+      console.error("Error getting account status:", error);
+      res.status(500).json({ message: "Failed to get account status" });
     }
   });
 

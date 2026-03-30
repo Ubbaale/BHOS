@@ -65,6 +65,7 @@ import {
   ShieldCheck,
   FileCheck,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { ItServiceTicket, ItTechProfile } from "@shared/schema";
 
 const categoryIcons: Record<string, typeof Monitor> = {
@@ -1335,6 +1336,36 @@ export default function ITTechDashboardPage() {
             <CheckCircle2 className="h-3 w-3 mr-1" /> Approved
           </Badge>
         </div>
+
+        {profile.accountStatus && profile.accountStatus !== "active" && (
+          <Alert variant="destructive" className="mb-4" data-testid="alert-account-status">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              {profile.accountStatus === "on_hold" && (
+                <span>Your account is <strong>on hold</strong> pending admin review. You cannot accept new tickets until the review is complete.
+                  {profile.suspensionReason && <> Reason: {profile.suspensionReason}</>}
+                </span>
+              )}
+              {profile.accountStatus === "warning" && (
+                <span>Your account has received a <strong>warning</strong>. Further complaints may result in suspension.
+                  {profile.suspensionReason && <> Reason: {profile.suspensionReason}</>}
+                </span>
+              )}
+              {profile.accountStatus === "suspended" && (
+                <span>Your account is <strong>suspended</strong>.
+                  {profile.suspendedUntil && <> Suspension ends: {new Date(profile.suspendedUntil).toLocaleDateString()}.</>}
+                  {profile.suspensionReason && <> Reason: {profile.suspensionReason}</>}
+                  {" "}Please contact support if you believe this is an error.
+                </span>
+              )}
+              {profile.accountStatus === "banned" && (
+                <span>Your account has been <strong>permanently deactivated</strong>.
+                  {profile.banReason && <> Reason: {profile.banReason}</>}
+                </span>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
           <Card data-testid="stat-tech-available">
