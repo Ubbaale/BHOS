@@ -13,7 +13,7 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
-import { users } from "@shared/schema";
+import { users, itCompanies, itTechProfiles } from "@shared/schema";
 
 const app = express();
 const httpServer = createServer(app);
@@ -282,6 +282,8 @@ app.use((req, res, next) => {
           { username: "admin@carehubapp.com", password: "Admin123!", role: "admin" },
           { username: "driver@test.com", password: "TestDriver123!", role: "driver" },
           { username: "patient@test.com", password: "TestPatient123!", role: "patient" },
+          { username: "itcompany@test.com", password: "TestCompany123!", role: "user" },
+          { username: "ittech@test.com", password: "TestTech123!", role: "it_tech" },
         ];
         for (const acct of accounts) {
           const hash = await bcrypt.hash(acct.password, 10);
@@ -294,6 +296,50 @@ app.use((req, res, next) => {
             await storage.updateUserPassword(existing.id, hash);
             await db.update(users).set({ emailVerified: true }).where(eq(users.id, existing.id));
             log(`${acct.role} account password reset: ${acct.username}`);
+          }
+        }
+
+        const itCompanyUser = await storage.getUserByUsername("itcompany@test.com");
+        if (itCompanyUser) {
+          const existingCompany = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, itCompanyUser.id)).limit(1);
+          if (existingCompany.length === 0) {
+            await db.insert(itCompanies).values({
+              ownerId: itCompanyUser.id,
+              companyName: "Test Healthcare IT Solutions",
+              contactEmail: "itcompany@test.com",
+              contactPhone: "555-100-2000",
+              address: "123 Medical Center Dr",
+              city: "Chicago",
+              state: "IL",
+              zipCode: "60601",
+              industry: "healthcare",
+              companySize: "11-50",
+            });
+            log("IT company profile created for itcompany@test.com");
+          }
+        }
+
+        const itTechUser = await storage.getUserByUsername("ittech@test.com");
+        if (itTechUser) {
+          const existingTech = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, itTechUser.id)).limit(1);
+          if (existingTech.length === 0) {
+            await db.insert(itTechProfiles).values({
+              userId: itTechUser.id,
+              fullName: "Test Technician",
+              email: "ittech@test.com",
+              phone: "555-200-3000",
+              city: "Chicago",
+              state: "IL",
+              zipCode: "60601",
+              skills: ["Network", "Hardware", "EHR System", "Printer"],
+              certifications: ["CompTIA A+", "Network+"],
+              experienceYears: "3-5",
+              bio: "Experienced healthcare IT technician",
+              hourlyRate: "45",
+              applicationStatus: "approved",
+              backgroundCheckStatus: "passed",
+            });
+            log("IT tech profile created for ittech@test.com");
           }
         }
       } catch (err) {

@@ -450,6 +450,62 @@ export async function registerRoutes(
         results.push("Admin account already exists: admin@carehubapp.com");
       }
       
+      const existingItCompany = await storage.getUserByUsername("itcompany@test.com");
+      if (!existingItCompany) {
+        const companyHash = await bcrypt.hash("TestCompany123!", 10);
+        const companyUser = await storage.createUser({
+          username: "itcompany@test.com",
+          password: companyHash,
+          role: "user"
+        });
+        await db.update(users).set({ emailVerified: true }).where(eq(users.id, companyUser.id));
+        await db.insert(itCompanies).values({
+          ownerId: companyUser.id,
+          companyName: "Test Healthcare IT Solutions",
+          contactEmail: "itcompany@test.com",
+          contactPhone: "555-100-2000",
+          address: "123 Medical Center Dr",
+          city: "Chicago",
+          state: "IL",
+          zipCode: "60601",
+          industry: "healthcare",
+          companySize: "11-50",
+        });
+        results.push("IT Company account created: itcompany@test.com / TestCompany123!");
+      } else {
+        results.push("IT Company account already exists: itcompany@test.com");
+      }
+
+      const existingItTech = await storage.getUserByUsername("ittech@test.com");
+      if (!existingItTech) {
+        const techHash = await bcrypt.hash("TestTech123!", 10);
+        const techUser = await storage.createUser({
+          username: "ittech@test.com",
+          password: techHash,
+          role: "it_tech"
+        });
+        await db.update(users).set({ emailVerified: true }).where(eq(users.id, techUser.id));
+        await db.insert(itTechProfiles).values({
+          userId: techUser.id,
+          fullName: "Test Technician",
+          email: "ittech@test.com",
+          phone: "555-200-3000",
+          city: "Chicago",
+          state: "IL",
+          zipCode: "60601",
+          skills: ["Network", "Hardware", "EHR System", "Printer"],
+          certifications: ["CompTIA A+", "Network+"],
+          experienceYears: "3-5",
+          bio: "Experienced healthcare IT technician",
+          hourlyRate: "45",
+          applicationStatus: "approved",
+          backgroundCheckStatus: "passed",
+        });
+        results.push("IT Tech account created: ittech@test.com / TestTech123!");
+      } else {
+        results.push("IT Tech account already exists: ittech@test.com");
+      }
+
       res.json({ 
         success: true, 
         message: "Test accounts setup complete",
@@ -457,7 +513,9 @@ export async function registerRoutes(
         credentials: {
           admin: { username: "admin@carehubapp.com", password: "Admin123!" },
           driver: { username: "driver@test.com", password: "TestDriver123!" },
-          patient: { username: "patient@test.com", password: "TestPatient123!" }
+          patient: { username: "patient@test.com", password: "TestPatient123!" },
+          itCompany: { username: "itcompany@test.com", password: "TestCompany123!" },
+          itTech: { username: "ittech@test.com", password: "TestTech123!" }
         }
       });
     } catch (error) {
