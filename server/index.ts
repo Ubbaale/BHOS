@@ -183,10 +183,23 @@ if (isProduction && process.env.DATABASE_URL) {
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
   });
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS "user_sessions" (
+      "sid" varchar NOT NULL COLLATE "default",
+      "sess" json NOT NULL,
+      "expire" timestamp(6) NOT NULL,
+      CONSTRAINT "user_sessions_pkey" PRIMARY KEY ("sid")
+    ) WITH (OIDS=FALSE);
+    CREATE INDEX IF NOT EXISTS "IDX_user_sessions_expire" ON "user_sessions" ("expire");
+  `).then(() => {
+    console.log("Session table ensured");
+  }).catch((err: Error) => {
+    console.error("Session table creation error:", err.message);
+  });
   sessionStore = new PgSession({
     pool,
     tableName: 'user_sessions',
-    createTableIfMissing: true,
+    createTableIfMissing: false,
   });
   console.log("Using PostgreSQL session store for production security");
 }
