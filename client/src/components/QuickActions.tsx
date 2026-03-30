@@ -76,22 +76,22 @@ export default function QuickActions() {
   if (showMobileUI) {
     return (
       <section id="quick-actions" className="py-6 px-4">
-        <div className="flex justify-center gap-3">
+        <div className="flex flex-wrap justify-center gap-3 max-w-xs mx-auto">
           {actions.map((action, index) => {
             const Icon = action.icon;
             return (
               <TileLink key={index} action={action}>
                 <div
                   className={cn(
-                    "w-40 h-40 flex flex-col items-center justify-center rounded-xl text-white touch-feedback",
+                    "w-[5.5rem] h-[5.5rem] flex flex-col items-center justify-center rounded-xl text-white touch-feedback",
                     `bg-gradient-to-br ${action.gradient}`
                   )}
                   data-testid={action.testId}
                 >
-                  <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mb-2">
-                    <Icon className="w-6 h-6" />
+                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mb-1.5">
+                    <Icon className="w-5 h-5" />
                   </div>
-                  <span className="text-xs font-semibold text-center leading-tight px-2">{action.title}</span>
+                  <span className="text-[10px] font-semibold text-center leading-tight px-1">{action.title}</span>
                 </div>
               </TileLink>
             );
