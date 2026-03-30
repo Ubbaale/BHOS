@@ -44,6 +44,11 @@ import {
   DollarSign,
   TrendingUp,
   StarIcon,
+  Car,
+  XCircle,
+  AlertTriangle,
+  MapPinned,
+  Receipt,
 } from "lucide-react";
 import type { ItServiceTicket, ItTechProfile } from "@shared/schema";
 
@@ -209,6 +214,163 @@ function DeliverableDialog({ ticketId, onAdded }: { ticketId: string; onAdded: (
   );
 }
 
+function MileageDialog({ ticketId, onSubmitted }: { ticketId: string; onSubmitted: () => void }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [miles, setMiles] = useState("");
+
+  const submitMileage = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/it/tech/mileage/${ticketId}`, { miles: parseFloat(miles) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tech/my-jobs"] });
+      toast({ title: "Mileage logged", description: `${miles} miles @ $0.67/mile recorded` });
+      setOpen(false);
+      setMiles("");
+      onSubmitted();
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" data-testid={`button-mileage-${ticketId}`}>
+          <Car className="h-3 w-3 mr-1" /> Log Mileage
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Log Travel Mileage</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">Enter one-way driving distance. Mileage is reimbursed at $0.67/mile (IRS standard rate).</p>
+        <div className="space-y-3">
+          <Input
+            type="number"
+            placeholder="Miles driven (one way)"
+            value={miles}
+            onChange={(e) => setMiles(e.target.value)}
+            min="0"
+            step="0.1"
+            data-testid="input-mileage-miles"
+          />
+          {miles && parseFloat(miles) > 0 && (
+            <p className="text-sm font-medium text-green-600">
+              Mileage pay: ${(parseFloat(miles) * 0.67).toFixed(2)}
+            </p>
+          )}
+          <Button onClick={() => submitMileage.mutate()} disabled={!miles || parseFloat(miles) <= 0 || submitMileage.isPending} data-testid="button-submit-mileage">
+            {submitMileage.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Submit Mileage
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DelayDialog({ ticketId, onSubmitted }: { ticketId: string; onSubmitted: () => void }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [minutes, setMinutes] = useState("");
+
+  const reportDelay = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/it/tech/report-delay/${ticketId}`, { reason, minutes: parseInt(minutes) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tech/my-jobs"] });
+      toast({ title: "Delay reported", description: "Company has been notified" });
+      setOpen(false);
+      setReason("");
+      setMinutes("");
+      onSubmitted();
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" data-testid={`button-report-delay-${ticketId}`}>
+          <AlertTriangle className="h-3 w-3 mr-1" /> Report Delay
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Report On-Site Delay</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">Report unexpected delays (waiting for access, equipment issues, scope change). Delay compensation is calculated at 50% of your hourly rate.</p>
+        <div className="space-y-3">
+          <Input
+            type="number"
+            placeholder="Delay duration (minutes)"
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+            min="1"
+            data-testid="input-delay-minutes"
+          />
+          <Textarea
+            placeholder="Reason for delay (e.g., waiting for server room access, additional scope discovered)"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            data-testid="input-delay-reason"
+          />
+          <Button onClick={() => reportDelay.mutate()} disabled={!reason || !minutes || parseInt(minutes) < 1 || reportDelay.isPending} data-testid="button-submit-delay">
+            {reportDelay.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Submit Delay Report
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CancelJobDialog({ ticketId, onCancelled }: { ticketId: string; onCancelled: () => void }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const cancelJob = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/it/tickets/${ticketId}/cancel`, { reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tech/my-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tech/available-tickets"] });
+      toast({ title: "Job released", description: "The ticket has been returned to the open pool." });
+      setOpen(false);
+      setReason("");
+      onCancelled();
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-600" data-testid={`button-cancel-job-${ticketId}`}>
+          <XCircle className="h-3 w-3 mr-1" /> Release Job
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Release This Job</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">If you can't complete this job (scheduling conflict, can't make it on time, etc.), release it back to the open pool so another tech can pick it up.</p>
+        <div className="space-y-3">
+          <Textarea
+            placeholder="Reason for releasing (e.g., schedule conflict with another ticket, unable to travel)"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            data-testid="input-cancel-reason"
+          />
+          <Button variant="destructive" onClick={() => cancelJob.mutate()} disabled={!reason || cancelJob.isPending} data-testid="button-confirm-cancel">
+            {cancelJob.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Release Job
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
   const { toast } = useToast();
   const CategoryIcon = categoryIcons[ticket.category] || Wrench;
@@ -224,10 +386,36 @@ function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
   });
 
   const checkIn = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/it/tech/checkin/${ticket.id}`),
-    onSuccess: () => {
+    mutationFn: async () => {
+      let body: Record<string, number> = {};
+      try {
+        if (navigator.geolocation) {
+          const pos = await new Promise<GeolocationPosition>((res, rej) =>
+            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000, enableHighAccuracy: true })
+          );
+          body = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        }
+      } catch {}
+      const resp = await fetch(`/api/it/tech/checkin/${ticket.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || resp.statusText);
+      }
+      return resp.json();
+    },
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/it/tech/my-jobs"] });
-      toast({ title: "Checked in!", description: "Your time is now being tracked." });
+      const locMsg = data?.locationVerified
+        ? "GPS verified - you're on site!"
+        : data?.distanceMeters != null
+          ? `GPS recorded (${Math.round(data.distanceMeters)}m from site)`
+          : "GPS not available";
+      toast({ title: "Checked in!", description: `Your time is now being tracked. ${locMsg}` });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -236,7 +424,7 @@ function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
     mutationFn: () => apiRequest("POST", `/api/it/tech/checkout/${ticket.id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/it/tech/my-jobs"] });
-      toast({ title: "Checked out!", description: "Hours logged and payment calculated." });
+      toast({ title: "Checked out!", description: "Hours logged and payment calculated. Awaiting company approval." });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -266,6 +454,11 @@ function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
                 <Badge className={etaColors[ticket.etaStatus || "none"]} variant="secondary">
                   {etaLabels[ticket.etaStatus || "none"]}
                 </Badge>
+                {(ticket as any).locationVerified && (
+                  <Badge className="bg-green-100 text-green-700" variant="secondary">
+                    <MapPinned className="h-3 w-3 mr-1" /> GPS Verified
+                  </Badge>
+                )}
               </div>
               <p className="font-medium">{ticket.title}</p>
               <p className="text-sm text-muted-foreground line-clamp-2">{ticket.description}</p>
@@ -286,12 +479,46 @@ function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
           </div>
         )}
 
+        {((ticket as any).mileagePay || (ticket as any).delayCompensation) && (
+          <div className="border rounded-lg p-3 bg-blue-50 dark:bg-blue-950 text-sm space-y-1">
+            <p className="font-medium text-xs mb-1 flex items-center gap-1"><Receipt className="h-3 w-3" /> Additional Compensation</p>
+            {(ticket as any).travelDistance && (
+              <p className="flex items-center gap-2"><Car className="h-4 w-4 text-blue-600" /> Mileage: {Number((ticket as any).travelDistance).toFixed(1)} mi × $0.67 = ${Number((ticket as any).mileagePay).toFixed(2)}</p>
+            )}
+            {(ticket as any).delayMinutes && (
+              <p className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-orange-500" /> Delay: {(ticket as any).delayMinutes}min — ${Number((ticket as any).delayCompensation).toFixed(2)}</p>
+            )}
+          </div>
+        )}
+
         {ticket.checkInTime && (
           <div className="border rounded-lg p-3 bg-muted/50 text-sm space-y-1">
             <p className="flex items-center gap-2"><LogIn className="h-4 w-4 text-green-600" /> Checked in: {new Date(ticket.checkInTime).toLocaleString()}</p>
+            {(ticket as any).checkInDistance != null && (
+              <p className="flex items-center gap-2 text-xs">
+                <MapPinned className="h-3 w-3" />
+                {(ticket as any).locationVerified
+                  ? <span className="text-green-600">On-site verified ({Math.round(Number((ticket as any).checkInDistance))}m from site)</span>
+                  : <span className="text-orange-500">Location: {Math.round(Number((ticket as any).checkInDistance))}m from site (not verified — over 500m)</span>
+                }
+              </p>
+            )}
             {ticket.checkOutTime && <p className="flex items-center gap-2"><LogOut className="h-4 w-4 text-blue-600" /> Checked out: {new Date(ticket.checkOutTime).toLocaleString()}</p>}
             {ticket.hoursWorked && <p className="flex items-center gap-2"><Clock className="h-4 w-4" /> Hours: {Number(ticket.hoursWorked).toFixed(2)}</p>}
-            {ticket.techPayout && <p className="flex items-center gap-2 font-medium"><DollarSign className="h-4 w-4 text-green-600" /> Your payout: ${Number(ticket.techPayout).toFixed(2)}</p>}
+            {ticket.techPayout && (
+              <div className="border-t pt-1 mt-1">
+                <p className="flex items-center gap-2 font-medium"><DollarSign className="h-4 w-4 text-green-600" /> Your payout: ${Number(ticket.techPayout).toFixed(2)}</p>
+                {(ticket as any).companyApproval === "pending" && (
+                  <p className="text-xs text-orange-500 flex items-center gap-1 mt-1"><Clock className="h-3 w-3" /> Awaiting company approval</p>
+                )}
+                {(ticket as any).companyApproval === "approved" && (
+                  <p className="text-xs text-green-600 flex items-center gap-1 mt-1"><CheckCircle2 className="h-3 w-3" /> Company approved</p>
+                )}
+                {(ticket as any).companyApproval === "disputed" && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1"><AlertCircle className="h-3 w-3" /> Disputed: {(ticket as any).companyApprovalNotes}</p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -315,14 +542,20 @@ function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
           {!ticket.checkInTime && (
             <Button size="sm" onClick={() => checkIn.mutate()} disabled={checkIn.isPending} data-testid={`button-checkin-${ticket.id}`}>
               {checkIn.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <LogIn className="h-3 w-3 mr-1" />}
-              Check In
+              Check In (GPS)
             </Button>
           )}
+          {!ticket.checkOutTime && (
+            <MileageDialog ticketId={ticket.id} onSubmitted={() => {}} />
+          )}
           {ticket.checkInTime && !ticket.checkOutTime && (
-            <Button size="sm" variant="secondary" onClick={() => checkOut.mutate()} disabled={checkOut.isPending} data-testid={`button-checkout-${ticket.id}`}>
-              {checkOut.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <LogOut className="h-3 w-3 mr-1" />}
-              Check Out
-            </Button>
+            <>
+              <DelayDialog ticketId={ticket.id} onSubmitted={() => {}} />
+              <Button size="sm" variant="secondary" onClick={() => checkOut.mutate()} disabled={checkOut.isPending} data-testid={`button-checkout-${ticket.id}`}>
+                {checkOut.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <LogOut className="h-3 w-3 mr-1" />}
+                Check Out
+              </Button>
+            </>
           )}
           <DeliverableDialog ticketId={ticket.id} onAdded={() => queryClient.invalidateQueries({ queryKey: ["/api/it/tech/my-jobs"] })} />
           {ticket.checkOutTime && (
@@ -330,6 +563,9 @@ function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
               {completeTicket.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
               Mark Complete
             </Button>
+          )}
+          {!ticket.checkInTime && (
+            <CancelJobDialog ticketId={ticket.id} onCancelled={() => {}} />
           )}
         </div>
       </CardContent>

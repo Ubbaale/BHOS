@@ -6643,8 +6643,30 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
         ? now > new Date(`${new Date(ticket.scheduledDate).toISOString().split('T')[0]}T${ticket.scheduledTime}:00`)
         : false;
 
+      const { lat, lng } = req.body || {};
+      let distanceMeters: number | null = null;
+      let locationVerified = false;
+
+      if (lat && lng && ticket.siteLat && ticket.siteLng) {
+        const toRad = (d: number) => d * Math.PI / 180;
+        const R = 6371000;
+        const dLat = toRad(parseFloat(ticket.siteLat) - lat);
+        const dLng = toRad(parseFloat(ticket.siteLng) - lng);
+        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat)) * Math.cos(toRad(parseFloat(ticket.siteLat))) * Math.sin(dLng/2)**2;
+        distanceMeters = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        locationVerified = distanceMeters <= 500;
+      }
+
+      const setData: Record<string, any> = {
+        checkInTime: now, etaStatus: "on_site", updatedAt: now,
+      };
+      if (lat) setData.checkInLat = String(lat);
+      if (lng) setData.checkInLng = String(lng);
+      if (distanceMeters !== null) setData.checkInDistance = String(Math.round(distanceMeters));
+      setData.locationVerified = locationVerified;
+
       const [updated] = await db.update(itServiceTickets)
-        .set({ checkInTime: now, etaStatus: "on_site", updatedAt: now })
+        .set(setData)
         .where(eq(itServiceTickets.id, req.params.id))
         .returning();
 
@@ -6654,18 +6676,18 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
           onTimeCheckIns: (profile.onTimeCheckIns || 0) + (isLate ? 0 : 1),
           lateCheckIns: (profile.lateCheckIns || 0) + (isLate ? 1 : 0),
         };
-        const totalCheckins = (updateData.onTimeCheckIns + (profile.lateCheckIns || 0)) + (isLate ? 0 : 0);
         const totalAll = (profile.onTimeCheckIns || 0) + (profile.lateCheckIns || 0) + 1;
         updateData.timelinessScore = String(Math.round(((profile.onTimeCheckIns || 0) + (isLate ? 0 : 1)) / totalAll * 100));
         await db.update(itTechProfiles).set(updateData).where(eq(itTechProfiles.userId, userId));
       }
 
+      const locationNote = locationVerified ? " (GPS verified)" : (lat ? " (GPS unverified - too far)" : " (no GPS)");
       notifyItCompanyOfTicketUpdate(
         ticket.createdBy, ticket.ticketNumber, ticket.title,
-        "tech checked in" + (isLate ? " (late)" : ""), ""
+        "tech checked in" + (isLate ? " (late)" : "") + locationNote, ""
       ).catch(err => console.error("Failed to notify check-in:", err));
 
-      res.json({ ...updated, isLate });
+      res.json({ ...updated, isLate, distanceMeters, locationVerified });
     } catch (error) {
       console.error("Check-in error:", error);
       res.status(500).json({ message: "Failed to check in" });
@@ -6685,12 +6707,16 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       const hoursWorked = ((now.getTime() - new Date(ticket.checkInTime).getTime()) / 3600000).toFixed(2);
 
       const payRate = ticket.payRate ? parseFloat(ticket.payRate) : 0;
-      let totalPay = 0;
+      let laborPay = 0;
       if (ticket.payType === "fixed") {
-        totalPay = payRate;
+        laborPay = payRate;
       } else {
-        totalPay = payRate * parseFloat(hoursWorked);
+        laborPay = payRate * parseFloat(hoursWorked);
       }
+
+      const mileagePay = ticket.mileagePay ? parseFloat(ticket.mileagePay) : 0;
+      const delayCmp = ticket.delayCompensation ? parseFloat(ticket.delayCompensation) : 0;
+      const totalPay = Math.round((laborPay + mileagePay + delayCmp) * 100) / 100;
       const platformFee = Math.round(totalPay * 0.10 * 100) / 100;
       const techPayout = Math.round((totalPay - platformFee) * 100) / 100;
 
@@ -6702,6 +6728,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
           platformFee: String(platformFee.toFixed(2)),
           techPayout: String(techPayout.toFixed(2)),
           paymentStatus: totalPay > 0 ? "pending" : "unpaid",
+          companyApproval: "pending",
           updatedAt: now,
         })
         .where(eq(itServiceTickets.id, req.params.id))
@@ -6713,6 +6740,11 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
           .set({ totalEarnings: String((parseFloat(profile.totalEarnings || "0") + techPayout).toFixed(2)) })
           .where(eq(itTechProfiles.userId, userId));
       }
+
+      notifyItCompanyOfTicketUpdate(
+        ticket.createdBy, ticket.ticketNumber, ticket.title,
+        "tech checked out - awaiting your approval", ""
+      ).catch(err => console.error("Failed to notify checkout:", err));
 
       res.json(updated);
     } catch (error) {
@@ -6753,6 +6785,254 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     } catch (error) {
       console.error("Add deliverable error:", error);
       res.status(500).json({ message: "Failed to add deliverable" });
+    }
+  });
+
+  // ==========================================
+  // IT: Cancellation with Compensation
+  // ==========================================
+  app.post("/api/it/tickets/:id/cancel", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+
+      const isOwner = ticket.createdBy === userId;
+      const isTech = ticket.assignedTo === userId;
+      if (!isOwner && !isTech) return res.status(403).json({ message: "Not authorized" });
+
+      if (["resolved", "closed", "cancelled"].includes(ticket.status)) {
+        return res.status(400).json({ message: "Ticket is already " + ticket.status });
+      }
+
+      const { reason } = req.body;
+      if (!reason) return res.status(400).json({ message: "Cancellation reason is required" });
+
+      const now = new Date();
+      const setData: Record<string, any> = {
+        status: "cancelled",
+        cancellationReason: reason,
+        cancelledBy: userId,
+        cancelledAt: now,
+        updatedAt: now,
+      };
+
+      if (isOwner && ticket.assignedTo) {
+        const payRate = ticket.payRate ? parseFloat(ticket.payRate) : 0;
+        let cancellationFee = 0;
+
+        if (ticket.checkInTime) {
+          const hoursOnSite = (now.getTime() - new Date(ticket.checkInTime).getTime()) / 3600000;
+          cancellationFee = Math.round(payRate * Math.max(hoursOnSite, 1) * 100) / 100;
+        } else if (ticket.etaStatus === "en_route" || ticket.etaStatus === "arriving") {
+          cancellationFee = Math.round(payRate * 0.5 * 100) / 100;
+        } else {
+          const scheduledTime = ticket.scheduledDate ? new Date(ticket.scheduledDate) : null;
+          if (scheduledTime) {
+            const hoursUntil = (scheduledTime.getTime() - now.getTime()) / 3600000;
+            if (hoursUntil < 2) {
+              cancellationFee = Math.round(payRate * 0.25 * 100) / 100;
+            }
+          }
+        }
+
+        const mileagePay = ticket.mileagePay ? parseFloat(ticket.mileagePay) : 0;
+        cancellationFee += mileagePay;
+
+        setData.cancellationFee = String(cancellationFee.toFixed(2));
+
+        if (cancellationFee > 0) {
+          const platformFee = Math.round(cancellationFee * 0.10 * 100) / 100;
+          setData.totalPay = String(cancellationFee.toFixed(2));
+          setData.platformFee = String(platformFee.toFixed(2));
+          setData.techPayout = String((cancellationFee - platformFee).toFixed(2));
+          setData.paymentStatus = "pending";
+
+          const [profile] = await db.select().from(itTechProfiles).where(eq(itTechProfiles.userId, ticket.assignedTo));
+          if (profile) {
+            const newEarnings = parseFloat(profile.totalEarnings || "0") + (cancellationFee - platformFee);
+            await db.update(itTechProfiles)
+              .set({ totalEarnings: String(newEarnings.toFixed(2)) })
+              .where(eq(itTechProfiles.userId, ticket.assignedTo));
+          }
+        }
+      }
+
+      if (isTech && !isOwner) {
+        setData.assignedTo = null;
+        setData.status = "open";
+        setData.etaStatus = "none";
+        setData.cancelledAt = now;
+        setData.cancellationReason = reason;
+        setData.cancelledBy = userId;
+      }
+
+      const [updated] = await db.update(itServiceTickets)
+        .set(setData)
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      const cancellerType = isOwner ? "Company" : "Tech";
+      notifyItCompanyOfTicketUpdate(
+        isOwner ? (ticket.assignedTo || ticket.createdBy) : ticket.createdBy,
+        ticket.ticketNumber, ticket.title,
+        `cancelled by ${cancellerType}: ${reason}` + (setData.cancellationFee ? ` (Compensation: $${setData.cancellationFee})` : ""),
+        ""
+      ).catch(err => console.error("Failed to notify cancellation:", err));
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Cancel IT ticket error:", error);
+      res.status(500).json({ message: "Failed to cancel ticket" });
+    }
+  });
+
+  // ==========================================
+  // IT: Company Approval of Completed Work
+  // ==========================================
+  app.post("/api/it/tickets/:id/approve", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.createdBy !== userId) return res.status(403).json({ message: "Not authorized" });
+
+      if (ticket.companyApproval === "approved") {
+        return res.status(400).json({ message: "Already approved" });
+      }
+
+      const { notes } = req.body || {};
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          companyApproval: "approved",
+          companyApprovalAt: new Date(),
+          companyApprovalNotes: notes || null,
+          paymentStatus: "approved",
+          status: ticket.status === "resolved" ? "closed" : ticket.status,
+          closedAt: ticket.status === "resolved" ? new Date() : ticket.closedAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      if (ticket.assignedTo) {
+        notifyItCompanyOfTicketUpdate(
+          ticket.assignedTo, ticket.ticketNumber, ticket.title,
+          "work approved by company - payment authorized", ""
+        ).catch(err => console.error("Failed to notify approval:", err));
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Approve IT ticket error:", error);
+      res.status(500).json({ message: "Failed to approve" });
+    }
+  });
+
+  app.post("/api/it/tickets/:id/dispute", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.createdBy !== userId) return res.status(403).json({ message: "Not authorized" });
+
+      const { reason } = req.body;
+      if (!reason) return res.status(400).json({ message: "Dispute reason is required" });
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          companyApproval: "disputed",
+          companyApprovalNotes: reason,
+          paymentStatus: "disputed",
+          updatedAt: new Date(),
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      if (ticket.assignedTo) {
+        notifyItCompanyOfTicketUpdate(
+          ticket.assignedTo, ticket.ticketNumber, ticket.title,
+          "work disputed by company: " + reason, ""
+        ).catch(err => console.error("Failed to notify dispute:", err));
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Dispute IT ticket error:", error);
+      res.status(500).json({ message: "Failed to dispute" });
+    }
+  });
+
+  // ==========================================
+  // IT: Delay Reporting & Compensation
+  // ==========================================
+  app.post("/api/it/tech/report-delay/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.assignedTo !== userId) return res.status(403).json({ message: "Not assigned to you" });
+
+      const { reason, minutes } = req.body;
+      if (!reason) return res.status(400).json({ message: "Delay reason is required" });
+      if (!minutes || minutes < 1) return res.status(400).json({ message: "Delay minutes must be at least 1" });
+
+      const payRate = ticket.payRate ? parseFloat(ticket.payRate) : 0;
+      const delayHours = minutes / 60;
+      const delayCompensation = Math.round(payRate * delayHours * 0.5 * 100) / 100;
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          delayReason: reason,
+          delayMinutes: minutes,
+          delayCompensation: String(delayCompensation.toFixed(2)),
+          updatedAt: new Date(),
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      notifyItCompanyOfTicketUpdate(
+        ticket.createdBy, ticket.ticketNumber, ticket.title,
+        `tech reported ${minutes}min delay: ${reason} (compensation: $${delayCompensation.toFixed(2)})`, ""
+      ).catch(err => console.error("Failed to notify delay:", err));
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Report delay error:", error);
+      res.status(500).json({ message: "Failed to report delay" });
+    }
+  });
+
+  // ==========================================
+  // IT: Mileage / Travel Distance
+  // ==========================================
+  app.post("/api/it/tech/mileage/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.assignedTo !== userId) return res.status(403).json({ message: "Not assigned to you" });
+
+      const { miles, fromAddress } = req.body;
+      if (!miles || miles < 0) return res.status(400).json({ message: "Miles must be a positive number" });
+
+      const mileageRate = ticket.mileageRate ? parseFloat(ticket.mileageRate) : 0.67;
+      const mileagePay = Math.round(miles * mileageRate * 100) / 100;
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          travelDistance: String(miles),
+          mileageRate: String(mileageRate),
+          mileagePay: String(mileagePay.toFixed(2)),
+          updatedAt: new Date(),
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      res.json({ ...updated, mileageBreakdown: { miles, rate: mileageRate, total: mileagePay } });
+    } catch (error) {
+      console.error("Set mileage error:", error);
+      res.status(500).json({ message: "Failed to set mileage" });
     }
   });
 

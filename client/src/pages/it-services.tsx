@@ -68,6 +68,8 @@ import {
   LogOut,
   Save,
   FolderOpen,
+  CheckCircle,
+  Car,
 } from "lucide-react";
 import type { ItServiceTicket, ItTicketNote } from "@shared/schema";
 
@@ -540,6 +542,37 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
     },
   });
 
+  const approveWork = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/it/tickets/${ticketId}/approve`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets"] });
+      toast({ title: "Work approved!", description: "Payment has been authorized." });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const disputeWork = useMutation({
+    mutationFn: (reason: string) => apiRequest("POST", `/api/it/tickets/${ticketId}/dispute`, { reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets"] });
+      toast({ title: "Work disputed", description: "The tech has been notified." });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const cancelTicket = useMutation({
+    mutationFn: (reason: string) => apiRequest("POST", `/api/it/tickets/${ticketId}/cancel`, { reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tickets/stats/summary"] });
+      toast({ title: "Ticket cancelled" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
   if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   if (!data) return <Alert><AlertDescription>Ticket not found</AlertDescription></Alert>;
 
@@ -584,9 +617,18 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
                 {categoryLabels[ticket.category] || ticket.category}
               </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {(ticket.status === "resolved" || ticket.status === "closed") && !ticket.customerRating && (
                 <RateTicketDialog ticketId={ticketId} onRated={() => queryClient.invalidateQueries({ queryKey: ["/api/it/tickets", ticketId] })} />
+              )}
+              {(ticket.status === "open" || ticket.status === "in_progress") && (
+                <Button size="sm" variant="destructive" onClick={() => {
+                  const reason = prompt("Why are you cancelling this ticket?");
+                  if (reason) cancelTicket.mutate(reason);
+                }} disabled={cancelTicket.isPending} data-testid="button-cancel-ticket">
+                  {cancelTicket.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
+                  Cancel
+                </Button>
               )}
               {(ticket.status === "open" || ticket.status === "resolved") && (
                 <Button size="sm" variant="outline" onClick={() => updateStatus.mutate("closed")} data-testid="button-close-ticket">
@@ -656,9 +698,22 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                   {ticket.checkInTime && (
-                    <div className="flex items-center gap-2">
-                      <LogIn className="h-4 w-4 text-green-600 shrink-0" />
-                      <span>Checked in: {new Date(ticket.checkInTime).toLocaleString()}</span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <LogIn className="h-4 w-4 text-green-600 shrink-0" />
+                        <span>Checked in: {new Date(ticket.checkInTime).toLocaleString()}</span>
+                      </div>
+                      {(ticket as any).locationVerified !== undefined && (
+                        <div className="flex items-center gap-1 mt-1 ml-6 text-xs">
+                          {(ticket as any).locationVerified ? (
+                            <span className="text-green-600 flex items-center gap-1"><CheckCircle className="h-3 w-3" /> GPS verified on-site ({Math.round(Number((ticket as any).checkInDistance || 0))}m)</span>
+                          ) : (ticket as any).checkInDistance ? (
+                            <span className="text-orange-500 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> GPS: {Math.round(Number((ticket as any).checkInDistance))}m from site (not verified)</span>
+                          ) : (
+                            <span className="text-gray-400 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> No GPS data</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                   {ticket.checkOutTime && (
@@ -674,6 +729,25 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
                     </div>
                   )}
                 </div>
+                {(ticket as any).delayMinutes && (
+                  <div className="border-t mt-3 pt-2 text-sm">
+                    <p className="flex items-center gap-2 text-orange-600">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      Delay reported: {(ticket as any).delayMinutes} minutes — {(ticket as any).delayReason}
+                    </p>
+                    {(ticket as any).delayCompensation && (
+                      <p className="text-xs text-muted-foreground ml-6 mt-1">Delay compensation: ${Number((ticket as any).delayCompensation).toFixed(2)}</p>
+                    )}
+                  </div>
+                )}
+                {(ticket as any).travelDistance && (
+                  <div className="border-t mt-3 pt-2 text-sm">
+                    <p className="flex items-center gap-2 text-blue-600">
+                      <MapPin className="h-4 w-4 shrink-0" />
+                      Travel: {Number((ticket as any).travelDistance).toFixed(1)} miles × $0.67/mi = ${Number((ticket as any).mileagePay || 0).toFixed(2)}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -689,6 +763,18 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Rate</span>
                       <span>${ticket.payRate}/{ticket.payType === "fixed" ? "flat" : "hr"}</span>
+                    </div>
+                  )}
+                  {(ticket as any).mileagePay && parseFloat((ticket as any).mileagePay) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Mileage ({Number((ticket as any).travelDistance).toFixed(1)} mi)</span>
+                      <span>${Number((ticket as any).mileagePay).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {(ticket as any).delayCompensation && parseFloat((ticket as any).delayCompensation) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Delay compensation</span>
+                      <span>${Number((ticket as any).delayCompensation).toFixed(2)}</span>
                     </div>
                   )}
                   {ticket.totalPay && (
@@ -710,11 +796,56 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack: () => vo
                   {ticket.paymentStatus && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Payment status</span>
-                      <Badge variant="outline" className={ticket.paymentStatus === "paid" ? "text-green-600" : "text-yellow-600"}>
+                      <Badge variant="outline" className={
+                        ticket.paymentStatus === "paid" || ticket.paymentStatus === "approved" ? "text-green-600" :
+                        ticket.paymentStatus === "disputed" ? "text-red-600" : "text-yellow-600"
+                      }>
                         {ticket.paymentStatus}
                       </Badge>
                     </div>
                   )}
+                </div>
+                {(ticket as any).companyApproval === "pending" && (
+                  <div className="border-t mt-3 pt-3 space-y-2">
+                    <p className="text-sm font-medium">Approve this work?</p>
+                    <p className="text-xs text-muted-foreground">Review the proof of work below and approve to authorize payment, or dispute if there are issues.</p>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => approveWork.mutate()} disabled={approveWork.isPending} data-testid="button-approve-work">
+                        {approveWork.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle className="h-3 w-3 mr-1" />}
+                        Approve & Pay
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => {
+                        const reason = prompt("What's the issue with this work?");
+                        if (reason) disputeWork.mutate(reason);
+                      }} disabled={disputeWork.isPending} data-testid="button-dispute-work">
+                        Dispute
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {(ticket as any).companyApproval === "approved" && (
+                  <div className="border-t mt-3 pt-2">
+                    <p className="text-xs text-green-600 flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Work approved {(ticket as any).companyApprovalAt && `on ${new Date((ticket as any).companyApprovalAt).toLocaleDateString()}`}</p>
+                  </div>
+                )}
+                {(ticket as any).companyApproval === "disputed" && (
+                  <div className="border-t mt-3 pt-2">
+                    <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Disputed: {(ticket as any).companyApprovalNotes}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {(ticket as any).cancellationFee && (
+            <Card className="bg-red-50 dark:bg-red-950">
+              <CardContent className="p-4">
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-2 text-red-700 dark:text-red-300">
+                  <AlertCircle className="h-4 w-4" /> Cancellation
+                </h4>
+                <div className="text-sm space-y-1">
+                  <p>Reason: {(ticket as any).cancellationReason}</p>
+                  <p>Cancellation fee: <span className="font-medium">${Number((ticket as any).cancellationFee).toFixed(2)}</span></p>
                 </div>
               </CardContent>
             </Card>
