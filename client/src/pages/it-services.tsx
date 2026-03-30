@@ -871,7 +871,7 @@ export default function ITServicesPage() {
                 </CardContent>
               </Card>
             </div>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button size="lg" onClick={() => setLocation("/signup")} data-testid="button-it-onboard">
                 <Building2 className="mr-2 h-5 w-5" />
                 Sign Up / Get Started
@@ -879,15 +879,6 @@ export default function ITServicesPage() {
               <Button size="lg" variant="outline" onClick={() => setLocation("/login")} data-testid="button-it-signin">
                 <LogIn className="mr-2 h-5 w-5" />
                 Sign In
-              </Button>
-            </div>
-            <div className="border-t pt-6">
-              <p className="text-sm text-muted-foreground mb-3">Nurses & Facilities: Submit dispatch requests from the CareHub mobile app</p>
-              <Button size="lg" variant="secondary" asChild data-testid="button-it-mobile-app">
-                <a href="https://app.carehubapp.com/#/login" target="_blank" rel="noopener noreferrer">
-                  <Smartphone className="mr-2 h-5 w-5" />
-                  Open CareHub App
-                </a>
               </Button>
             </div>
           </div>
