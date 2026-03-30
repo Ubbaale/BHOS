@@ -280,7 +280,7 @@ export default function SignupPage() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <img src={logoImg} alt="CareHub" className="h-16 w-16 rounded-full object-cover" />
+              <img src={logoImg} alt="CareHub" className="h-16 w-auto object-contain" />
             </div>
             <CardTitle className="text-2xl" data-testid="text-signup-title">Create Your Account</CardTitle>
             <CardDescription>Join CareHub to access IT services and more</CardDescription>
