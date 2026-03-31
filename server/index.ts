@@ -381,7 +381,7 @@ app.use((req, res, next) => {
               stretcherCapable: false,
               isAvailable: true,
               applicationStatus: "approved",
-              kycStatus: "verified",
+              kycStatus: "approved",
               driversLicenseNumber: "D400-1234-5678",
               driversLicenseExpiry: "2028-12-31",
               driversLicenseState: "IL",
@@ -397,6 +397,8 @@ app.use((req, res, next) => {
               isContractorOnboarded: true,
               taxClassification: "individual",
               accountStatus: "active",
+              patientTransportEnabled: true,
+              medicalCourierEnabled: true,
             });
             log("Driver profile created for driver@test.com");
           }

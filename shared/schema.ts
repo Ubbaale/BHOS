@@ -144,6 +144,8 @@ export const driverProfiles = pgTable("driver_profiles", {
   wheelchairAccessible: boolean("wheelchair_accessible").default(false),
   stretcherCapable: boolean("stretcher_capable").default(false),
   isAvailable: boolean("is_available").default(true),
+  patientTransportEnabled: boolean("patient_transport_enabled").default(true),
+  medicalCourierEnabled: boolean("medical_courier_enabled").default(false),
   currentLat: numeric("current_lat"),
   currentLng: numeric("current_lng"),
   applicationStatus: text("application_status").notNull().default("pending"),
@@ -246,6 +248,8 @@ export const insertDriverProfileSchema = z.object({
   taxCity: z.string().optional(),
   taxState: z.string().optional(),
   taxZip: z.string().optional(),
+  patientTransportEnabled: z.boolean().optional(),
+  medicalCourierEnabled: z.boolean().optional(),
 });
 
 export const kycStatuses = ["not_submitted", "pending_review", "approved", "rejected"] as const;

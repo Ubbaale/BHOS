@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { User, Phone, Mail, Car, FileCheck, CheckCircle2, Clock, Lock, Eye, EyeOff } from "lucide-react";
+import { User, Phone, Mail, Car, FileCheck, CheckCircle2, Clock, Lock, Eye, EyeOff, Package } from "lucide-react";
 
 const passwordSchema = z.string()
   .min(6, "Password must be at least 6 characters")
@@ -49,10 +49,15 @@ const driverApplicationSchema = z.object({
   vehiclePlate: z.string().min(1, "License plate is required"),
   wheelchairAccessible: z.boolean().default(false),
   stretcherCapable: z.boolean().default(false),
+  patientTransportEnabled: z.boolean().default(true),
+  medicalCourierEnabled: z.boolean().default(false),
   tosAccepted: z.literal(true, { errorMap: () => ({ message: "You must accept the Terms of Service and Privacy Policy" }) }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
+}).refine((data) => data.patientTransportEnabled || data.medicalCourierEnabled, {
+  message: "You must enable at least one service",
+  path: ["patientTransportEnabled"],
 });
 
 type DriverApplicationFormData = z.infer<typeof driverApplicationSchema>;
@@ -85,6 +90,8 @@ export default function DriverApply() {
       vehiclePlate: "",
       wheelchairAccessible: false,
       stretcherCapable: false,
+      patientTransportEnabled: true,
+      medicalCourierEnabled: false,
       tosAccepted: false as unknown as true,
     },
   });
@@ -420,6 +427,79 @@ export default function DriverApply() {
                                 </FormDescription>
                               </div>
                             </label>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <FormLabel>Services You Want to Provide</FormLabel>
+                    <p className="text-sm text-muted-foreground">
+                      As a CareHub driver, you can offer one or both services. The same onboarding, background check, and compliance apply to all.
+                    </p>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="patientTransportEnabled"
+                        render={({ field }) => (
+                          <FormItem>
+                            <label
+                              className={`flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors active:bg-accent/50 ${
+                                field.value ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30" : "border-border hover:bg-accent/30"
+                              }`}
+                            >
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                  data-testid="checkbox-patient-transport"
+                                  className="mt-0.5"
+                                />
+                              </FormControl>
+                              <div className="space-y-1 leading-none">
+                                <FormLabel className="cursor-pointer flex items-center gap-2">
+                                  <Car className="w-4 h-4 text-blue-600" />
+                                  Patient Transportation (NEMT)
+                                </FormLabel>
+                                <FormDescription>
+                                  Drive patients to medical appointments, dialysis, therapy, and hospital discharges
+                                </FormDescription>
+                              </div>
+                            </label>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="medicalCourierEnabled"
+                        render={({ field }) => (
+                          <FormItem>
+                            <label
+                              className={`flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors active:bg-accent/50 ${
+                                field.value ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : "border-border hover:bg-accent/30"
+                              }`}
+                            >
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                  data-testid="checkbox-medical-courier"
+                                  className="mt-0.5"
+                                />
+                              </FormControl>
+                              <div className="space-y-1 leading-none">
+                                <FormLabel className="cursor-pointer flex items-center gap-2">
+                                  <Package className="w-4 h-4 text-emerald-600" />
+                                  Medical Courier Delivery
+                                </FormLabel>
+                                <FormDescription>
+                                  Deliver medications, lab samples, medical equipment, and documents between facilities
+                                </FormDescription>
+                              </div>
+                            </label>
+                            <FormMessage />
                           </FormItem>
                         )}
                       />

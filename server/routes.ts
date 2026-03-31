@@ -1564,6 +1564,11 @@ export async function registerRoutes(
         return mobileError(res, 403, "Only drivers can accept rides", "NOT_DRIVER");
       }
 
+      const [driverProfile] = await db.select().from(driverProfiles).where(eq(driverProfiles.id, mobileUser.driverId));
+      if (driverProfile && driverProfile.patientTransportEnabled === false) {
+        return mobileError(res, 403, "Patient transportation is not enabled on your profile", "SERVICE_DISABLED");
+      }
+
       const rideId = parseInt(req.params.id);
       const ride = await storage.getRide(rideId);
       if (!ride) {
@@ -2819,6 +2824,10 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Driver not found" });
       }
 
+      if (driverProfile.patientTransportEnabled === false) {
+        return res.status(403).json({ message: "Patient transportation is not enabled on your profile. Enable it in your dashboard settings." });
+      }
+
       const compliance = await checkDriverCompliance(driverId);
       if (!compliance.compliant) {
         return res.status(403).json({ 
@@ -3566,6 +3575,38 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating driver availability:", error);
       res.status(500).json({ message: "Failed to update driver availability" });
+    }
+  });
+
+  app.patch("/api/drivers/:id/services", requireDriver, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const userId = (req as any).session?.userId;
+      const { patientTransportEnabled, medicalCourierEnabled } = req.body;
+
+      const [existing] = await db.select().from(driverProfiles).where(eq(driverProfiles.id, id));
+      if (!existing) return res.status(404).json({ message: "Driver not found" });
+
+      if (existing.userId !== userId && (req as any).session?.role !== "admin") {
+        return res.status(403).json({ message: "You can only update your own service preferences" });
+      }
+
+      const finalPT = typeof patientTransportEnabled === "boolean" ? patientTransportEnabled : existing.patientTransportEnabled;
+      const finalMC = typeof medicalCourierEnabled === "boolean" ? medicalCourierEnabled : existing.medicalCourierEnabled;
+
+      if (!finalPT && !finalMC) {
+        return res.status(400).json({ message: "At least one service must be enabled" });
+      }
+
+      const updates: Record<string, boolean> = {};
+      if (typeof patientTransportEnabled === "boolean") updates.patientTransportEnabled = patientTransportEnabled;
+      if (typeof medicalCourierEnabled === "boolean") updates.medicalCourierEnabled = medicalCourierEnabled;
+
+      const [updated] = await db.update(driverProfiles).set(updates).where(eq(driverProfiles.id, id)).returning();
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating driver services:", error);
+      res.status(500).json({ message: "Failed to update driver services" });
     }
   });
 
@@ -9286,6 +9327,10 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       const userId = (req as any).session?.userId;
       const [driverProfile] = await db.select().from(driverProfiles).where(eq(driverProfiles.userId, userId));
       if (!driverProfile) return res.status(404).json({ message: "Driver profile not found" });
+
+      if (driverProfile.medicalCourierEnabled === false) {
+        return res.status(403).json({ message: "Medical courier service is not enabled on your profile. Enable it in your dashboard settings." });
+      }
 
       const compliance = await checkDriverCompliance(driverProfile.id);
       if (!compliance.compliant) {

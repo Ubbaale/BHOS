@@ -1,4 +1,4 @@
-import { Car, UserCog, Briefcase, Phone, Monitor } from "lucide-react";
+import { Car, UserCog, Briefcase, Phone, Monitor, Package } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +54,16 @@ const actions = [
     buttonText: "Get Started",
     testId: "tile-it-services",
     gradient: "from-rose-500 to-rose-600",
+  },
+  {
+    icon: Package,
+    title: "Medical Courier",
+    description: "Dispatch medical deliveries — medications, lab samples, equipment, and documents between facilities.",
+    mobileDesc: "Medical delivery dispatch",
+    link: "/courier/onboard",
+    buttonText: "Get Started",
+    testId: "tile-medical-courier",
+    gradient: "from-teal-500 to-teal-600",
   },
 ];
 

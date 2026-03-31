@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Stethoscope, Heart, UserCheck, Activity, AlertCircle, Calendar, Car, Monitor } from "lucide-react";
+import { Stethoscope, Heart, UserCheck, Activity, AlertCircle, Calendar, Car, Monitor, Package } from "lucide-react";
 import { Link } from "wouter";
 
 const services: { icon: any; title: string; description: string; href?: string }[] = [
@@ -43,6 +43,12 @@ const services: { icon: any; title: string; description: string; href?: string }
     title: "IT Services",
     description: "On-demand IT support for healthcare facilities — network setup, EHR systems, hardware repair, and HIPAA-compliant security.",
     href: "/it-services",
+  },
+  {
+    icon: Package,
+    title: "Medical Courier",
+    description: "HIPAA-compliant delivery of medications, lab samples, medical equipment, and documents with chain of custody tracking.",
+    href: "/courier/onboard",
   },
 ];
 

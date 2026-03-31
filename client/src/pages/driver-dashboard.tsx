@@ -619,6 +619,8 @@ export default function DriverDashboard() {
   const { toast } = useToast();
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
   const [isAvailable, setIsAvailable] = useState(true);
+  const [patientTransportEnabled, setPatientTransportEnabled] = useState(true);
+  const [medicalCourierEnabled, setMedicalCourierEnabled] = useState(false);
   const [currentDriverId, setCurrentDriverId] = useState<number | null>(null);
   const [newRideIds, setNewRideIds] = useState<Set<number>>(new Set());
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -788,8 +790,25 @@ export default function DriverDashboard() {
   useEffect(() => {
     if (drivers.length > 0 && !currentDriverId) {
       setCurrentDriverId(drivers[0].id);
+      setPatientTransportEnabled(drivers[0].patientTransportEnabled ?? true);
+      setMedicalCourierEnabled(drivers[0].medicalCourierEnabled ?? false);
     }
   }, [drivers, currentDriverId]);
+
+  const serviceToggleMutation = useMutation({
+    mutationFn: async (data: { patientTransportEnabled?: boolean; medicalCourierEnabled?: boolean }) => {
+      if (!currentDriverId) return;
+      const response = await apiRequest("PATCH", `/api/drivers/${currentDriverId}/services`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drivers"] });
+      toast({ title: "Service preference updated" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to update", description: error.message, variant: "destructive" });
+    },
+  });
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -919,6 +938,42 @@ export default function DriverDashboard() {
                 <Badge variant={isAvailable ? "default" : "secondary"} className="no-default-hover-elevate">
                   {isAvailable ? "Online" : "Offline"}
                 </Badge>
+              </div>
+              <div className="flex items-center gap-3 border-l pl-3">
+                <div className="flex items-center gap-1.5">
+                  <Car className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="text-xs text-muted-foreground">Rides</span>
+                  <Switch
+                    checked={patientTransportEnabled}
+                    onCheckedChange={(checked) => {
+                      if (!checked && !medicalCourierEnabled) {
+                        toast({ title: "At least one service must be enabled", variant: "destructive" });
+                        return;
+                      }
+                      setPatientTransportEnabled(checked);
+                      serviceToggleMutation.mutate({ patientTransportEnabled: checked });
+                    }}
+                    data-testid="switch-patient-transport"
+                    className="scale-75"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-xs text-muted-foreground">Courier</span>
+                  <Switch
+                    checked={medicalCourierEnabled}
+                    onCheckedChange={(checked) => {
+                      if (!checked && !patientTransportEnabled) {
+                        toast({ title: "At least one service must be enabled", variant: "destructive" });
+                        return;
+                      }
+                      setMedicalCourierEnabled(checked);
+                      serviceToggleMutation.mutate({ medicalCourierEnabled: checked });
+                    }}
+                    data-testid="switch-medical-courier"
+                    className="scale-75"
+                  />
+                </div>
               </div>
               {currentDriver && (
                 <div className="flex items-center gap-2 text-sm">
