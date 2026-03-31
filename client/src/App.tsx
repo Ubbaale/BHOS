@@ -36,6 +36,8 @@ import ITServices from "@/pages/it-services";
 import ITTechApply from "@/pages/it-tech-apply";
 import ITTechDashboard from "@/pages/it-tech-dashboard";
 import ITCompanyOnboard from "@/pages/it-company-onboard";
+import CourierOnboard from "@/pages/courier-onboard";
+import CourierDashboard from "@/pages/courier-dashboard";
 import SignupPage from "@/pages/signup";
 
 function Router() {
@@ -98,6 +100,8 @@ function Router() {
       <Route path="/it-services" component={ITServices} />
       <Route path="/it-tech/apply" component={ITTechApply} />
       <Route path="/it-tech" component={ITTechDashboard} />
+      <Route path="/courier/onboard" component={CourierOnboard} />
+      <Route path="/courier" component={CourierDashboard} />
       <Route path="/terms" component={TermsOfService} />
       <Route path="/privacy" component={PrivacyPolicy} />
       <Route component={NotFound} />

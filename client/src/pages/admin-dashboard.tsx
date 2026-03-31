@@ -24,7 +24,7 @@ import {
   MapPin, Calendar, ChevronLeft, Shield, FileText, RotateCcw,
   UserPlus, TrendingUp, CreditCard, Unlock, BarChart3,
   LayoutDashboard, Navigation, Headphones, Settings, Monitor,
-  Menu, X, LogOut, Home, ChevronRight
+  Menu, X, LogOut, Home, ChevronRight, Package, Thermometer
 } from "lucide-react";
 
 interface AdminStats {
@@ -80,6 +80,7 @@ const NAV_ITEMS = [
   { key: "driver-complaints", label: "Driver Reports", icon: AlertTriangle, permission: "drivers" },
   { key: "incidents", label: "Incidents", icon: AlertTriangle, permission: "incidents" },
   { key: "it-complaints", label: "IT Services", icon: Monitor, permission: "it_services" },
+  { key: "courier", label: "Courier", icon: Package, permission: "dispatch" },
 ] as const;
 
 export default function AdminDashboard() {
@@ -1282,6 +1283,20 @@ export default function AdminDashboard() {
           </Card>
           )}
 
+          {activeSection === "courier" && hasPermission("dispatch") && (
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Medical Courier Deliveries</CardTitle>
+                <CardDescription>View and manage all medical courier deliveries across the platform</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CourierAdminSection />
+              </CardContent>
+            </Card>
+          </div>
+          )}
+
           {activeSection === "earnings" && hasPermission("earnings") && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -2322,6 +2337,111 @@ export default function AdminDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function CourierAdminSection() {
+  const { data: deliveries = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/courier/deliveries"],
+  });
+
+  const { data: companies = [] } = useQuery<any[]>({
+    queryKey: ["/api/admin/courier/companies"],
+  });
+
+  const statusColors: Record<string, string> = {
+    requested: "bg-yellow-100 text-yellow-800",
+    accepted: "bg-blue-100 text-blue-800",
+    en_route_pickup: "bg-indigo-100 text-indigo-800",
+    picked_up: "bg-purple-100 text-purple-800",
+    in_transit: "bg-orange-100 text-orange-800",
+    arrived: "bg-teal-100 text-teal-800",
+    delivered: "bg-green-100 text-green-800",
+    confirmed: "bg-emerald-100 text-emerald-800",
+    cancelled: "bg-red-100 text-red-800",
+  };
+
+  if (isLoading) return <p className="text-muted-foreground">Loading courier data...</p>;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-4 text-center">
+            <p className="text-2xl font-bold" data-testid="text-admin-courier-companies">{companies.length}</p>
+            <p className="text-xs text-muted-foreground">Companies</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 text-center">
+            <p className="text-2xl font-bold" data-testid="text-admin-courier-total">{deliveries.length}</p>
+            <p className="text-xs text-muted-foreground">Total Deliveries</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 text-center">
+            <p className="text-2xl font-bold text-blue-600">{deliveries.filter((d: any) => !["delivered","confirmed","cancelled"].includes(d.status)).length}</p>
+            <p className="text-xs text-muted-foreground">Active</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 text-center">
+            <p className="text-2xl font-bold text-green-600">{deliveries.filter((d: any) => ["delivered","confirmed"].includes(d.status)).length}</p>
+            <p className="text-xs text-muted-foreground">Completed</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>ID</TableHead>
+            <TableHead>Company</TableHead>
+            <TableHead>Package</TableHead>
+            <TableHead>Priority</TableHead>
+            <TableHead>Pickup</TableHead>
+            <TableHead>Dropoff</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Fare</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {deliveries.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={8} className="text-center text-muted-foreground py-8">No courier deliveries yet</TableCell>
+            </TableRow>
+          ) : (
+            deliveries.map((d: any) => (
+              <TableRow key={d.id} data-testid={`row-admin-delivery-${d.id}`}>
+                <TableCell className="font-mono text-xs">#{d.id}</TableCell>
+                <TableCell className="text-sm">{d.companyName || "—"}</TableCell>
+                <TableCell>
+                  <div className="text-sm">{d.packageType?.replace(/_/g, " ")}</div>
+                  {d.temperatureControl !== "ambient" && (
+                    <Badge variant="outline" className="text-xs mt-1">
+                      <Thermometer className="h-3 w-3 mr-1" />{d.temperatureControl}
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={d.priority === "stat" ? "destructive" : d.priority === "urgent" ? "default" : "secondary"}>
+                    {d.priority?.toUpperCase()}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs max-w-[120px] truncate">{d.pickupAddress}</TableCell>
+                <TableCell className="text-xs max-w-[120px] truncate">{d.dropoffAddress}</TableCell>
+                <TableCell>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[d.status] || "bg-gray-100"}`}>
+                    {d.status?.replace(/_/g, " ")}
+                  </span>
+                </TableCell>
+                <TableCell>${d.finalFare || d.estimatedFare || "—"}</TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
     </div>
   );
 }

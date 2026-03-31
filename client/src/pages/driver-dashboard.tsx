@@ -20,7 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet, Star, AlertTriangle, History, ShieldCheck, ShieldAlert, Flame, ArrowUpRight, Route, Zap } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet, Star, AlertTriangle, History, ShieldCheck, ShieldAlert, Flame, ArrowUpRight, Route, Zap, Package, Thermometer } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { openNavigation } from "@/lib/navigation";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -646,6 +646,46 @@ export default function DriverDashboard() {
     queryKey: ["/api/rides/all"],
   });
 
+  const { data: courierPool = [] } = useQuery<any[]>({
+    queryKey: ["/api/courier/deliveries/pool"],
+    refetchInterval: 15000,
+  });
+
+  const { data: activeDeliveries = [] } = useQuery<any[]>({
+    queryKey: ["/api/courier/deliveries/active"],
+    refetchInterval: 10000,
+  });
+
+  const acceptDeliveryMutation = useMutation({
+    mutationFn: async (deliveryId: number) => {
+      const response = await apiRequest("POST", `/api/courier/deliveries/${deliveryId}/accept`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/courier/deliveries/pool"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/courier/deliveries/active"] });
+      toast({ title: "Delivery accepted!", description: "Navigate to the pickup location." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Cannot accept delivery", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateDeliveryStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const response = await apiRequest("PATCH", `/api/courier/deliveries/${id}/status`, { status });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/courier/deliveries/active"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/courier/deliveries/pool"] });
+      toast({ title: "Delivery status updated" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to update status", description: error.message, variant: "destructive" });
+    },
+  });
+
   const { data: drivers = [] } = useQuery<DriverProfile[]>({
     queryKey: ["/api/drivers"],
   });
@@ -1235,18 +1275,22 @@ export default function DriverDashboard() {
           <div className="grid lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               <Tabs defaultValue="available" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 mb-4">
+                <TabsList className="grid w-full grid-cols-4 mb-4">
                   <TabsTrigger value="available" data-testid="tab-available">
                     <Briefcase className="w-4 h-4 mr-1" />
-                    Ride Pool ({requestedRides.length})
+                    Rides ({requestedRides.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="deliveries" data-testid="tab-deliveries">
+                    <Package className="w-4 h-4 mr-1" />
+                    Deliveries ({courierPool.length})
                   </TabsTrigger>
                   <TabsTrigger value="active" data-testid="tab-active">
                     <Play className="w-4 h-4 mr-1" />
-                    My Rides ({myActiveRides.length})
+                    Active ({myActiveRides.length + activeDeliveries.length})
                   </TabsTrigger>
                   <TabsTrigger value="completed" data-testid="tab-completed">
                     <CheckCircle2 className="w-4 h-4 mr-1" />
-                    Completed ({completedRides.length})
+                    Done ({completedRides.length})
                   </TabsTrigger>
                 </TabsList>
 
@@ -1281,11 +1325,114 @@ export default function DriverDashboard() {
                   )}
                 </TabsContent>
 
+                <TabsContent value="deliveries" className="space-y-4">
+                  {courierPool.length === 0 ? (
+                    <Card>
+                      <CardContent className="p-8 text-center">
+                        <Package className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                        <h3 className="font-semibold mb-2">No Deliveries Available</h3>
+                        <p className="text-muted-foreground text-sm">Medical courier delivery requests will appear here.</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    courierPool.map((delivery: any) => (
+                      <Card key={delivery.id} className="border-l-4 border-l-blue-500" data-testid={`card-delivery-${delivery.id}`}>
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <Badge variant={delivery.priority === "stat" ? "destructive" : delivery.priority === "urgent" ? "default" : "secondary"} className="mb-2">
+                                {delivery.priority?.toUpperCase()}
+                              </Badge>
+                              <h3 className="font-semibold">{delivery.packageType?.replace(/_/g, " ")}</h3>
+                              {delivery.companyName && <p className="text-xs text-muted-foreground">From: {delivery.companyName}</p>}
+                            </div>
+                            {delivery.estimatedFare && (
+                              <span className="text-lg font-bold text-green-600">${delivery.estimatedFare}</span>
+                            )}
+                          </div>
+                          <div className="space-y-2 text-sm mb-3">
+                            <div className="flex items-start gap-2">
+                              <MapPin className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                              <span>{delivery.pickupAddress}</span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <MapPin className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                              <span>{delivery.dropoffAddress}</span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {delivery.temperatureControl !== "ambient" && (
+                              <Badge variant="outline"><Thermometer className="h-3 w-3 mr-1" />{delivery.temperatureControl === "cold_chain" ? "Cold Chain" : delivery.temperatureControl === "frozen" ? "Frozen" : "CRT"}</Badge>
+                            )}
+                            {delivery.signatureRequired && <Badge variant="outline">Signature Req.</Badge>}
+                            {delivery.chainOfCustody && <Badge variant="outline">Chain of Custody</Badge>}
+                          </div>
+                          {delivery.packageDescription && <p className="text-xs text-muted-foreground mb-3">{delivery.packageDescription}</p>}
+                          <Button
+                            className="w-full"
+                            onClick={() => acceptDeliveryMutation.mutate(delivery.id)}
+                            disabled={acceptDeliveryMutation.isPending}
+                            data-testid={`button-accept-delivery-${delivery.id}`}
+                          >
+                            <Package className="w-4 h-4 mr-2" /> Accept Delivery
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </TabsContent>
+
                 <TabsContent value="active" className="space-y-4">
-                  {myActiveRides.length === 0 ? (
+                  {activeDeliveries.length > 0 && activeDeliveries.map((delivery: any) => {
+                    const nextStatus: Record<string, string> = {
+                      accepted: "en_route_pickup",
+                      en_route_pickup: "picked_up",
+                      picked_up: "in_transit",
+                      in_transit: "arrived",
+                      arrived: "delivered",
+                    };
+                    const statusLabel: Record<string, string> = {
+                      en_route_pickup: "En Route to Pickup",
+                      picked_up: "Mark as Picked Up",
+                      in_transit: "Start Transit",
+                      arrived: "Mark Arrived",
+                      delivered: "Mark Delivered",
+                    };
+                    const next = nextStatus[delivery.status];
+                    return (
+                      <Card key={`del-${delivery.id}`} className="border-l-4 border-l-purple-500" data-testid={`card-active-delivery-${delivery.id}`}>
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <Badge className="bg-purple-100 text-purple-800 mb-1">Courier Delivery</Badge>
+                              <h3 className="font-semibold">{delivery.packageType?.replace(/_/g, " ")}</h3>
+                              {delivery.companyName && <p className="text-xs text-muted-foreground">{delivery.companyName}</p>}
+                            </div>
+                            <Badge variant="outline">{delivery.status?.replace(/_/g, " ")}</Badge>
+                          </div>
+                          <div className="space-y-1 text-sm mb-3">
+                            <div className="flex items-start gap-2"><MapPin className="w-4 h-4 text-green-600 mt-0.5" /><span>{delivery.pickupAddress}</span></div>
+                            <div className="flex items-start gap-2"><MapPin className="w-4 h-4 text-red-600 mt-0.5" /><span>{delivery.dropoffAddress}</span></div>
+                          </div>
+                          {delivery.specialInstructions && <p className="text-xs text-muted-foreground bg-yellow-50 dark:bg-yellow-950 p-2 rounded mb-3">{delivery.specialInstructions}</p>}
+                          {next && (
+                            <Button
+                              className="w-full"
+                              onClick={() => updateDeliveryStatusMutation.mutate({ id: delivery.id, status: next })}
+                              disabled={updateDeliveryStatusMutation.isPending}
+                              data-testid={`button-delivery-status-${delivery.id}`}
+                            >
+                              {statusLabel[next] || next}
+                            </Button>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                  {myActiveRides.length === 0 && activeDeliveries.length === 0 ? (
                     <Card>
                       <CardContent className="p-6 text-center text-muted-foreground">
-                        No active rides. Accept a ride to get started.
+                        No active rides or deliveries. Accept a job to get started.
                       </CardContent>
                     </Card>
                   ) : (

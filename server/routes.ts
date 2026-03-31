@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements, itTechComplaints, itTechEnforcementLog, driverProfiles, driverComplaints, driverEnforcementLog } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements, itTechComplaints, itTechEnforcementLog, driverProfiles, driverComplaints, driverEnforcementLog, courierCompanies, courierDeliveries, insertCourierCompanySchema, insertCourierDeliverySchema, courierDeliveryStatuses } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -2709,6 +2709,19 @@ export async function registerRoutes(
     }
   });
 
+  const ACTIVE_RIDE_STATUSES = ["accepted", "driver_enroute", "arrived", "in_progress"];
+  const ACTIVE_DELIVERY_STATUSES = ["accepted", "en_route_pickup", "picked_up", "in_transit", "arrived"];
+
+  async function checkDriverHasActiveTask(driverId: number): Promise<{ hasActiveRide: boolean; hasActiveDelivery: boolean }> {
+    const driverRides = await db.select().from(rides).where(eq(rides.driverId, driverId));
+    const hasActiveRide = driverRides.some(r => ACTIVE_RIDE_STATUSES.includes(r.status));
+
+    const driverDeliveries = await db.select().from(courierDeliveries).where(eq(courierDeliveries.driverId, driverId));
+    const hasActiveDelivery = driverDeliveries.some(d => ACTIVE_DELIVERY_STATUSES.includes(d.status));
+
+    return { hasActiveRide, hasActiveDelivery };
+  }
+
   const DRIVER_COMPLAINT_CATEGORIES = ["reckless_driving", "no_show", "unprofessional", "vehicle_condition", "safety_violation", "overcharging", "harassment", "intoxication", "route_deviation", "other"];
   const DRIVER_AUTO_HOLD_THRESHOLD = 3;
 
@@ -2766,11 +2779,12 @@ export async function registerRoutes(
   app.post("/api/rides/:id/accept", requireDriver, async (req, res) => {
     try {
       const rideId = parseInt(req.params.id);
-      const { driverId } = req.body;
-      
-      if (!driverId) {
-        return res.status(400).json({ message: "Driver ID is required" });
+      const userId = (req as any).session?.userId;
+      const [driverProfile] = await db.select().from(driverProfiles).where(eq(driverProfiles.userId, userId));
+      if (!driverProfile) {
+        return res.status(404).json({ message: "Driver profile not found" });
       }
+      const driverId = driverProfile.id;
       
       const driver = await storage.getDriver(driverId);
       if (!driver) {
@@ -2783,6 +2797,14 @@ export async function registerRoutes(
           message: "Cannot accept rides due to compliance issues",
           issues: compliance.issues
         });
+      }
+
+      const activeTask = await checkDriverHasActiveTask(driverId);
+      if (activeTask.hasActiveRide) {
+        return res.status(409).json({ message: "You already have an active ride. Complete it before accepting another." });
+      }
+      if (activeTask.hasActiveDelivery) {
+        return res.status(409).json({ message: "You have an active medical courier delivery. Complete it before accepting a ride." });
       }
       
       // Check if ride is still available (prevents race condition)
@@ -8862,6 +8884,360 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     } catch (error) {
       console.error("Delete template error:", error);
       res.status(500).json({ message: "Failed to delete template" });
+    }
+  });
+
+  // ============ MEDICAL COURIER DELIVERY SYSTEM ============
+
+  app.post("/api/courier/companies", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const parsed = insertCourierCompanySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+
+      const existing = await db.select().from(courierCompanies).where(eq(courierCompanies.ownerId, userId));
+      if (existing.length > 0) {
+        return res.status(409).json({ message: "You already have a courier company registered" });
+      }
+
+      const [company] = await db.insert(courierCompanies).values({
+        ...parsed.data,
+        ownerId: userId,
+      }).returning();
+
+      await db.update(users).set({ role: "courier_company" }).where(eq(users.id, userId));
+
+      res.status(201).json(company);
+    } catch (error) {
+      console.error("Error creating courier company:", error);
+      res.status(500).json({ message: "Failed to create courier company" });
+    }
+  });
+
+  app.get("/api/courier/companies/mine", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [company] = await db.select().from(courierCompanies).where(eq(courierCompanies.ownerId, userId));
+      if (!company) return res.status(404).json({ message: "No courier company found for your account" });
+      res.json(company);
+    } catch (error) {
+      console.error("Error getting courier company:", error);
+      res.status(500).json({ message: "Failed to get courier company" });
+    }
+  });
+
+  app.patch("/api/courier/companies/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [company] = await db.select().from(courierCompanies).where(eq(courierCompanies.id, req.params.id));
+      if (!company) return res.status(404).json({ message: "Company not found" });
+      if (company.ownerId !== userId) return res.status(403).json({ message: "Unauthorized" });
+
+      const { companyName, contactEmail, contactPhone, address, city, state, zipCode, companyType, businessLicenseNumber, deaNumber, hipaaCompliant } = req.body;
+      const [updated] = await db.update(courierCompanies)
+        .set({ companyName, contactEmail, contactPhone, address, city, state, zipCode, companyType, businessLicenseNumber, deaNumber, hipaaCompliant })
+        .where(eq(courierCompanies.id, req.params.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating courier company:", error);
+      res.status(500).json({ message: "Failed to update courier company" });
+    }
+  });
+
+  app.post("/api/courier/deliveries", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [company] = await db.select().from(courierCompanies).where(eq(courierCompanies.ownerId, userId));
+      if (!company) return res.status(403).json({ message: "You must register a courier company first" });
+
+      const parsed = insertCourierDeliverySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid delivery data", errors: parsed.error.errors });
+      }
+
+      const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
+
+      const [delivery] = await db.insert(courierDeliveries).values({
+        ...parsed.data,
+        companyId: company.id,
+        status: "requested",
+        verificationCode,
+        scheduledPickupTime: parsed.data.scheduledPickupTime ? new Date(parsed.data.scheduledPickupTime) : null,
+      }).returning();
+
+      res.status(201).json(delivery);
+    } catch (error) {
+      console.error("Error creating courier delivery:", error);
+      res.status(500).json({ message: "Failed to create delivery" });
+    }
+  });
+
+  app.get("/api/courier/deliveries", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [company] = await db.select().from(courierCompanies).where(eq(courierCompanies.ownerId, userId));
+      if (!company) return res.status(403).json({ message: "Courier company not found" });
+
+      const deliveries = await db.select().from(courierDeliveries)
+        .where(eq(courierDeliveries.companyId, company.id))
+        .orderBy(desc(courierDeliveries.createdAt));
+
+      res.json(deliveries);
+    } catch (error) {
+      console.error("Error getting deliveries:", error);
+      res.status(500).json({ message: "Failed to get deliveries" });
+    }
+  });
+
+  app.get("/api/courier/deliveries/pool", requireDriver, async (_req, res) => {
+    try {
+      const available = await db.select({
+        delivery: courierDeliveries,
+        companyName: courierCompanies.companyName,
+        companyType: courierCompanies.companyType,
+      })
+        .from(courierDeliveries)
+        .leftJoin(courierCompanies, eq(courierDeliveries.companyId, courierCompanies.id))
+        .where(and(
+          eq(courierDeliveries.status, "requested"),
+          isNull(courierDeliveries.driverId)
+        ))
+        .orderBy(desc(courierDeliveries.createdAt));
+
+      res.json(available.map(a => ({ ...a.delivery, companyName: a.companyName, companyType: a.companyType })));
+    } catch (error) {
+      console.error("Error getting delivery pool:", error);
+      res.status(500).json({ message: "Failed to get available deliveries" });
+    }
+  });
+
+  app.get("/api/courier/deliveries/active", requireDriver, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [driverProfile] = await db.select().from(driverProfiles).where(eq(driverProfiles.userId, userId));
+      if (!driverProfile) return res.status(404).json({ message: "Driver profile not found" });
+
+      const activeDeliveries = await db.select({
+        delivery: courierDeliveries,
+        companyName: courierCompanies.companyName,
+      })
+        .from(courierDeliveries)
+        .leftJoin(courierCompanies, eq(courierDeliveries.companyId, courierCompanies.id))
+        .where(eq(courierDeliveries.driverId, driverProfile.id));
+
+      const active = activeDeliveries
+        .filter(a => ACTIVE_DELIVERY_STATUSES.includes(a.delivery.status))
+        .map(a => ({ ...a.delivery, companyName: a.companyName }));
+
+      res.json(active);
+    } catch (error) {
+      console.error("Error getting active deliveries:", error);
+      res.status(500).json({ message: "Failed to get active deliveries" });
+    }
+  });
+
+  app.post("/api/courier/deliveries/:id/accept", requireDriver, async (req, res) => {
+    try {
+      const deliveryId = parseInt(req.params.id);
+      const userId = (req as any).session?.userId;
+      const [driverProfile] = await db.select().from(driverProfiles).where(eq(driverProfiles.userId, userId));
+      if (!driverProfile) return res.status(404).json({ message: "Driver profile not found" });
+
+      const compliance = await checkDriverCompliance(driverProfile.id);
+      if (!compliance.compliant) {
+        return res.status(403).json({ message: "Cannot accept deliveries due to compliance issues", issues: compliance.issues });
+      }
+
+      const activeTask = await checkDriverHasActiveTask(driverProfile.id);
+      if (activeTask.hasActiveRide) {
+        return res.status(409).json({ message: "You have an active patient ride. Complete it before accepting a delivery." });
+      }
+      if (activeTask.hasActiveDelivery) {
+        return res.status(409).json({ message: "You already have an active delivery. Complete it before accepting another." });
+      }
+
+      const [delivery] = await db.select().from(courierDeliveries).where(eq(courierDeliveries.id, deliveryId));
+      if (!delivery) return res.status(404).json({ message: "Delivery not found" });
+      if (delivery.status !== "requested") return res.status(409).json({ message: "Delivery is no longer available" });
+      if (delivery.driverId) return res.status(409).json({ message: "Delivery already assigned to another driver" });
+
+      const [updated] = await db.update(courierDeliveries)
+        .set({ driverId: driverProfile.id, status: "accepted", updatedAt: new Date() })
+        .where(and(
+          eq(courierDeliveries.id, deliveryId),
+          eq(courierDeliveries.status, "requested"),
+          isNull(courierDeliveries.driverId)
+        ))
+        .returning();
+
+      if (!updated) return res.status(409).json({ message: "Delivery was claimed by another driver" });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error accepting delivery:", error);
+      res.status(500).json({ message: "Failed to accept delivery" });
+    }
+  });
+
+  app.patch("/api/courier/deliveries/:id/status", requireAuth, async (req, res) => {
+    try {
+      const deliveryId = parseInt(req.params.id);
+      const userId = (req as any).session?.userId;
+      const { status, proofOfDeliveryUrl, signatureUrl, cancelledBy, cancellationReason } = req.body;
+
+      if (!courierDeliveryStatuses.includes(status)) {
+        return res.status(400).json({ message: `Invalid status. Must be one of: ${courierDeliveryStatuses.join(", ")}` });
+      }
+
+      const [delivery] = await db.select().from(courierDeliveries).where(eq(courierDeliveries.id, deliveryId));
+      if (!delivery) return res.status(404).json({ message: "Delivery not found" });
+
+      const validTransitions: Record<string, string[]> = {
+        requested: ["accepted", "cancelled"],
+        accepted: ["en_route_pickup", "cancelled"],
+        en_route_pickup: ["picked_up", "cancelled"],
+        picked_up: ["in_transit", "cancelled"],
+        in_transit: ["arrived", "cancelled"],
+        arrived: ["delivered", "cancelled"],
+        delivered: ["confirmed"],
+        confirmed: [],
+        cancelled: [],
+      };
+
+      const allowed = validTransitions[delivery.status] || [];
+      if (!allowed.includes(status)) {
+        return res.status(400).json({ message: `Cannot transition from "${delivery.status}" to "${status}"` });
+      }
+
+      const [callerUser] = await db.select().from(users).where(eq(users.id, userId));
+      const [driverProfile] = delivery.driverId
+        ? await db.select().from(driverProfiles).where(eq(driverProfiles.id, delivery.driverId))
+        : [null];
+      const [company] = await db.select().from(courierCompanies).where(eq(courierCompanies.id, delivery.companyId));
+
+      const isDriver = driverProfile?.userId === userId;
+      const isCompany = company?.ownerId === userId;
+      const isAdmin = callerUser?.role === "admin";
+
+      if (!isDriver && !isCompany && !isAdmin) {
+        return res.status(403).json({ message: "Unauthorized to update this delivery" });
+      }
+
+      const updateData: any = { status, updatedAt: new Date() };
+
+      if (status === "picked_up") updateData.actualPickupTime = new Date();
+      if (status === "delivered") updateData.actualDeliveryTime = new Date();
+      if (status === "cancelled") {
+        updateData.cancelledAt = new Date();
+        updateData.cancelledBy = cancelledBy || (isDriver ? "driver" : "company");
+        updateData.cancellationReason = cancellationReason;
+      }
+      if (proofOfDeliveryUrl) updateData.proofOfDeliveryUrl = proofOfDeliveryUrl;
+      if (signatureUrl) updateData.signatureUrl = signatureUrl;
+
+      if (status === "delivered" || status === "confirmed") {
+        const fare = parseFloat(delivery.estimatedFare || "0");
+        updateData.finalFare = fare.toFixed(2);
+        updateData.platformFee = (fare * 0.15).toFixed(2);
+        updateData.driverEarnings = (fare * 0.85).toFixed(2);
+      }
+
+      const [updated] = await db.update(courierDeliveries)
+        .set(updateData)
+        .where(eq(courierDeliveries.id, deliveryId))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating delivery status:", error);
+      res.status(500).json({ message: "Failed to update delivery status" });
+    }
+  });
+
+  app.get("/api/courier/deliveries/:id", requireAuth, async (req, res) => {
+    try {
+      const deliveryId = parseInt(req.params.id);
+      const userId = (req as any).session?.userId;
+      const [delivery] = await db.select().from(courierDeliveries).where(eq(courierDeliveries.id, deliveryId));
+      if (!delivery) return res.status(404).json({ message: "Delivery not found" });
+
+      const [company] = await db.select().from(courierCompanies).where(eq(courierCompanies.id, delivery.companyId));
+      const [callerUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = callerUser?.role === "admin";
+      const isCompanyOwner = company?.ownerId === userId;
+      let isAssignedDriver = false;
+      if (delivery.driverId) {
+        const [dp] = await db.select().from(driverProfiles).where(eq(driverProfiles.id, delivery.driverId));
+        if (dp?.userId === userId) isAssignedDriver = true;
+      }
+
+      if (!isAdmin && !isCompanyOwner && !isAssignedDriver) {
+        return res.status(403).json({ message: "Unauthorized to view this delivery" });
+      }
+
+      let driverInfo = null;
+      if (delivery.driverId) {
+        const driver = await storage.getDriver(delivery.driverId);
+        if (driver) driverInfo = { name: driver.fullName, phone: driver.phone, vehicleType: driver.vehicleType, vehiclePlate: driver.vehiclePlate };
+      }
+
+      res.json({ ...delivery, companyName: company?.companyName, driver: driverInfo });
+    } catch (error) {
+      console.error("Error getting delivery:", error);
+      res.status(500).json({ message: "Failed to get delivery" });
+    }
+  });
+
+  app.get("/api/admin/courier/deliveries", requireAdmin, async (_req, res) => {
+    try {
+      const allDeliveries = await db.select({
+        delivery: courierDeliveries,
+        companyName: courierCompanies.companyName,
+      })
+        .from(courierDeliveries)
+        .leftJoin(courierCompanies, eq(courierDeliveries.companyId, courierCompanies.id))
+        .orderBy(desc(courierDeliveries.createdAt));
+
+      res.json(allDeliveries.map(d => ({ ...d.delivery, companyName: d.companyName })));
+    } catch (error) {
+      console.error("Error getting all deliveries:", error);
+      res.status(500).json({ message: "Failed to get deliveries" });
+    }
+  });
+
+  app.get("/api/admin/courier/companies", requireAdmin, async (_req, res) => {
+    try {
+      const companies = await db.select().from(courierCompanies).orderBy(desc(courierCompanies.createdAt));
+      res.json(companies);
+    } catch (error) {
+      console.error("Error getting courier companies:", error);
+      res.status(500).json({ message: "Failed to get courier companies" });
+    }
+  });
+
+  app.get("/api/courier/deliveries/driver/history", requireDriver, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const [driverProfile] = await db.select().from(driverProfiles).where(eq(driverProfiles.userId, userId));
+      if (!driverProfile) return res.status(404).json({ message: "Driver profile not found" });
+
+      const history = await db.select({
+        delivery: courierDeliveries,
+        companyName: courierCompanies.companyName,
+      })
+        .from(courierDeliveries)
+        .leftJoin(courierCompanies, eq(courierDeliveries.companyId, courierCompanies.id))
+        .where(eq(courierDeliveries.driverId, driverProfile.id))
+        .orderBy(desc(courierDeliveries.createdAt));
+
+      res.json(history.map(h => ({ ...h.delivery, companyName: h.companyName })));
+    } catch (error) {
+      console.error("Error getting delivery history:", error);
+      res.status(500).json({ message: "Failed to get delivery history" });
     }
   });
 

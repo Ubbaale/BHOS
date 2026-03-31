@@ -29,6 +29,7 @@ import {
   Lock,
   AlertCircle,
   Building2,
+  Package,
   UserPlus,
   ShieldCheck,
   RefreshCw,
@@ -45,7 +46,7 @@ const signupSchema = z.object({
     .regex(/[a-z]/, "Must contain a lowercase letter")
     .regex(/[0-9]/, "Must contain a number"),
   confirmPassword: z.string().min(1, "Please confirm your password"),
-  accountType: z.enum(["individual", "company"]).default("individual"),
+  accountType: z.enum(["individual", "company", "courier"]).default("individual"),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -87,6 +88,8 @@ function VerificationStep({
       setTimeout(() => {
         if (accountType === "company") {
           setLocation("/it-services/onboard");
+        } else if (accountType === "courier") {
+          setLocation("/courier/onboard");
         } else {
           setLocation("/it-services");
         }
@@ -298,7 +301,7 @@ export default function SignupPage() {
                 <FormField control={form.control} name="accountType" render={({ field }) => (
                   <FormItem>
                     <FormLabel>I am signing up as</FormLabel>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       <Button
                         type="button"
                         variant={field.value === "individual" ? "default" : "outline"}
@@ -317,7 +320,17 @@ export default function SignupPage() {
                         data-testid="button-type-company"
                       >
                         <Building2 className="mr-2 h-4 w-4" />
-                        Company
+                        IT Company
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={field.value === "courier" ? "default" : "outline"}
+                        className="w-full"
+                        onClick={() => field.onChange("courier")}
+                        data-testid="button-type-courier"
+                      >
+                        <Package className="mr-2 h-4 w-4" />
+                        Courier
                       </Button>
                     </div>
                     <FormMessage />
@@ -412,7 +425,7 @@ export default function SignupPage() {
                   {isSubmitting ? (
                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating Account...</>
                   ) : (
-                    <><UserPlus className="mr-2 h-4 w-4" />{accountType === "company" ? "Create Account & Onboard Company" : "Create Account"}</>
+                    <><UserPlus className="mr-2 h-4 w-4" />{accountType === "company" ? "Create Account & Onboard IT Company" : accountType === "courier" ? "Create Account & Onboard Courier" : "Create Account"}</>
                   )}
                 </Button>
 
