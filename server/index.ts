@@ -169,6 +169,10 @@ app.use((req, res, next) => {
 // Session middleware for authentication with production-grade security
 const isProduction = process.env.NODE_ENV === "production";
 
+if (isProduction) {
+  app.set('trust proxy', 1);
+}
+
 // Enforce strong session secret in production
 const sessionSecret = process.env.SESSION_SECRET;
 if (isProduction && !sessionSecret) {
@@ -215,7 +219,7 @@ app.use(
       secure: isProduction,
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: isProduction ? "strict" : "lax", // Strict in production for CSRF protection
+      sameSite: "lax",
     },
   })
 );
