@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements, itTechComplaints, itTechEnforcementLog, driverProfiles, driverComplaints, driverEnforcementLog, courierCompanies, courierDeliveries, insertCourierCompanySchema, insertCourierDeliverySchema, courierDeliveryStatuses } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements, itTechComplaints, itTechEnforcementLog, driverProfiles, driverComplaints, driverEnforcementLog, courierCompanies, courierDeliveries, insertCourierCompanySchema, insertCourierDeliverySchema, courierDeliveryStatuses, courierChainOfCustodyLog, courierFareConfig, courierCustodyEventTypes } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -8887,6 +8887,131 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
+  // ============ COURIER FARE CALCULATION ============
+
+  function calculateCourierFare(params: {
+    distanceMiles: number;
+    priority: string;
+    temperatureControl: string;
+    signatureRequired: boolean;
+    chainOfCustody: boolean;
+    photoProofRequired: boolean;
+    weightLbs: number;
+    scheduledTime?: Date | null;
+  }) {
+    const cfg = courierFareConfig;
+    const p = params.priority as keyof typeof cfg.baseFare;
+    const t = params.temperatureControl as keyof typeof cfg.temperatureSurcharge;
+
+    const baseFare = cfg.baseFare[p] || cfg.baseFare.standard;
+    const mileageFare = params.distanceMiles * (cfg.perMileRate[p] || cfg.perMileRate.standard);
+    const tempSurcharge = cfg.temperatureSurcharge[t] || 0;
+
+    let servicesFee = 0;
+    if (params.signatureRequired) servicesFee += cfg.signatureFee;
+    if (params.chainOfCustody) servicesFee += cfg.chainOfCustodyFee;
+    if (params.photoProofRequired) servicesFee += cfg.photoProofFee;
+
+    let wSurcharge = 0;
+    if (params.weightLbs > 100) wSurcharge = cfg.weightSurcharge.over100;
+    else if (params.weightLbs > 50) wSurcharge = cfg.weightSurcharge.under100;
+    else if (params.weightLbs > 25) wSurcharge = cfg.weightSurcharge.under50;
+
+    let peakSurcharge = 0;
+    const checkTime = params.scheduledTime || new Date();
+    const hour = checkTime.getHours();
+    const isPeak = (hour >= cfg.peakHours.start && hour < cfg.peakHours.end) ||
+                   (hour >= cfg.peakHours.afternoonStart && hour < cfg.peakHours.afternoonEnd);
+
+    let subtotal = baseFare + mileageFare + tempSurcharge + servicesFee + wSurcharge;
+    if (isPeak) {
+      peakSurcharge = subtotal * (cfg.peakHourMultiplier - 1);
+      subtotal *= cfg.peakHourMultiplier;
+    }
+
+    let longDistSurcharge = 0;
+    if (params.distanceMiles > cfg.longDistanceMiles) {
+      longDistSurcharge = cfg.longDistanceSurcharge;
+      subtotal += longDistSurcharge;
+    }
+
+    const total = Math.max(subtotal, cfg.minimumFare);
+    const platformFee = total * cfg.platformFeePercent;
+    const driverEarnings = total - platformFee;
+    const estimatedMinutes = Math.ceil(params.distanceMiles * 2.5) + 10;
+
+    return {
+      baseFare: baseFare.toFixed(2),
+      mileageFare: mileageFare.toFixed(2),
+      prioritySurcharge: (baseFare - cfg.baseFare.standard).toFixed(2),
+      temperatureSurcharge: tempSurcharge.toFixed(2),
+      servicesFee: servicesFee.toFixed(2),
+      weightSurcharge: wSurcharge.toFixed(2),
+      peakSurcharge: peakSurcharge.toFixed(2),
+      longDistanceSurcharge: longDistSurcharge.toFixed(2),
+      estimatedFare: total.toFixed(2),
+      platformFee: platformFee.toFixed(2),
+      driverEarnings: driverEarnings.toFixed(2),
+      estimatedDurationMinutes: estimatedMinutes,
+      isPeakHour: isPeak,
+    };
+  }
+
+  async function logCustodyEvent(params: {
+    deliveryId: number;
+    eventType: string;
+    performedBy?: string;
+    performedByName?: string;
+    performedByRole?: string;
+    lat?: string;
+    lng?: string;
+    locationAddress?: string;
+    temperatureReading?: string;
+    notes?: string;
+    photoUrl?: string;
+    signatureUrl?: string;
+    ipAddress?: string;
+    userAgent?: string;
+  }) {
+    const eventTimestamp = new Date().toISOString();
+    const payload = JSON.stringify({
+      deliveryId: params.deliveryId,
+      eventType: params.eventType,
+      performedBy: params.performedBy,
+      performedByName: params.performedByName,
+      performedByRole: params.performedByRole,
+      timestamp: eventTimestamp,
+      lat: params.lat || null,
+      lng: params.lng || null,
+      locationAddress: params.locationAddress || null,
+      temperatureReading: params.temperatureReading || null,
+      notes: params.notes || null,
+      photoUrl: params.photoUrl || null,
+      signatureUrl: params.signatureUrl || null,
+    });
+    const immutableHash = crypto.createHash("sha256").update(payload).digest("hex");
+
+    await db.insert(courierChainOfCustodyLog).values({
+      deliveryId: params.deliveryId,
+      eventType: params.eventType,
+      performedBy: params.performedBy || null,
+      performedByName: params.performedByName || null,
+      performedByRole: params.performedByRole || null,
+      lat: params.lat || null,
+      lng: params.lng || null,
+      locationAddress: params.locationAddress || null,
+      temperatureReading: params.temperatureReading || null,
+      notes: params.notes || null,
+      photoUrl: params.photoUrl || null,
+      signatureUrl: params.signatureUrl || null,
+      ipAddress: params.ipAddress || null,
+      userAgent: params.userAgent || null,
+      immutableHash,
+    });
+
+    return immutableHash;
+  }
+
   // ============ MEDICAL COURIER DELIVERY SYSTEM ============
 
   app.post("/api/courier/companies", requireAuth, async (req, res) => {
@@ -8948,6 +9073,41 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
+  const fareEstimateSchema = z.object({
+    distanceMiles: z.coerce.number().min(0).max(500).default(5),
+    priority: z.enum(["standard", "urgent", "stat"]).default("standard"),
+    temperatureControl: z.enum(["ambient", "cold_chain", "frozen", "controlled_room"]).default("ambient"),
+    signatureRequired: z.boolean().default(true),
+    chainOfCustody: z.boolean().default(false),
+    photoProofRequired: z.boolean().default(false),
+    weightLbs: z.coerce.number().min(0).max(2000).default(0),
+    scheduledPickupTime: z.string().nullable().optional(),
+  });
+
+  app.post("/api/courier/fare-estimate", requireAuth, async (req, res) => {
+    try {
+      const parsed = fareEstimateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid fare estimate parameters", errors: parsed.error.errors });
+      }
+      const d = parsed.data;
+      const estimate = calculateCourierFare({
+        distanceMiles: d.distanceMiles,
+        priority: d.priority,
+        temperatureControl: d.temperatureControl,
+        signatureRequired: d.signatureRequired,
+        chainOfCustody: d.chainOfCustody,
+        photoProofRequired: d.photoProofRequired,
+        weightLbs: d.weightLbs,
+        scheduledTime: d.scheduledPickupTime ? new Date(d.scheduledPickupTime) : null,
+      });
+      res.json({ ...estimate, fareConfig: courierFareConfig });
+    } catch (error) {
+      console.error("Error estimating fare:", error);
+      res.status(500).json({ message: "Failed to estimate fare" });
+    }
+  });
+
   app.post("/api/courier/deliveries", requireAuth, async (req, res) => {
     try {
       const userId = (req as any).session?.userId;
@@ -8961,15 +9121,67 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
 
       const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
 
+      const dist = Math.max(0, Number(parsed.data.distanceMiles) || 5);
+      const wt = Math.max(0, Number(parsed.data.weightLbs) || 0);
+
+      const fareCalc = calculateCourierFare({
+        distanceMiles: isFinite(dist) ? dist : 5,
+        priority: parsed.data.priority || "standard",
+        temperatureControl: parsed.data.temperatureControl || "ambient",
+        signatureRequired: parsed.data.signatureRequired ?? true,
+        chainOfCustody: parsed.data.chainOfCustody ?? false,
+        photoProofRequired: parsed.data.photoProofRequired ?? false,
+        weightLbs: isFinite(wt) ? wt : 0,
+        scheduledTime: parsed.data.scheduledPickupTime ? new Date(parsed.data.scheduledPickupTime) : null,
+      });
+
       const [delivery] = await db.insert(courierDeliveries).values({
         ...parsed.data,
         companyId: company.id,
         status: "requested",
         verificationCode,
+        estimatedFare: fareCalc.estimatedFare,
+        baseFare: fareCalc.baseFare,
+        mileageFare: fareCalc.mileageFare,
+        prioritySurcharge: fareCalc.prioritySurcharge,
+        temperatureSurcharge: fareCalc.temperatureSurcharge,
+        servicesFee: fareCalc.servicesFee,
+        weightSurcharge: fareCalc.weightSurcharge,
+        peakSurcharge: fareCalc.peakSurcharge,
+        longDistanceSurcharge: fareCalc.longDistanceSurcharge,
+        platformFee: fareCalc.platformFee,
+        driverEarnings: fareCalc.driverEarnings,
+        estimatedDurationMinutes: fareCalc.estimatedDurationMinutes,
         scheduledPickupTime: parsed.data.scheduledPickupTime ? new Date(parsed.data.scheduledPickupTime) : null,
       }).returning();
 
-      res.status(201).json(delivery);
+      await logCustodyEvent({
+        deliveryId: delivery.id,
+        eventType: "dispatch_created",
+        performedBy: userId,
+        performedByName: company.companyName,
+        performedByRole: "dispatcher",
+        notes: `Delivery #${delivery.id} created by ${company.companyName}. Priority: ${delivery.priority}. Package: ${delivery.packageType}.`,
+        ipAddress: req.ip || undefined,
+        userAgent: req.headers["user-agent"] || undefined,
+      });
+
+      try {
+        await notifyDriversOfNewRide(
+          delivery.pickupAddress || "Pickup location",
+          delivery.scheduledPickupTime || new Date(),
+          {
+            rideId: delivery.id,
+            dropoffAddress: delivery.dropoffAddress || undefined,
+            distanceMiles: parseFloat(delivery.distanceMiles || "0"),
+            estimatedFare: parseFloat(delivery.estimatedFare || "0"),
+          }
+        );
+      } catch (pushErr) {
+        console.log("Push notification for courier delivery failed (non-critical):", pushErr);
+      }
+
+      res.status(201).json({ ...delivery, fareBreakdown: fareCalc });
     } catch (error) {
       console.error("Error creating courier delivery:", error);
       res.status(500).json({ message: "Failed to create delivery" });
@@ -9076,6 +9288,18 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
 
       if (!updated) return res.status(409).json({ message: "Delivery was claimed by another driver" });
 
+      const [callerUser] = await db.select().from(users).where(eq(users.id, userId));
+      await logCustodyEvent({
+        deliveryId,
+        eventType: "driver_assigned",
+        performedBy: userId,
+        performedByName: callerUser?.firstName ? `${callerUser.firstName} ${callerUser.lastName || ""}`.trim() : callerUser?.username || "Driver",
+        performedByRole: "driver",
+        notes: `Driver accepted delivery #${deliveryId}`,
+        ipAddress: req.ip || undefined,
+        userAgent: req.headers["user-agent"] || undefined,
+      });
+
       res.json(updated);
     } catch (error) {
       console.error("Error accepting delivery:", error);
@@ -9087,7 +9311,7 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     try {
       const deliveryId = parseInt(req.params.id);
       const userId = (req as any).session?.userId;
-      const { status, proofOfDeliveryUrl, signatureUrl, cancelledBy, cancellationReason } = req.body;
+      const { status, proofOfDeliveryUrl, signatureUrl, pickupSignatureUrl, cancelledBy, cancellationReason, lat, lng, locationAddress, temperatureReading, notes } = req.body;
 
       if (!courierDeliveryStatuses.includes(status)) {
         return res.status(400).json({ message: `Invalid status. Must be one of: ${courierDeliveryStatuses.join(", ")}` });
@@ -9114,12 +9338,12 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       }
 
       const [callerUser] = await db.select().from(users).where(eq(users.id, userId));
-      const [driverProfile] = delivery.driverId
+      const [driverProfileRow] = delivery.driverId
         ? await db.select().from(driverProfiles).where(eq(driverProfiles.id, delivery.driverId))
         : [null];
       const [company] = await db.select().from(courierCompanies).where(eq(courierCompanies.id, delivery.companyId));
 
-      const isDriver = driverProfile?.userId === userId;
+      const isDriver = driverProfileRow?.userId === userId;
       const isCompany = company?.ownerId === userId;
       const isAdmin = callerUser?.role === "admin";
 
@@ -9138,12 +9362,14 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       }
       if (proofOfDeliveryUrl) updateData.proofOfDeliveryUrl = proofOfDeliveryUrl;
       if (signatureUrl) updateData.signatureUrl = signatureUrl;
+      if (pickupSignatureUrl) updateData.pickupSignatureUrl = pickupSignatureUrl;
 
       if (status === "delivered" || status === "confirmed") {
         const fare = parseFloat(delivery.estimatedFare || "0");
+        const feeRate = courierFareConfig.platformFeePercent;
         updateData.finalFare = fare.toFixed(2);
-        updateData.platformFee = (fare * 0.15).toFixed(2);
-        updateData.driverEarnings = (fare * 0.85).toFixed(2);
+        updateData.platformFee = (fare * feeRate).toFixed(2);
+        updateData.driverEarnings = (fare * (1 - feeRate)).toFixed(2);
       }
 
       const [updated] = await db.update(courierDeliveries)
@@ -9151,10 +9377,119 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
         .where(eq(courierDeliveries.id, deliveryId))
         .returning();
 
+      const statusEventMap: Record<string, string> = {
+        en_route_pickup: "en_route_to_pickup",
+        picked_up: "package_picked_up",
+        in_transit: "in_transit",
+        arrived: "arrived_at_destination",
+        delivered: "package_delivered",
+        confirmed: "delivery_confirmed",
+        cancelled: "delivery_cancelled",
+      };
+      const custodyEventType = statusEventMap[status] || `status_${status}`;
+      const performerName = callerUser?.firstName ? `${callerUser.firstName} ${callerUser.lastName || ""}`.trim() : callerUser?.username || "Unknown";
+      const performerRole = isDriver ? "driver" : isCompany ? "dispatcher" : "admin";
+
+      await logCustodyEvent({
+        deliveryId,
+        eventType: custodyEventType,
+        performedBy: userId,
+        performedByName: performerName,
+        performedByRole: performerRole,
+        lat: lat || undefined,
+        lng: lng || undefined,
+        locationAddress: locationAddress || undefined,
+        temperatureReading: temperatureReading || undefined,
+        notes: notes || `Status changed to "${status}" by ${performerRole}`,
+        photoUrl: proofOfDeliveryUrl || undefined,
+        signatureUrl: signatureUrl || pickupSignatureUrl || undefined,
+        ipAddress: req.ip || undefined,
+        userAgent: req.headers["user-agent"] || undefined,
+      });
+
       res.json(updated);
     } catch (error) {
       console.error("Error updating delivery status:", error);
       res.status(500).json({ message: "Failed to update delivery status" });
+    }
+  });
+
+  app.post("/api/courier/deliveries/:id/custody-log", requireAuth, async (req, res) => {
+    try {
+      const deliveryId = parseInt(req.params.id);
+      const userId = (req as any).session?.userId;
+
+      const [delivery] = await db.select().from(courierDeliveries).where(eq(courierDeliveries.id, deliveryId));
+      if (!delivery) return res.status(404).json({ message: "Delivery not found" });
+
+      const [callerUser] = await db.select().from(users).where(eq(users.id, userId));
+      const [driverProfileRow] = delivery.driverId
+        ? await db.select().from(driverProfiles).where(eq(driverProfiles.id, delivery.driverId))
+        : [null];
+      const [company] = await db.select().from(courierCompanies).where(eq(courierCompanies.id, delivery.companyId));
+
+      const isDriver = driverProfileRow?.userId === userId;
+      const isCompany = company?.ownerId === userId;
+      const isAdmin = callerUser?.role === "admin";
+      if (!isDriver && !isCompany && !isAdmin) {
+        return res.status(403).json({ message: "Unauthorized to log custody events for this delivery" });
+      }
+
+      const { eventType, lat, lng, locationAddress, temperatureReading, notes, photoUrl, signatureUrl: sigUrl } = req.body;
+      if (!eventType || !courierCustodyEventTypes.includes(eventType)) {
+        return res.status(400).json({ message: `Invalid event type. Must be one of: ${courierCustodyEventTypes.join(", ")}` });
+      }
+
+      const performerName = callerUser?.firstName ? `${callerUser.firstName} ${callerUser.lastName || ""}`.trim() : callerUser?.username || "Unknown";
+      const performerRole = isDriver ? "driver" : isCompany ? "dispatcher" : "admin";
+
+      const hash = await logCustodyEvent({
+        deliveryId,
+        eventType,
+        performedBy: userId,
+        performedByName: performerName,
+        performedByRole: performerRole,
+        lat, lng, locationAddress, temperatureReading, notes, photoUrl, signatureUrl: sigUrl,
+        ipAddress: req.ip || undefined,
+        userAgent: req.headers["user-agent"] || undefined,
+      });
+
+      res.status(201).json({ message: "Custody event logged", hash });
+    } catch (error) {
+      console.error("Error logging custody event:", error);
+      res.status(500).json({ message: "Failed to log custody event" });
+    }
+  });
+
+  app.get("/api/courier/deliveries/:id/custody-log", requireAuth, async (req, res) => {
+    try {
+      const deliveryId = parseInt(req.params.id);
+      const userId = (req as any).session?.userId;
+
+      const [delivery] = await db.select().from(courierDeliveries).where(eq(courierDeliveries.id, deliveryId));
+      if (!delivery) return res.status(404).json({ message: "Delivery not found" });
+
+      const [callerUser] = await db.select().from(users).where(eq(users.id, userId));
+      const [driverProfileRow] = delivery.driverId
+        ? await db.select().from(driverProfiles).where(eq(driverProfiles.id, delivery.driverId))
+        : [null];
+      const [company] = await db.select().from(courierCompanies).where(eq(courierCompanies.id, delivery.companyId));
+
+      const isDriver = driverProfileRow?.userId === userId;
+      const isCompany = company?.ownerId === userId;
+      const isAdmin = callerUser?.role === "admin";
+      if (!isDriver && !isCompany && !isAdmin) {
+        return res.status(403).json({ message: "Unauthorized to view custody log for this delivery" });
+      }
+
+      const log = await db.select().from(courierChainOfCustodyLog)
+        .where(eq(courierChainOfCustodyLog.deliveryId, deliveryId))
+        .orderBy(courierChainOfCustodyLog.createdAt);
+
+      res.json(log);
+    } catch (error) {
+      console.error("Error fetching custody log:", error);
+      res.status(500).json({ message: "Failed to fetch custody log" });
     }
   });
 

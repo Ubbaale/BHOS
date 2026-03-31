@@ -1213,8 +1213,18 @@ export const courierDeliveries = pgTable("courier_deliveries", {
   scheduledPickupTime: timestamp("scheduled_pickup_time"),
   actualPickupTime: timestamp("actual_pickup_time"),
   actualDeliveryTime: timestamp("actual_delivery_time"),
+  baseFare: numeric("base_fare"),
+  mileageFare: numeric("mileage_fare"),
+  prioritySurcharge: numeric("priority_surcharge"),
+  temperatureSurcharge: numeric("temperature_surcharge"),
+  servicesFee: numeric("services_fee"),
+  weightSurcharge: numeric("weight_surcharge"),
+  peakSurcharge: numeric("peak_surcharge"),
+  longDistanceSurcharge: numeric("long_distance_surcharge"),
+  pickupSignatureUrl: text("pickup_signature_url"),
   proofOfDeliveryUrl: text("proof_of_delivery_url"),
   signatureUrl: text("signature_url"),
+  estimatedDurationMinutes: integer("estimated_duration_minutes"),
   cancelledAt: timestamp("cancelled_at"),
   cancelledBy: text("cancelled_by"),
   cancellationReason: text("cancellation_reason"),
@@ -1222,6 +1232,57 @@ export const courierDeliveries = pgTable("courier_deliveries", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+export const courierChainOfCustodyLog = pgTable("courier_chain_of_custody_log", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  deliveryId: integer("delivery_id").references(() => courierDeliveries.id).notNull(),
+  eventType: text("event_type").notNull(),
+  performedBy: varchar("performed_by").references(() => users.id),
+  performedByName: text("performed_by_name"),
+  performedByRole: text("performed_by_role"),
+  lat: numeric("lat"),
+  lng: numeric("lng"),
+  locationAddress: text("location_address"),
+  temperatureReading: numeric("temperature_reading"),
+  temperatureUnit: text("temperature_unit").default("fahrenheit"),
+  notes: text("notes"),
+  photoUrl: text("photo_url"),
+  signatureUrl: text("signature_url"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  immutableHash: text("immutable_hash"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type CourierChainOfCustodyEntry = typeof courierChainOfCustodyLog.$inferSelect;
+
+export const courierFareConfig = {
+  baseFare: { standard: 8.00, urgent: 15.00, stat: 25.00 },
+  perMileRate: { standard: 1.50, urgent: 2.25, stat: 3.50 },
+  temperatureSurcharge: { ambient: 0, cold_chain: 5.00, frozen: 10.00, controlled_room: 3.00 },
+  signatureFee: 2.00,
+  chainOfCustodyFee: 5.00,
+  photoProofFee: 1.50,
+  weightSurcharge: { under25: 0, under50: 5.00, under100: 10.00, over100: 20.00 },
+  peakHourMultiplier: 1.35,
+  peakHours: { start: 7, end: 9, afternoonStart: 16, afternoonEnd: 18 },
+  longDistanceMiles: 30,
+  longDistanceSurcharge: 15.00,
+  platformFeePercent: 0.15,
+  minimumFare: 12.00,
+} as const;
+
+export const courierCustodyEventTypes = [
+  "dispatch_created", "driver_assigned", "driver_accepted",
+  "en_route_to_pickup", "en_route_pickup",
+  "arrived_pickup", "pickup_signed", "package_picked_up", "package_inspected",
+  "temperature_logged", "in_transit", "in_transit_checkpoint",
+  "arrived_at_destination", "arrived_destination", "delivery_attempted",
+  "package_delivered", "delivery_signed", "delivery_confirmed",
+  "photo_proof_captured", "handoff_to_recipient",
+  "delivery_cancelled", "cancelled", "returned_to_sender",
+  "exception_logged",
+] as const;
 
 export const courierDeliveryStatuses = [
   "requested", "accepted", "en_route_pickup", "picked_up",
