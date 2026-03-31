@@ -13,7 +13,7 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
-import { users, itCompanies, itTechProfiles } from "@shared/schema";
+import { users, itCompanies, itTechProfiles, driverProfiles, courierCompanies, facilities, facilityStaff, caregiverPatients } from "@shared/schema";
 
 const app = express();
 const httpServer = createServer(app);
@@ -302,6 +302,11 @@ app.use((req, res, next) => {
           { username: "patient@test.com", password: "TestPatient123!", role: "patient" },
           { username: "itcompany@test.com", password: "TestCompany123!", role: "user" },
           { username: "ittech@test.com", password: "TestTech123!", role: "it_tech" },
+          { username: "employer@test.com", password: "TestEmployer123!", role: "employer" },
+          { username: "worker@test.com", password: "TestWorker123!", role: "healthcare_worker" },
+          { username: "caregiver@test.com", password: "TestCaregiver123!", role: "caregiver" },
+          { username: "facility@test.com", password: "TestFacility123!", role: "facility_staff" },
+          { username: "courier@test.com", password: "TestCourier123!", role: "user" },
         ];
         for (const acct of accounts) {
           const hash = await bcrypt.hash(acct.password, 10);
@@ -343,7 +348,7 @@ app.use((req, res, next) => {
           if (existingTech.length === 0) {
             await db.insert(itTechProfiles).values({
               userId: itTechUser.id,
-              fullName: "Test Technician",
+              fullName: "David Martinez",
               email: "ittech@test.com",
               phone: "555-200-3000",
               city: "Chicago",
@@ -352,12 +357,123 @@ app.use((req, res, next) => {
               skills: ["Network", "Hardware", "EHR System", "Printer"],
               certifications: ["CompTIA A+", "Network+"],
               experienceYears: "3-5",
-              bio: "Experienced healthcare IT technician",
+              bio: "Experienced healthcare IT technician specializing in EHR systems and hospital network infrastructure",
               hourlyRate: "45",
               applicationStatus: "approved",
               backgroundCheckStatus: "passed",
             });
             log("IT tech profile created for ittech@test.com");
+          }
+        }
+
+        const driverUser = await storage.getUserByUsername("driver@test.com");
+        if (driverUser) {
+          const existingDriver = await db.select().from(driverProfiles).where(eq(driverProfiles.userId, driverUser.id)).limit(1);
+          if (existingDriver.length === 0) {
+            await db.insert(driverProfiles).values({
+              userId: driverUser.id,
+              fullName: "James Wilson",
+              phone: "555-300-4000",
+              email: "driver@test.com",
+              vehicleType: "sedan",
+              vehiclePlate: "IL-TEST-001",
+              wheelchairAccessible: false,
+              stretcherCapable: false,
+              isAvailable: true,
+              applicationStatus: "approved",
+              kycStatus: "verified",
+              driversLicenseNumber: "D400-1234-5678",
+              driversLicenseExpiry: "2028-12-31",
+              driversLicenseState: "IL",
+              insuranceProvider: "State Farm",
+              insurancePolicyNumber: "SF-98765432",
+              insuranceExpiry: "2027-06-30",
+              vehicleYear: "2022",
+              vehicleMake: "Toyota",
+              vehicleModel: "Camry",
+              vehicleColor: "Silver",
+              currentLat: "41.8781",
+              currentLng: "-87.6298",
+              isContractorOnboarded: true,
+              taxClassification: "individual",
+              accountStatus: "active",
+            });
+            log("Driver profile created for driver@test.com");
+          }
+        }
+
+        const courierUser = await storage.getUserByUsername("courier@test.com");
+        if (courierUser) {
+          const existingCourier = await db.select().from(courierCompanies).where(eq(courierCompanies.ownerId, courierUser.id)).limit(1);
+          if (existingCourier.length === 0) {
+            await db.insert(courierCompanies).values({
+              ownerId: courierUser.id,
+              companyName: "MedExpress Courier Services",
+              contactEmail: "courier@test.com",
+              contactPhone: "555-400-5000",
+              address: "456 Healthcare Blvd",
+              city: "Chicago",
+              state: "IL",
+              zipCode: "60602",
+              companyType: "pharmacy",
+              businessLicenseNumber: "BL-2024-78901",
+              hipaaCompliant: true,
+              isActive: true,
+              defaultDeliveryTerms: "standard",
+            });
+            log("Courier company profile created for courier@test.com");
+          }
+        }
+
+        const facilityUser = await storage.getUserByUsername("facility@test.com");
+        if (facilityUser) {
+          const existingFacility = await db.select().from(facilities).limit(1);
+          let facilityId: number;
+          if (existingFacility.length === 0) {
+            const [newFacility] = await db.insert(facilities).values({
+              name: "Chicago General Hospital",
+              address: "789 Hospital Way, Chicago, IL 60603",
+              lat: "41.8827",
+              lng: "-87.6233",
+              phone: "555-500-6000",
+              email: "discharge@chicagogeneral.test",
+              facilityType: "hospital",
+              contactPerson: "Karen Miller",
+              isActive: true,
+            }).returning();
+            facilityId = newFacility.id;
+            log("Facility created: Chicago General Hospital");
+          } else {
+            facilityId = existingFacility[0].id;
+          }
+
+          const existingStaff = await db.select().from(facilityStaff).where(eq(facilityStaff.userId, facilityUser.id)).limit(1);
+          if (existingStaff.length === 0) {
+            await db.insert(facilityStaff).values({
+              facilityId,
+              userId: facilityUser.id,
+              role: "coordinator",
+              isActive: true,
+            });
+            log("Facility staff profile created for facility@test.com");
+          }
+        }
+
+        const caregiverUser = await storage.getUserByUsername("caregiver@test.com");
+        if (caregiverUser) {
+          const existingPatients = await db.select().from(caregiverPatients).where(eq(caregiverPatients.caregiverId, caregiverUser.id)).limit(1);
+          if (existingPatients.length === 0) {
+            await db.insert(caregiverPatients).values({
+              caregiverId: caregiverUser.id,
+              patientName: "Margaret Brown",
+              patientPhone: "555-600-7000",
+              patientEmail: "margaret.brown@test.com",
+              relationship: "parent",
+              mobilityNeeds: ["wheelchair"],
+              medicalNotes: "Requires wheelchair-accessible vehicle. Has regular dialysis appointments on Tuesdays and Thursdays.",
+              isActive: true,
+            });
+            log("Caregiver patient profile created for caregiver@test.com");
           }
         }
       } catch (err) {
