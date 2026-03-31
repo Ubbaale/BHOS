@@ -20,7 +20,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet, Star, AlertTriangle, History, ShieldCheck, ShieldAlert, Flame, ArrowUpRight, Route, Zap, Package, Thermometer } from "lucide-react";
+import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet, Star, AlertTriangle, History, ShieldCheck, ShieldAlert, Flame, ArrowUpRight, Route, Zap, Package, Thermometer, Share2 } from "lucide-react";
+import { ShareMenu } from "@/components/ShareMenu";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { openNavigation } from "@/lib/navigation";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -293,12 +294,22 @@ function RideCard({ ride, driverId, onAction, isNew = false, navigationPreferenc
             </div>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <Badge
-              variant="secondary"
-              className={`${statusColors[ride.status]} text-white no-default-hover-elevate`}
-            >
-              {statusLabels[ride.status]}
-            </Badge>
+            <div className="flex items-center gap-1">
+              <ShareMenu
+                title="Ride Request on CareHub"
+                text={`Ride available on CareHub!\nPickup: ${ride.pickupAddress}\nDropoff: ${ride.dropoffAddress}${ride.estimatedFare ? `\nFare: $${parseFloat(ride.estimatedFare).toFixed(2)}` : ""}`}
+                url={`/book-ride`}
+                size="icon"
+                variant="ghost"
+                testId={`button-share-ride-${ride.id}`}
+              />
+              <Badge
+                variant="secondary"
+                className={`${statusColors[ride.status]} text-white no-default-hover-elevate`}
+              >
+                {statusLabels[ride.status]}
+              </Badge>
+            </div>
             {ride.status === "requested" && (ride.distanceToPickup || ride.estimatedFare) && (
               <div className="flex flex-col items-end gap-1">
                 {ride.estimatedFare && (
@@ -1401,9 +1412,19 @@ export default function DriverDashboard() {
                               <h3 className="font-semibold">{delivery.packageType?.replace(/_/g, " ")}</h3>
                               {delivery.companyName && <p className="text-xs text-muted-foreground">From: {delivery.companyName}</p>}
                             </div>
-                            {delivery.estimatedFare && (
-                              <span className="text-lg font-bold text-green-600">${delivery.estimatedFare}</span>
-                            )}
+                            <div className="flex items-center gap-1">
+                              <ShareMenu
+                                title="Medical Courier Delivery on CareHub"
+                                text={`Medical courier delivery available on CareHub!\nPackage: ${delivery.packageType?.replace(/_/g, " ")}\nPriority: ${delivery.priority?.toUpperCase()}\nPickup: ${delivery.pickupAddress}\nDropoff: ${delivery.dropoffAddress}${delivery.estimatedFare ? `\nFare: $${delivery.estimatedFare}` : ""}`}
+                                url="/driver/apply"
+                                size="icon"
+                                variant="ghost"
+                                testId={`button-share-delivery-${delivery.id}`}
+                              />
+                              {delivery.estimatedFare && (
+                                <span className="text-lg font-bold text-green-600">${delivery.estimatedFare}</span>
+                              )}
+                            </div>
                           </div>
                           <div className="space-y-2 text-sm mb-3">
                             <div className="flex items-start gap-2">

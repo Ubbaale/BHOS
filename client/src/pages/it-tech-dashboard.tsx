@@ -64,7 +64,9 @@ import {
   BadgeCheck,
   ShieldCheck,
   FileCheck,
+  Share2,
 } from "lucide-react";
+import { ShareMenu } from "@/components/ShareMenu";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { ItServiceTicket, ItTechProfile } from "@shared/schema";
 
@@ -632,9 +634,19 @@ function AvailableTicketCard({ ticket, onAccept, isAccepting }: { ticket: ItServ
               </div>
             </div>
           </div>
-          <Button size="sm" onClick={onAccept} disabled={isAccepting} data-testid={`button-accept-${ticket.id}`}>
-            {isAccepting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept"}
-          </Button>
+          <div className="flex flex-col gap-1 items-end">
+            <ShareMenu
+              title={`IT Service Job: ${ticket.title}`}
+              text={`IT Service job available on CareHub!\n${ticket.title}\nCategory: ${categoryLabels[ticket.category] || ticket.category}${ticket.siteCity ? `\nLocation: ${ticket.siteCity}, ${ticket.siteState}` : ""}${ticket.payRate ? `\nPay: $${ticket.payRate}/${ticket.payType === "fixed" ? "flat" : "hr"}` : ""}\n\nApply as an IT tech to accept jobs!`}
+              url="/it-tech/apply"
+              size="icon"
+              variant="ghost"
+              testId={`button-share-ticket-${ticket.id}`}
+            />
+            <Button size="sm" onClick={onAccept} disabled={isAccepting} data-testid={`button-accept-${ticket.id}`}>
+              {isAccepting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept"}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

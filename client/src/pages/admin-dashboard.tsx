@@ -24,8 +24,10 @@ import {
   MapPin, Calendar, ChevronLeft, Shield, FileText, RotateCcw,
   UserPlus, TrendingUp, CreditCard, Unlock, BarChart3,
   LayoutDashboard, Navigation, Headphones, Settings, Monitor,
-  Menu, X, LogOut, Home, ChevronRight, Package, Thermometer
+  Menu, X, LogOut, Home, ChevronRight, Package, Thermometer,
+  Share2, Send, Truck, Wrench
 } from "lucide-react";
+import { ShareMenu, InviteShareButton, buildShareUrl } from "@/components/ShareMenu";
 
 interface AdminStats {
   totalRides: number;
@@ -1436,7 +1438,49 @@ export default function AdminDashboard() {
           )}
 
           {activeSection === "accounts" && hasPermission("accounts") && (
-          <Card>
+          <>
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Send className="w-5 h-5" />
+                  Invite & Share Links
+                </CardTitle>
+                <CardDescription>
+                  Share signup and onboarding links via WhatsApp, text message, or email to recruit drivers, patients, IT techs, and courier companies.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="flex flex-col items-center gap-2 p-3 border rounded-lg">
+                    <Truck className="w-6 h-6 text-blue-600" />
+                    <span className="text-sm font-medium">Invite Driver</span>
+                    <InviteShareButton role="driver" />
+                  </div>
+                  <div className="flex flex-col items-center gap-2 p-3 border rounded-lg">
+                    <Users className="w-6 h-6 text-green-600" />
+                    <span className="text-sm font-medium">Invite Patient</span>
+                    <InviteShareButton role="patient" />
+                  </div>
+                  <div className="flex flex-col items-center gap-2 p-3 border rounded-lg">
+                    <Wrench className="w-6 h-6 text-purple-600" />
+                    <span className="text-sm font-medium">Invite IT Tech</span>
+                    <InviteShareButton role="it_tech" />
+                  </div>
+                  <div className="flex flex-col items-center gap-2 p-3 border rounded-lg">
+                    <Package className="w-6 h-6 text-teal-600" />
+                    <span className="text-sm font-medium">Invite Courier</span>
+                    <InviteShareButton role="courier" />
+                  </div>
+                  <div className="flex flex-col items-center gap-2 p-3 border rounded-lg">
+                    <Share2 className="w-6 h-6 text-orange-600" />
+                    <span className="text-sm font-medium">General Invite</span>
+                    <InviteShareButton role="general" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
             <CardHeader>
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
@@ -1562,6 +1606,7 @@ export default function AdminDashboard() {
               </Table>
             </CardContent>
           </Card>
+          </>
           )}
         </div>
       </main>

@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Clock, DollarSign, Building2, ExternalLink, Car, User, Accessibility, Wrench, Server } from "lucide-react";
+import { MapPin, Clock, DollarSign, Building2, ExternalLink, Car, User, Accessibility, Wrench, Server, Share2 } from "lucide-react";
+import { ShareMenu } from "@/components/ShareMenu";
 import { apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 import type { Job, Ride } from "@shared/schema";
@@ -400,15 +401,25 @@ export default function JobMap() {
                           <ExternalLink className="w-3 h-3" /> External Listing
                         </p>
                       )}
-                      <a
-                        href={`https://app.carehubapp.com/#/login?ref=job&jobId=${job.id}&title=${encodeURIComponent(job.title)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block mt-2 text-xs font-medium text-white bg-primary px-3 py-1 rounded hover:opacity-90"
-                        data-testid={`link-apply-popup-${job.id}`}
-                      >
-                        Apply in App
-                      </a>
+                      <div className="flex items-center gap-2 mt-2">
+                        <a
+                          href={`https://app.carehubapp.com/#/login?ref=job&jobId=${job.id}&title=${encodeURIComponent(job.title)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-block text-xs font-medium text-white bg-primary px-3 py-1 rounded hover:opacity-90"
+                          data-testid={`link-apply-popup-${job.id}`}
+                        >
+                          Apply in App
+                        </a>
+                        <ShareMenu
+                          title={`Job: ${job.title}`}
+                          text={`Healthcare job on CareHub!\n${job.title} at ${job.facility}\nPay: ${job.pay}\n\nApply now!`}
+                          url={`/signup?role=worker`}
+                          size="icon"
+                          variant="ghost"
+                          testId={`button-share-job-${job.id}`}
+                        />
+                      </div>
                     </div>
                   </Popup>
                 </Marker>

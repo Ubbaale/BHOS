@@ -14,7 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Package, Plus, MapPin, Thermometer, Clock, CheckCircle2, XCircle, Truck } from "lucide-react";
+import { Package, Plus, MapPin, Thermometer, Clock, CheckCircle2, XCircle, Truck, Share2 } from "lucide-react";
+import { ShareMenu } from "@/components/ShareMenu";
 import type { CourierDelivery, CourierCompany } from "@shared/schema";
 
 const statusColors: Record<string, string> = {
@@ -369,6 +370,7 @@ function DeliveryTable({ deliveries, onCancel, onConfirm, showActions }: {
               <TableHead>Status</TableHead>
               <TableHead>Temp</TableHead>
               <TableHead>Fare</TableHead>
+              <TableHead></TableHead>
               {showActions && <TableHead>Actions</TableHead>}
             </TableRow>
           </TableHeader>
@@ -404,6 +406,16 @@ function DeliveryTable({ deliveries, onCancel, onConfirm, showActions }: {
                   )}
                 </TableCell>
                 <TableCell>${d.estimatedFare || d.finalFare || "—"}</TableCell>
+                <TableCell>
+                  <ShareMenu
+                    title="Medical Courier Delivery on CareHub"
+                    text={`Medical courier delivery #${d.id} on CareHub!\nPackage: ${d.packageType?.replace(/_/g, " ")}\nPriority: ${d.priority?.toUpperCase()}\nPickup: ${d.pickupAddress}\nDropoff: ${d.dropoffAddress}${d.estimatedFare ? `\nFare: $${d.estimatedFare}` : ""}\n\nDrivers: sign up to accept deliveries!`}
+                    url="/driver/apply"
+                    size="icon"
+                    variant="ghost"
+                    testId={`button-share-delivery-${d.id}`}
+                  />
+                </TableCell>
                 {showActions && (
                   <TableCell>
                     <div className="flex gap-1">
