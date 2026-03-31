@@ -1,8 +1,5 @@
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Car, UserCog, Briefcase, Phone, Monitor } from "lucide-react";
 import { Link } from "wouter";
-import { usePlatform } from "@/hooks/use-platform";
 import { cn } from "@/lib/utils";
 
 const actions = [
@@ -71,40 +68,10 @@ function TileLink({ action, children }: { action: typeof actions[number]; childr
 }
 
 export default function QuickActions() {
-  const { showMobileUI } = usePlatform();
-
-  if (showMobileUI) {
-    return (
-      <section id="quick-actions" className="py-6 px-4">
-        <div className="flex flex-wrap justify-center gap-3 max-w-xs mx-auto">
-          {actions.map((action, index) => {
-            const Icon = action.icon;
-            return (
-              <TileLink key={index} action={action}>
-                <div
-                  className={cn(
-                    "w-[5.5rem] h-[5.5rem] flex flex-col items-center justify-center rounded-xl text-white touch-feedback",
-                    `bg-gradient-to-br ${action.gradient}`
-                  )}
-                  data-testid={action.testId}
-                >
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mb-1.5">
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <span className="text-[10px] font-semibold text-center leading-tight px-1">{action.title}</span>
-                </div>
-              </TileLink>
-            );
-          })}
-        </div>
-      </section>
-    );
-  }
-
   return (
-    <section id="quick-actions" className="py-10 bg-muted/30">
-      <div className="max-w-5xl mx-auto px-6">
-        <div className="text-center mb-6">
+    <section id="quick-actions" className="py-6 px-4 md:py-10 md:bg-muted/30">
+      <div className="max-w-5xl mx-auto md:px-6">
+        <div className="hidden md:block text-center mb-6">
           <h2 className="text-2xl font-semibold mb-2">
             Get Started
           </h2>
@@ -113,22 +80,24 @@ export default function QuickActions() {
           </p>
         </div>
 
-        <div className="flex justify-center gap-4 flex-wrap">
+        <div className="flex flex-wrap justify-center gap-3 md:gap-4 max-w-xs md:max-w-none mx-auto">
           {actions.map((action, index) => {
             const Icon = action.icon;
             return (
               <TileLink key={index} action={action}>
                 <div
                   className={cn(
-                    "w-44 h-44 flex flex-col items-center justify-center rounded-xl text-white transition-transform hover:scale-[1.03] cursor-pointer",
+                    "flex flex-col items-center justify-center rounded-xl text-white cursor-pointer",
+                    "w-[5.5rem] h-[5.5rem] md:w-44 md:h-44",
+                    "md:transition-transform md:hover:scale-[1.03]",
                     `bg-gradient-to-br ${action.gradient}`
                   )}
                   data-testid={action.testId}
                 >
-                  <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mb-2">
-                    <Icon className="w-7 h-7" />
+                  <div className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-white/20 flex items-center justify-center mb-1.5 md:mb-2">
+                    <Icon className="w-5 h-5 md:w-7 md:h-7" />
                   </div>
-                  <span className="text-sm font-semibold text-center px-2">{action.title}</span>
+                  <span className="text-[10px] md:text-sm font-semibold text-center leading-tight px-1 md:px-2">{action.title}</span>
                 </div>
               </TileLink>
             );
