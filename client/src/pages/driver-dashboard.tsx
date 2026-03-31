@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MapPin, Clock, User, Phone, Car, Play, CheckCircle2, Navigation, Accessibility, AlertCircle, Shield, DollarSign, CreditCard, Bell, BellRing, Briefcase, TrendingUp, MessageCircle, Send, Heart, ExternalLink, FileText, Wallet, Star, AlertTriangle, History, ShieldCheck, ShieldAlert, Flame, ArrowUpRight, Route, Zap, Package, Thermometer, Share2 } from "lucide-react";
 import { ShareMenu } from "@/components/ShareMenu";
+import { DocumentUpload } from "@/components/DocumentUpload";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { openNavigation } from "@/lib/navigation";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -1664,6 +1665,16 @@ export default function DriverDashboard() {
             </div>
           </div>
           </>
+          )}
+
+          {currentDriver && (
+            <div className="mt-6">
+              <DocumentUpload
+                relatedEntityType="driver_profile"
+                relatedEntityId={currentDriver.id}
+                allowedTypes={["signed_agreement", "signed_contract", "ic_agreement", "w9_form", "insurance_doc", "medical_clearance", "certification", "other"]}
+              />
+            </div>
           )}
         </div>
       </main>

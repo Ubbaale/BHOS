@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements, itTechComplaints, itTechEnforcementLog, driverProfiles, driverComplaints, driverEnforcementLog, courierCompanies, courierDeliveries, insertCourierCompanySchema, insertCourierDeliverySchema, courierDeliveryStatuses, courierChainOfCustodyLog, courierFareConfig, courierCustodyEventTypes } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements, itTechComplaints, itTechEnforcementLog, driverProfiles, driverComplaints, driverEnforcementLog, courierCompanies, courierDeliveries, insertCourierCompanySchema, insertCourierDeliverySchema, courierDeliveryStatuses, courierChainOfCustodyLog, courierFareConfig, courierCustodyEventTypes, userDocuments, insertUserDocumentSchema } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -9646,6 +9646,158 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     } catch (error) {
       console.error("Error getting delivery history:", error);
       res.status(500).json({ message: "Failed to get delivery history" });
+    }
+  });
+
+  const docUpload = multer({
+    storage: multer.diskStorage({
+      destination: (req, file, cb) => {
+        const dir = "uploads/documents";
+        fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      },
+      filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + '-' + file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'));
+      }
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      const allowed = ["application/pdf", "image/png", "image/jpeg", "image/jpg",
+        "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new Error("Only PDF, PNG, JPG, DOC, DOCX files are allowed"));
+    }
+  });
+
+  app.use("/uploads/documents", express.static("uploads/documents"));
+  app.use("/uploads/signatures", express.static("uploads/signatures"));
+
+  app.post("/api/documents/upload", requireAuth, docUpload.single("file"), async (req: any, res) => {
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ message: "No file provided" });
+      const { documentType, documentName, description, relatedEntityType, relatedEntityId } = req.body;
+      if (!documentType || !documentName) {
+        return res.status(400).json({ message: "Document type and name are required" });
+      }
+      const fileUrl = `/uploads/documents/${file.filename}`;
+      const [doc] = await db.insert(userDocuments).values({
+        userId: req.session.userId,
+        documentType,
+        documentName,
+        fileUrl,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        description: description || null,
+        relatedEntityType: relatedEntityType || "general",
+        relatedEntityId: relatedEntityId || null,
+      }).returning();
+      res.json(doc);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/documents", requireAuth, async (req: any, res) => {
+    try {
+      const { entityType, entityId } = req.query;
+      let conditions = [eq(userDocuments.userId, req.session.userId)];
+      if (entityType) conditions.push(eq(userDocuments.relatedEntityType, entityType as string));
+      if (entityId) conditions.push(eq(userDocuments.relatedEntityId, entityId as string));
+      const docs = await db.select().from(userDocuments)
+        .where(and(...conditions))
+        .orderBy(desc(userDocuments.uploadedAt));
+      res.json(docs);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/documents/admin", requireAuth, async (req: any, res) => {
+    try {
+      const user = await db.select().from(users).where(eq(users.id, req.session.userId)).then(r => r[0]);
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin access required" });
+      const { userId, entityType, status } = req.query;
+      let conditions: any[] = [];
+      if (userId) conditions.push(eq(userDocuments.userId, userId as string));
+      if (entityType) conditions.push(eq(userDocuments.relatedEntityType, entityType as string));
+      if (status) conditions.push(eq(userDocuments.status, status as string));
+      const docs = await db.select().from(userDocuments)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(userDocuments.uploadedAt))
+        .limit(100);
+      res.json(docs);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/documents/:id/review", requireAuth, async (req: any, res) => {
+    try {
+      const user = await db.select().from(users).where(eq(users.id, req.session.userId)).then(r => r[0]);
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin access required" });
+      const { status, reviewNotes } = req.body;
+      if (!status || !["approved", "rejected", "under_review"].includes(status)) {
+        return res.status(400).json({ message: "Valid status required: approved, rejected, under_review" });
+      }
+      const [updated] = await db.update(userDocuments)
+        .set({ status, reviewedBy: req.session.userId, reviewedAt: new Date(), reviewNotes: reviewNotes || null })
+        .where(eq(userDocuments.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ message: "Document not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/documents/:id", requireAuth, async (req: any, res) => {
+    try {
+      const [doc] = await db.select().from(userDocuments)
+        .where(and(eq(userDocuments.id, req.params.id), eq(userDocuments.userId, req.session.userId)));
+      if (!doc) return res.status(404).json({ message: "Document not found" });
+      try { fs.unlinkSync(doc.fileUrl.replace(/^\//, "")); } catch {}
+      await db.delete(userDocuments).where(eq(userDocuments.id, req.params.id));
+      res.json({ message: "Document deleted" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/it/tickets/:id/signature", requireAuth, async (req: any, res) => {
+    try {
+      const ticket = await db.select().from(itServiceTickets)
+        .where(eq(itServiceTickets.id, req.params.id)).then(r => r[0]);
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.assignedTo !== req.session.userId) {
+        return res.status(403).json({ message: "Only the assigned tech can capture signatures" });
+      }
+      if (!["assigned", "in_progress", "resolved"].includes(ticket.status)) {
+        return res.status(400).json({ message: "Ticket must be in progress or resolved to capture signature" });
+      }
+      const { signatureDataUrl, signedName } = req.body;
+      if (!signatureDataUrl || !signedName) {
+        return res.status(400).json({ message: "Signature data and signed name are required" });
+      }
+      const base64Data = signatureDataUrl.replace(/^data:image\/png;base64,/, "");
+      const dir = "uploads/signatures";
+      fs.mkdirSync(dir, { recursive: true });
+      const filename = `${Date.now()}-${Math.round(Math.random() * 1E9)}-signature.png`;
+      fs.writeFileSync(`${dir}/${filename}`, base64Data, "base64");
+      const signatureUrl = `/uploads/signatures/${filename}`;
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          customerSignatureUrl: signatureUrl,
+          customerSignedAt: new Date(),
+          customerSignedName: signedName,
+          updatedAt: new Date(),
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+      res.json({ message: "Signature captured", ticket: updated });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
     }
   });
 

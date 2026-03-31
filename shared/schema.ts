@@ -875,6 +875,9 @@ export const itServiceTickets = pgTable("it_service_tickets", {
   overageHours: numeric("overage_hours"),
   payoutDate: timestamp("payout_date"),
   overtimeAlertSent: boolean("overtime_alert_sent").default(false),
+  customerSignatureUrl: text("customer_signature_url"),
+  customerSignedAt: timestamp("customer_signed_at"),
+  customerSignedName: text("customer_signed_name"),
   resolvedAt: timestamp("resolved_at"),
   closedAt: timestamp("closed_at"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1321,3 +1324,35 @@ export const insertCourierDeliverySchema = z.object({
 });
 export type InsertCourierDelivery = z.infer<typeof insertCourierDeliverySchema>;
 export type CourierDelivery = typeof courierDeliveries.$inferSelect;
+
+export const userDocuments = pgTable("user_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  documentType: text("document_type").notNull(),
+  documentName: text("document_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileSize: integer("file_size"),
+  mimeType: text("mime_type"),
+  description: text("description"),
+  relatedEntityType: text("related_entity_type"),
+  relatedEntityId: varchar("related_entity_id"),
+  status: text("status").notNull().default("uploaded"),
+  reviewedBy: varchar("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+});
+
+export const insertUserDocumentSchema = z.object({
+  documentType: z.enum([
+    "signed_agreement", "signed_contract", "ic_agreement", "w9_form",
+    "certification", "insurance_doc", "medical_clearance", "background_check",
+    "work_order_signoff", "invoice", "receipt", "other"
+  ]),
+  documentName: z.string().min(1, "Document name is required"),
+  description: z.string().optional(),
+  relatedEntityType: z.enum(["it_ticket", "ride", "delivery", "driver_profile", "general"]).optional(),
+  relatedEntityId: z.string().optional(),
+});
+export type InsertUserDocument = z.infer<typeof insertUserDocumentSchema>;
+export type UserDocument = typeof userDocuments.$inferSelect;

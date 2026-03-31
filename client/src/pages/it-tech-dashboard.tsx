@@ -65,8 +65,11 @@ import {
   ShieldCheck,
   FileCheck,
   Share2,
+  PenTool,
 } from "lucide-react";
 import { ShareMenu } from "@/components/ShareMenu";
+import { SignaturePad } from "@/components/SignaturePad";
+import { DocumentUpload } from "@/components/DocumentUpload";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { ItServiceTicket, ItTechProfile } from "@shared/schema";
 
@@ -391,6 +394,7 @@ function CancelJobDialog({ ticketId, onCancelled }: { ticketId: string; onCancel
 
 function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
   const { toast } = useToast();
+  const [signatureOpen, setSignatureOpen] = useState(false);
   const CategoryIcon = categoryIcons[ticket.category] || Wrench;
   let deliverables: any[] = [];
   try { deliverables = JSON.parse(ticket.deliverables || "[]"); } catch { deliverables = []; }
@@ -453,6 +457,17 @@ function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
       queryClient.invalidateQueries({ queryKey: ["/api/it/tech/my-jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/it/tech/available-tickets"] });
       toast({ title: "Job completed!" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const captureSignature = useMutation({
+    mutationFn: (data: { signatureDataUrl: string; signedName: string }) =>
+      apiRequest("POST", `/api/it/tickets/${ticket.id}/signature`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/it/tech/my-jobs"] });
+      setSignatureOpen(false);
+      toast({ title: "Signature captured!", description: "Customer signature has been saved." });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -593,6 +608,11 @@ function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
             </>
           )}
           <DeliverableDialog ticketId={ticket.id} onAdded={() => queryClient.invalidateQueries({ queryKey: ["/api/it/tech/my-jobs"] })} />
+          {ticket.checkInTime && !(ticket as any).customerSignatureUrl && (
+            <Button size="sm" variant="outline" onClick={() => setSignatureOpen(true)} data-testid={`button-get-signature-${ticket.id}`}>
+              <PenTool className="h-3 w-3 mr-1" /> Get Signature
+            </Button>
+          )}
           {ticket.checkOutTime && (
             <Button size="sm" onClick={() => completeTicket.mutate()} disabled={completeTicket.isPending} data-testid={`button-complete-${ticket.id}`}>
               {completeTicket.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
@@ -603,6 +623,39 @@ function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
             <CancelJobDialog ticketId={ticket.id} onCancelled={() => {}} />
           )}
         </div>
+
+        {(ticket as any).customerSignatureUrl && (
+          <div className="border rounded-lg p-3 bg-green-50 dark:bg-green-950 text-sm">
+            <p className="font-medium text-xs mb-2 flex items-center gap-1 text-green-700">
+              <CheckCircle2 className="h-3 w-3" /> Customer Signature Captured
+            </p>
+            <div className="flex items-center gap-3">
+              <img
+                src={(ticket as any).customerSignatureUrl}
+                alt="Customer Signature"
+                className="h-12 border rounded bg-white"
+                data-testid={`img-signature-${ticket.id}`}
+              />
+              <div>
+                <p className="font-medium">{(ticket as any).customerSignedName}</p>
+                {(ticket as any).customerSignedAt && (
+                  <p className="text-xs text-muted-foreground">
+                    Signed: {new Date((ticket as any).customerSignedAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <SignaturePad
+          open={signatureOpen}
+          onOpenChange={setSignatureOpen}
+          onSubmit={(data) => captureSignature.mutate(data)}
+          title="Customer Signature"
+          description="Have the customer sign below to confirm work completion on this service ticket."
+          isPending={captureSignature.isPending}
+        />
       </CardContent>
     </Card>
   );
@@ -1531,6 +1584,10 @@ export default function ITTechDashboardPage() {
           <TabsContent value="settings" className="space-y-4">
             <ContractorOnboardingSection />
             <CertificationUploadsSection />
+            <DocumentUpload
+              relatedEntityType="general"
+              allowedTypes={["signed_agreement", "signed_contract", "ic_agreement", "w9_form", "certification", "insurance_doc", "other"]}
+            />
           </TabsContent>
         </Tabs>
       </main>
