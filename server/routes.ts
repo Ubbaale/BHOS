@@ -778,7 +778,22 @@ export async function registerRoutes(
         }
       }
 
-      // Set session data
+      let redirectTo: string | undefined;
+      let hasItCompany = false;
+      let hasCourierCompany = false;
+      if (user.role === "user") {
+        const [itCo] = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, user.id)).limit(1);
+        if (itCo) {
+          hasItCompany = true;
+          redirectTo = "/it-services";
+        }
+        const [courierCo] = await db.select().from(courierCompanies).where(eq(courierCompanies.ownerId, user.id)).limit(1);
+        if (courierCo) {
+          hasCourierCompany = true;
+          redirectTo = "/courier";
+        }
+      }
+
       req.session.userId = user.id;
       req.session.username = user.username;
       req.session.role = user.role || "user";
@@ -787,7 +802,6 @@ export async function registerRoutes(
         req.session.driverId = driverId;
       }
 
-      // Clear rate limiting on successful login
       if ((req as any).loginRateLimitKey) {
         clearLoginAttempts((req as any).loginRateLimitKey);
       }
@@ -804,14 +818,17 @@ export async function registerRoutes(
             id: user.id, 
             username: user.username, 
             role: user.role,
-            permissions: user.permissions || []
+            permissions: user.permissions || [],
+            hasItCompany,
+            hasCourierCompany,
           },
           driver: driverProfile ? {
             id: driverProfile.id,
             fullName: driverProfile.fullName,
             applicationStatus: driverProfile.applicationStatus,
             kycStatus: driverProfile.kycStatus
-          } : null
+          } : null,
+          redirectTo,
         });
       });
     } catch (error) {
@@ -948,12 +965,23 @@ export async function registerRoutes(
       driverProfile = await storage.getDriver(req.session.driverId);
     }
 
+    let hasItCompany = false;
+    let hasCourierCompany = false;
+    if (user.role === "user") {
+      const [itCo] = await db.select().from(itCompanies).where(eq(itCompanies.ownerId, user.id)).limit(1);
+      if (itCo) hasItCompany = true;
+      const [courierCo] = await db.select().from(courierCompanies).where(eq(courierCompanies.ownerId, user.id)).limit(1);
+      if (courierCo) hasCourierCompany = true;
+    }
+
     res.json({
       user: {
         id: user.id,
         username: user.username,
         role: user.role,
-        permissions: user.permissions || []
+        permissions: user.permissions || [],
+        hasItCompany,
+        hasCourierCompany,
       },
       driver: driverProfile ? {
         id: driverProfile.id,

@@ -80,9 +80,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(data.user);
       setDriver(data.driver);
-      let redirectTo = "/";
-      if (data.user?.role === "admin") redirectTo = "/admin";
-      else if (data.user?.role === "driver") redirectTo = data.redirectTo || "/driver";
+      let redirectTo = data.redirectTo || "/";
+      if (!data.redirectTo) {
+        switch (data.user?.role) {
+          case "admin": redirectTo = "/admin"; break;
+          case "driver": redirectTo = "/driver"; break;
+          case "patient": redirectTo = "/book-ride"; break;
+          case "employer": redirectTo = "/"; break;
+          case "healthcare_worker": redirectTo = "/"; break;
+          case "caregiver": redirectTo = "/caregiver"; break;
+          case "facility_staff": redirectTo = "/facility"; break;
+          case "it_tech": redirectTo = "/it-tech"; break;
+          default: redirectTo = "/"; break;
+        }
+      }
       return { success: true, redirectTo };
     } catch (error) {
       return { success: false, message: "Login failed. Please try again." };
