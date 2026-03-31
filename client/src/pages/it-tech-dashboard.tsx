@@ -404,8 +404,29 @@ function useLocationTracking(ticketId: string, isCheckedIn: boolean, isCheckedOu
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const active = isCheckedIn && !isCheckedOut;
 
+  const fetchStatusFallback = useCallback(async () => {
+    try {
+      const resp = await fetch(`/api/it/tech/location-status/${ticketId}`, { credentials: "include" });
+      if (resp.ok) {
+        const data = await resp.json();
+        setLocationInfo({
+          locationStatus: data.locationStatus || "unknown",
+          distanceMeters: data.lastLocationDistance,
+          onSite: data.locationStatus === "on_site",
+          shouldRemind: data.hoursCheckedIn > 8 && !data.checkoutReminderSent,
+          hoursCheckedIn: data.hoursCheckedIn || 0,
+          reminderReason: data.hoursCheckedIn > 8 ? "long_shift" : null,
+        });
+      }
+    } catch {}
+  }, [ticketId]);
+
   const sendPing = useCallback(async () => {
-    if (!active || !navigator.geolocation) return;
+    if (!active) return;
+    if (!navigator.geolocation) {
+      await fetchStatusFallback();
+      return;
+    }
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 15000, enableHighAccuracy: true })
@@ -420,8 +441,10 @@ function useLocationTracking(ticketId: string, isCheckedIn: boolean, isCheckedOu
         const data = await resp.json();
         setLocationInfo(data);
       }
-    } catch {}
-  }, [ticketId, active]);
+    } catch {
+      await fetchStatusFallback();
+    }
+  }, [ticketId, active, fetchStatusFallback]);
 
   useEffect(() => {
     if (!active) {

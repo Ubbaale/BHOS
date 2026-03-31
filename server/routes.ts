@@ -9775,8 +9775,13 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
         return res.status(400).json({ message: "Must be checked in and not checked out" });
       }
 
-      const { lat, lng } = req.body;
-      if (!lat || !lng) return res.status(400).json({ message: "GPS coordinates required" });
+      const rawLat = Number(req.body?.lat);
+      const rawLng = Number(req.body?.lng);
+      if (!Number.isFinite(rawLat) || !Number.isFinite(rawLng) || rawLat < -90 || rawLat > 90 || rawLng < -180 || rawLng > 180) {
+        return res.status(400).json({ message: "Valid GPS coordinates required (lat: -90 to 90, lng: -180 to 180)" });
+      }
+      const lat = rawLat;
+      const lng = rawLng;
 
       const now = new Date();
       let distanceMeters: number | null = null;
@@ -9785,13 +9790,17 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       const LEFT_SITE_RADIUS = 800;
 
       if (ticket.siteLat && ticket.siteLng) {
-        const toRad = (d: number) => d * Math.PI / 180;
-        const R = 6371000;
-        const dLat = toRad(parseFloat(ticket.siteLat) - lat);
-        const dLng = toRad(parseFloat(ticket.siteLng) - lng);
-        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat)) * Math.cos(toRad(parseFloat(ticket.siteLat))) * Math.sin(dLng/2)**2;
-        distanceMeters = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        onSite = distanceMeters <= ON_SITE_RADIUS;
+        const siteLat = parseFloat(ticket.siteLat);
+        const siteLng = parseFloat(ticket.siteLng);
+        if (Number.isFinite(siteLat) && Number.isFinite(siteLng)) {
+          const toRad = (d: number) => d * Math.PI / 180;
+          const R = 6371000;
+          const dLat = toRad(siteLat - lat);
+          const dLng = toRad(siteLng - lng);
+          const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat)) * Math.cos(toRad(siteLat)) * Math.sin(dLng/2)**2;
+          distanceMeters = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          onSite = distanceMeters <= ON_SITE_RADIUS;
+        }
       }
 
       let locationStatus = ticket.locationStatus || "unknown";
