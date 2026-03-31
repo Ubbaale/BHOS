@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements, itTechComplaints, itTechEnforcementLog } from "@shared/schema";
+import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProfileSchema, rideStatuses, insertPushSubscriptionSchema, insertRideMessageSchema, insertTripShareSchema, users, auditLogs, legalAgreements, insertFacilitySchema, insertFacilityStaffSchema, insertCaregiverPatientSchema, passwordResetCodes, emailVerificationCodes, itCompanies, itServiceTickets, itTicketNotes, insertItCompanySchema, insertItServiceTicketSchema, insertItTicketNoteSchema, itTechProfiles, insertItTechProfileSchema, itTalentPools, itTalentPoolMembers, insertItTalentPoolSchema, itWorkOrderTemplates, insertItWorkOrderTemplateSchema, itTechAnnualEarnings, itTechContractorAgreements, itTechComplaints, itTechEnforcementLog, driverProfiles, driverComplaints, driverEnforcementLog } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -2709,6 +2709,59 @@ export async function registerRoutes(
     }
   });
 
+  const DRIVER_COMPLAINT_CATEGORIES = ["reckless_driving", "no_show", "unprofessional", "vehicle_condition", "safety_violation", "overcharging", "harassment", "intoxication", "route_deviation", "other"];
+  const DRIVER_AUTO_HOLD_THRESHOLD = 3;
+
+  async function checkDriverCompliance(driverId: number): Promise<{ compliant: boolean; issues: string[] }> {
+    const driver = await storage.getDriver(driverId);
+    if (!driver) return { compliant: false, issues: ["Driver not found"] };
+
+    const issues: string[] = [];
+
+    if (driver.accountStatus === "suspended") {
+      if (driver.suspendedUntil && new Date(driver.suspendedUntil) > new Date()) {
+        issues.push(`Account suspended until ${new Date(driver.suspendedUntil).toLocaleDateString()}`);
+      } else if (driver.suspendedUntil && new Date(driver.suspendedUntil) <= new Date()) {
+        await db.update(driverProfiles)
+          .set({ accountStatus: "active", suspendedAt: null, suspendedUntil: null, suspensionReason: null })
+          .where(eq(driverProfiles.id, driverId));
+      } else {
+        issues.push("Account is suspended. Please contact support.");
+      }
+    }
+
+    if (driver.accountStatus === "deactivated") {
+      issues.push("Account has been permanently deactivated.");
+    }
+
+    if (driver.accountStatus === "on_hold") {
+      issues.push("Account is on hold pending complaint review. You cannot accept rides until the review is complete.");
+    }
+
+    if (driver.applicationStatus !== "approved") {
+      issues.push("Application has not been approved yet.");
+    }
+
+    const now = new Date();
+    if (driver.driversLicenseExpiry) {
+      const expiry = new Date(driver.driversLicenseExpiry);
+      if (expiry < now) issues.push("Driver's license has expired.");
+    }
+    if (driver.insuranceExpiry) {
+      const expiry = new Date(driver.insuranceExpiry);
+      if (expiry < now) issues.push("Insurance has expired.");
+    }
+    if (driver.vehicleInspectionExpiry) {
+      const expiry = new Date(driver.vehicleInspectionExpiry);
+      if (expiry < now) issues.push("Vehicle inspection has expired.");
+    }
+    if (driver.backgroundCheckStatus === "failed") {
+      issues.push("Background check failed.");
+    }
+
+    return { compliant: issues.length === 0, issues };
+  }
+
   // Protected: Only authenticated drivers can accept rides
   app.post("/api/rides/:id/accept", requireDriver, async (req, res) => {
     try {
@@ -5350,6 +5403,276 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
   
+  // ============ DRIVER COMPLAINT & ENFORCEMENT SYSTEM ============
+
+  app.post("/api/drivers/:driverId/report", requireAuth, async (req, res) => {
+    try {
+      const reporterId = (req as any).session?.userId;
+      const driverProfileId = parseInt(req.params.driverId);
+      const { rideId, category, description, evidence } = req.body;
+
+      if (!category || !description) {
+        return res.status(400).json({ message: "Category and description are required" });
+      }
+      if (!DRIVER_COMPLAINT_CATEGORIES.includes(category)) {
+        return res.status(400).json({ message: `Invalid category. Must be one of: ${DRIVER_COMPLAINT_CATEGORIES.join(", ")}` });
+      }
+
+      const driver = await storage.getDriver(driverProfileId);
+      if (!driver) return res.status(404).json({ message: "Driver not found" });
+
+      if (reporterId === driver.userId) {
+        return res.status(400).json({ message: "You cannot report yourself" });
+      }
+
+      if (!rideId) {
+        return res.status(400).json({ message: "A ride ID is required to file a complaint" });
+      }
+
+      const ride = await storage.getRide(parseInt(rideId));
+      if (!ride) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      const [reporterUser] = await db.select().from(users).where(eq(users.id, reporterId));
+      const isRideParticipant = ride.driverId === driverProfileId && (
+        ride.userId === reporterId ||
+        (reporterUser?.role === "admin")
+      );
+      if (!isRideParticipant) {
+        return res.status(403).json({ message: "You can only report drivers on your own rides" });
+      }
+
+      const [complaint] = await db.insert(driverComplaints).values({
+        driverProfileId,
+        driverUserId: driver.userId,
+        rideId: rideId ? parseInt(rideId) : null,
+        reportedBy: reporterId,
+        reason: category,
+        category,
+        description,
+        evidence: evidence || null,
+        status: "pending",
+      }).returning();
+
+      const newComplaintCount = (driver.complaintCount || 0) + 1;
+      const updateData: any = { complaintCount: newComplaintCount };
+
+      if (newComplaintCount >= DRIVER_AUTO_HOLD_THRESHOLD && driver.accountStatus === "active") {
+        updateData.accountStatus = "on_hold";
+        updateData.suspendedAt = new Date();
+        updateData.suspensionReason = `Auto-hold: ${newComplaintCount} complaints received (threshold: ${DRIVER_AUTO_HOLD_THRESHOLD})`;
+
+        await db.insert(driverEnforcementLog).values({
+          driverProfileId,
+          driverUserId: driver.userId,
+          action: "auto_hold",
+          reason: `Auto-hold triggered: ${newComplaintCount} complaints reached threshold of ${DRIVER_AUTO_HOLD_THRESHOLD}`,
+          previousStatus: driver.accountStatus || "active",
+          newStatus: "on_hold",
+          performedBy: null,
+          performedBySystem: true,
+          complaintId: complaint.id,
+        });
+      }
+
+      await db.update(driverProfiles)
+        .set(updateData)
+        .where(eq(driverProfiles.id, driverProfileId));
+
+      res.json({ message: "Complaint submitted successfully", complaint });
+    } catch (error) {
+      console.error("Error reporting driver:", error);
+      res.status(500).json({ message: "Failed to submit complaint" });
+    }
+  });
+
+  app.get("/api/admin/driver-complaints", requireAdmin, requirePermission("drivers"), async (_req, res) => {
+    try {
+      const allComplaints = await db.select().from(driverComplaints).orderBy(desc(driverComplaints.createdAt));
+
+      const enriched = await Promise.all(allComplaints.map(async (c) => {
+        const [reporter] = await db.select().from(users).where(eq(users.id, c.reportedBy));
+        const driver = c.driverProfileId ? await storage.getDriver(c.driverProfileId) : null;
+        return {
+          ...c,
+          reporterName: reporter?.username || "Unknown",
+          driverName: driver?.fullName || "Unknown",
+          driverAccountStatus: driver?.accountStatus || "unknown",
+        };
+      }));
+
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error getting driver complaints:", error);
+      res.status(500).json({ message: "Failed to get complaints" });
+    }
+  });
+
+  app.post("/api/admin/driver-complaints/:id/review", requireAdmin, requirePermission("drivers"), async (req, res) => {
+    try {
+      const adminId = (req as any).session?.userId;
+      const { status, adminNotes, adminAction } = req.body;
+
+      if (!status || !["verified", "dismissed", "investigating"].includes(status)) {
+        return res.status(400).json({ message: "Status must be verified, dismissed, or investigating" });
+      }
+
+      const [complaint] = await db.select().from(driverComplaints).where(eq(driverComplaints.id, req.params.id));
+      if (!complaint) return res.status(404).json({ message: "Complaint not found" });
+
+      await db.update(driverComplaints)
+        .set({
+          status,
+          adminReviewedBy: adminId,
+          adminNotes: adminNotes || null,
+          adminAction: adminAction || null,
+          reviewedAt: new Date(),
+        })
+        .where(eq(driverComplaints.id, req.params.id));
+
+      if (status === "verified" && complaint.status !== "verified") {
+        const driver = await storage.getDriver(complaint.driverProfileId);
+        if (driver) {
+          const newVerified = (driver.verifiedComplaintCount || 0) + 1;
+          await db.update(driverProfiles)
+            .set({ verifiedComplaintCount: newVerified })
+            .where(eq(driverProfiles.id, complaint.driverProfileId));
+        }
+      }
+
+      const [updated] = await db.select().from(driverComplaints).where(eq(driverComplaints.id, req.params.id));
+      res.json({ message: "Complaint reviewed", complaint: updated });
+    } catch (error) {
+      console.error("Error reviewing driver complaint:", error);
+      res.status(500).json({ message: "Failed to review complaint" });
+    }
+  });
+
+  app.post("/api/admin/drivers/:id/enforce", requireAdmin, requirePermission("drivers"), async (req, res) => {
+    try {
+      const adminId = (req as any).session?.userId;
+      const driverProfileId = parseInt(req.params.id);
+      const { action, reason, suspendDays, notes } = req.body;
+
+      if (!action || !["warn", "suspend", "ban", "reinstate", "remove_hold"].includes(action)) {
+        return res.status(400).json({ message: "Invalid action. Must be warn, suspend, ban, reinstate, or remove_hold" });
+      }
+      if (!reason) return res.status(400).json({ message: "Reason is required" });
+
+      const driver = await storage.getDriver(driverProfileId);
+      if (!driver) return res.status(404).json({ message: "Driver not found" });
+
+      const previousStatus = driver.accountStatus || "active";
+      let newStatus = previousStatus;
+      const updateData: any = {};
+
+      if (action === "warn") {
+        newStatus = "warning";
+        updateData.accountStatus = "warning";
+      } else if (action === "suspend") {
+        newStatus = "suspended";
+        updateData.accountStatus = "suspended";
+        updateData.suspendedAt = new Date();
+        updateData.suspensionReason = reason;
+        if (suspendDays) {
+          const until = new Date();
+          until.setDate(until.getDate() + parseInt(suspendDays));
+          updateData.suspendedUntil = until;
+        }
+      } else if (action === "ban") {
+        newStatus = "deactivated";
+        updateData.accountStatus = "deactivated";
+        updateData.bannedAt = new Date();
+        updateData.banReason = reason;
+        updateData.isAvailable = false;
+      } else if (action === "reinstate" || action === "remove_hold") {
+        newStatus = "active";
+        updateData.accountStatus = "active";
+        updateData.suspendedAt = null;
+        updateData.suspendedUntil = null;
+        updateData.suspensionReason = null;
+      }
+
+      await db.update(driverProfiles)
+        .set(updateData)
+        .where(eq(driverProfiles.id, driverProfileId));
+
+      await db.insert(driverEnforcementLog).values({
+        driverProfileId,
+        driverUserId: driver.userId,
+        action,
+        reason,
+        previousStatus,
+        newStatus,
+        performedBy: adminId,
+        notes: notes || null,
+      });
+
+      const updatedDriver = await storage.getDriver(driverProfileId);
+      res.json({ message: `Driver ${action} action applied`, driver: updatedDriver });
+    } catch (error) {
+      console.error("Error enforcing driver:", error);
+      res.status(500).json({ message: "Failed to enforce action" });
+    }
+  });
+
+  app.get("/api/admin/drivers/:id/enforcement-history", requireAdmin, requirePermission("drivers"), async (req, res) => {
+    try {
+      const driverProfileId = parseInt(req.params.id);
+      const driver = await storage.getDriver(driverProfileId);
+      if (!driver) return res.status(404).json({ message: "Driver not found" });
+
+      const history = await db.select().from(driverEnforcementLog)
+        .where(eq(driverEnforcementLog.driverProfileId, driverProfileId))
+        .orderBy(desc(driverEnforcementLog.createdAt));
+
+      const complaints = await db.select().from(driverComplaints)
+        .where(eq(driverComplaints.driverProfileId, driverProfileId))
+        .orderBy(desc(driverComplaints.createdAt));
+
+      res.json({ history, complaints, driver });
+    } catch (error) {
+      console.error("Error getting driver enforcement history:", error);
+      res.status(500).json({ message: "Failed to get enforcement history" });
+    }
+  });
+
+  app.get("/api/drivers/:id/account-status", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const driverProfileId = parseInt(req.params.id);
+      const driver = await storage.getDriver(driverProfileId);
+      if (!driver) return res.status(404).json({ message: "Driver not found" });
+
+      const [callerUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (driver.userId !== userId && callerUser?.role !== "admin") {
+        return res.status(403).json({ message: "You can only view your own account status" });
+      }
+
+      const complaints = await db.select().from(driverComplaints)
+        .where(eq(driverComplaints.driverProfileId, driverProfileId))
+        .orderBy(desc(driverComplaints.createdAt));
+
+      res.json({
+        accountStatus: driver.accountStatus || "active",
+        complaintCount: driver.complaintCount || 0,
+        verifiedComplaintCount: driver.verifiedComplaintCount || 0,
+        suspensionReason: driver.suspensionReason,
+        suspendedUntil: driver.suspendedUntil,
+        complaints: complaints.map(c => ({
+          id: c.id,
+          category: c.category,
+          status: c.status,
+          createdAt: c.createdAt,
+        })),
+      });
+    } catch (error) {
+      console.error("Error getting driver account status:", error);
+      res.status(500).json({ message: "Failed to get account status" });
+    }
+  });
+
   // Admin cancel a ride
   // Protected: Only admins can force cancel rides
   app.post("/api/admin/rides/:id/cancel", requireAdmin, requirePermission("rides", "dispatch"), async (req, res) => {

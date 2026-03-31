@@ -201,6 +201,12 @@ export const driverProfiles = pgTable("driver_profiles", {
   backgroundCheckStatus: text("background_check_status").default("not_started"),
   backgroundCheckDate: text("background_check_date"),
   backgroundCheckProvider: text("background_check_provider"),
+  complaintCount: integer("complaint_count").default(0),
+  verifiedComplaintCount: integer("verified_complaint_count").default(0),
+  suspendedAt: timestamp("suspended_at"),
+  suspendedUntil: timestamp("suspended_until"),
+  bannedAt: timestamp("banned_at"),
+  banReason: text("ban_reason"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1097,6 +1103,41 @@ export const itTechEnforcementLog = pgTable("it_tech_enforcement_log", {
   newStatus: text("new_status"),
   performedBy: varchar("performed_by").references(() => users.id).notNull(),
   complaintId: varchar("complaint_id").references(() => itTechComplaints.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const driverComplaints = pgTable("driver_complaints", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  driverProfileId: integer("driver_profile_id").references(() => driverProfiles.id).notNull(),
+  driverUserId: varchar("driver_user_id").references(() => users.id),
+  rideId: integer("ride_id"),
+  reportedBy: varchar("reported_by").references(() => users.id).notNull(),
+  reason: text("reason").notNull(),
+  category: text("category").notNull(),
+  description: text("description").notNull(),
+  evidence: text("evidence"),
+  status: text("status").default("pending"),
+  adminReviewedBy: varchar("admin_reviewed_by").references(() => users.id),
+  adminNotes: text("admin_notes"),
+  adminAction: text("admin_action"),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type DriverComplaint = typeof driverComplaints.$inferSelect;
+
+export const driverEnforcementLog = pgTable("driver_enforcement_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  driverProfileId: integer("driver_profile_id").references(() => driverProfiles.id).notNull(),
+  driverUserId: varchar("driver_user_id").references(() => users.id),
+  action: text("action").notNull(),
+  reason: text("reason").notNull(),
+  previousStatus: text("previous_status"),
+  newStatus: text("new_status"),
+  performedBy: varchar("performed_by").references(() => users.id),
+  performedBySystem: boolean("performed_by_system").default(false),
+  complaintId: varchar("complaint_id").references(() => driverComplaints.id),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });

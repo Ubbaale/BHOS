@@ -77,6 +77,7 @@ const NAV_ITEMS = [
   { key: "patients", label: "Patients", icon: Users, permission: "patients" },
   { key: "earnings", label: "Earnings", icon: TrendingUp, permission: "earnings" },
   { key: "accounts", label: "Accounts", icon: Shield, permission: "accounts" },
+  { key: "driver-complaints", label: "Driver Reports", icon: AlertTriangle, permission: "drivers" },
   { key: "incidents", label: "Incidents", icon: AlertTriangle, permission: "incidents" },
   { key: "it-complaints", label: "IT Services", icon: Monitor, permission: "it_services" },
 ] as const;
@@ -139,6 +140,10 @@ export default function AdminDashboard() {
 
   const { data: allComplaints = [] } = useQuery<any[]>({
     queryKey: ["/api/it/admin/complaints"],
+  });
+
+  const { data: driverComplaints = [] } = useQuery<any[]>({
+    queryKey: ["/api/admin/driver-complaints"],
   });
 
   const { data: allItTechs = [] } = useQuery<any[]>({
@@ -306,6 +311,39 @@ export default function AdminDashboard() {
     },
   });
 
+  const reviewDriverComplaintMutation = useMutation({
+    mutationFn: async ({ complaintId, status, adminNotes, adminAction }: { complaintId: string; status: string; adminNotes?: string; adminAction?: string }) => {
+      const response = await apiRequest("POST", `/api/admin/driver-complaints/${complaintId}/review`, { status, adminNotes, adminAction });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/driver-complaints"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/drivers/all"] });
+      toast({ title: "Complaint reviewed" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const enforceDriverMutation = useMutation({
+    mutationFn: async ({ driverId, action, reason, suspendDays, notes }: { driverId: number; action: string; reason: string; suspendDays?: number; notes?: string }) => {
+      const response = await apiRequest("POST", `/api/admin/drivers/${driverId}/enforce`, { action, reason, suspendDays, notes });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drivers/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/driver-complaints"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setActionDialogOpen(false);
+      setActionReason("");
+      toast({ title: "Driver enforcement action applied" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const updatePatientStatusMutation = useMutation({
     mutationFn: async ({ phone, status, reason }: { phone: string; status: string; reason?: string }) => {
       const response = await apiRequest("PATCH", `/api/admin/patients/${encodeURIComponent(phone)}/status`, { status, reason });
@@ -393,6 +431,8 @@ export default function AdminDashboard() {
       cancelRideMutation.mutate({ rideId: selectedRide.id, reason: actionReason });
     } else if (actionType === "refund_ride" && selectedRide) {
       refundRideMutation.mutate({ rideId: selectedRide.id, reason: actionReason, refundAmount: refundAmount || undefined });
+    } else if (actionType === "enforce_suspend_driver" && selectedDriver) {
+      enforceDriverMutation.mutate({ driverId: selectedDriver.id, action: "suspend", reason: actionReason });
     }
   };
 
@@ -922,6 +962,142 @@ export default function AdminDashboard() {
                   )}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+          )}
+
+          {activeSection === "driver-complaints" && hasPermission("drivers") && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Driver Complaint Reports</CardTitle>
+              <CardDescription>
+                Review complaints filed against drivers. After {3} complaints, a driver is automatically put on hold and cannot accept rides until an admin reviews.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {driverComplaints.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8" data-testid="text-no-driver-complaints">No driver complaints filed yet.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Driver</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Reporter</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Driver Status</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {driverComplaints.map((complaint: any) => (
+                      <TableRow key={complaint.id} data-testid={`row-driver-complaint-${complaint.id}`}>
+                        <TableCell className="font-medium">{complaint.driverName}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" data-testid={`badge-category-${complaint.id}`}>
+                            {complaint.category?.replace(/_/g, " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate">{complaint.description}</TableCell>
+                        <TableCell>{complaint.reporterName}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={complaint.status === "verified" ? "destructive" : complaint.status === "dismissed" ? "secondary" : "default"}
+                            data-testid={`badge-status-${complaint.id}`}
+                          >
+                            {complaint.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              complaint.driverAccountStatus === "on_hold" || complaint.driverAccountStatus === "suspended"
+                                ? "destructive"
+                                : complaint.driverAccountStatus === "deactivated"
+                                ? "destructive"
+                                : complaint.driverAccountStatus === "warning"
+                                ? "default"
+                                : "secondary"
+                            }
+                            data-testid={`badge-driver-status-${complaint.id}`}
+                          >
+                            {complaint.driverAccountStatus?.replace(/_/g, " ") || "active"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{complaint.createdAt ? new Date(complaint.createdAt).toLocaleDateString() : "N/A"}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 flex-wrap">
+                            {complaint.status === "pending" && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => reviewDriverComplaintMutation.mutate({ complaintId: complaint.id, status: "verified" })}
+                                  data-testid={`button-verify-complaint-${complaint.id}`}
+                                >
+                                  Verify
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => reviewDriverComplaintMutation.mutate({ complaintId: complaint.id, status: "dismissed" })}
+                                  data-testid={`button-dismiss-complaint-${complaint.id}`}
+                                >
+                                  Dismiss
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => reviewDriverComplaintMutation.mutate({ complaintId: complaint.id, status: "investigating" })}
+                                  data-testid={`button-investigate-complaint-${complaint.id}`}
+                                >
+                                  Investigate
+                                </Button>
+                              </>
+                            )}
+                            {(complaint.driverAccountStatus === "on_hold" || complaint.driverAccountStatus === "active" || complaint.driverAccountStatus === "warning") && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => {
+                                    setSelectedDriver(allDrivers.find(d => d.id === complaint.driverProfileId) || null);
+                                    setActionType("enforce_suspend_driver");
+                                    setActionDialogOpen(true);
+                                  }}
+                                  data-testid={`button-suspend-driver-${complaint.id}`}
+                                >
+                                  Suspend
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => enforceDriverMutation.mutate({ driverId: complaint.driverProfileId, action: "ban", reason: `Banned due to complaint: ${complaint.category}` })}
+                                  data-testid={`button-ban-driver-${complaint.id}`}
+                                >
+                                  Ban
+                                </Button>
+                              </>
+                            )}
+                            {(complaint.driverAccountStatus === "on_hold" || complaint.driverAccountStatus === "suspended") && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => enforceDriverMutation.mutate({ driverId: complaint.driverProfileId, action: "remove_hold", reason: "Admin cleared after review" })}
+                                data-testid={`button-reinstate-driver-${complaint.id}`}
+                              >
+                                Reinstate
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
           )}
@@ -1519,6 +1695,7 @@ export default function AdminDashboard() {
               {actionType === "approve_driver" && "Approve Driver"}
               {actionType === "reject_driver" && "Reject Driver"}
               {actionType === "suspend_driver" && "Suspend Driver"}
+              {actionType === "enforce_suspend_driver" && "Suspend Driver (Enforcement)"}
               {actionType === "unsuspend_driver" && "Unsuspend Driver"}
               {actionType === "block_patient" && "Block Patient"}
               {actionType === "unblock_patient" && "Unblock Patient"}
@@ -1568,7 +1745,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
-          {(actionType === "reject_driver" || actionType === "suspend_driver" || actionType === "block_patient" || actionType === "cancel_ride" || actionType === "refund_ride") && (
+          {(actionType === "reject_driver" || actionType === "suspend_driver" || actionType === "enforce_suspend_driver" || actionType === "block_patient" || actionType === "cancel_ride" || actionType === "refund_ride") && (
             <div className="py-4 space-y-4">
               <div>
                 <Label htmlFor="reason">Reason {actionType === "refund_ride" && "(required)"}</Label>
