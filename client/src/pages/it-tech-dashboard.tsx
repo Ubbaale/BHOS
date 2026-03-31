@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
@@ -392,12 +392,132 @@ function CancelJobDialog({ ticketId, onCancelled }: { ticketId: string; onCancel
   );
 }
 
+function useLocationTracking(ticketId: string, isCheckedIn: boolean, isCheckedOut: boolean) {
+  const [locationInfo, setLocationInfo] = useState<{
+    locationStatus: string;
+    distanceMeters: number | null;
+    onSite: boolean;
+    shouldRemind: boolean;
+    hoursCheckedIn: number;
+    reminderReason: string | null;
+  } | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const active = isCheckedIn && !isCheckedOut;
+
+  const sendPing = useCallback(async () => {
+    if (!active || !navigator.geolocation) return;
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 15000, enableHighAccuracy: true })
+      );
+      const resp = await fetch(`/api/it/tech/location-ping/${ticketId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        credentials: "include",
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setLocationInfo(data);
+      }
+    } catch {}
+  }, [ticketId, active]);
+
+  useEffect(() => {
+    if (!active) {
+      setLocationInfo(null);
+      return;
+    }
+    sendPing();
+    intervalRef.current = setInterval(sendPing, 120000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [active, sendPing]);
+
+  return locationInfo;
+}
+
+function LocationStatusBanner({ locationInfo, onCheckout }: {
+  locationInfo: { locationStatus: string; distanceMeters: number | null; onSite: boolean; shouldRemind: boolean; hoursCheckedIn: number; reminderReason: string | null } | null;
+  onCheckout: () => void;
+}) {
+  if (!locationInfo) return null;
+
+  const { locationStatus, distanceMeters, hoursCheckedIn, shouldRemind, reminderReason } = locationInfo;
+
+  if (locationStatus === "left_site") {
+    return (
+      <div data-testid="location-left-site-banner" className="bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 rounded-lg p-3 flex items-start gap-3">
+        <AlertTriangle className="h-5 w-5 text-orange-500 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-orange-800 dark:text-orange-200">You appear to have left the job site</p>
+          <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
+            {distanceMeters ? `${distanceMeters}m away from site` : "Away from site"} · {hoursCheckedIn.toFixed(1)}h checked in
+          </p>
+          {shouldRemind && (
+            <p className="text-xs text-orange-700 dark:text-orange-300 font-medium mt-1">
+              Don't forget to check out if you're done!
+            </p>
+          )}
+        </div>
+        <Button size="sm" variant="outline" className="border-orange-300 text-orange-700 hover:bg-orange-100 shrink-0" onClick={onCheckout} data-testid="btn-checkout-reminder">
+          <LogOut className="h-3 w-3 mr-1" /> Check Out
+        </Button>
+      </div>
+    );
+  }
+
+  if (hoursCheckedIn > 8 && shouldRemind) {
+    return (
+      <div data-testid="location-long-shift-banner" className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-start gap-3">
+        <Clock className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-blue-800 dark:text-blue-200">Long shift reminder</p>
+          <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+            You've been checked in for {hoursCheckedIn.toFixed(1)} hours. Remember to check out when done.
+          </p>
+        </div>
+        <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-100 shrink-0" onClick={onCheckout} data-testid="btn-checkout-long-shift">
+          <LogOut className="h-3 w-3 mr-1" /> Check Out
+        </Button>
+      </div>
+    );
+  }
+
+  if (locationStatus === "on_site") {
+    return (
+      <div data-testid="location-on-site-badge" className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+        <MapPinned className="h-3.5 w-3.5" />
+        <span>On site{distanceMeters ? ` (${distanceMeters}m)` : ""} · {hoursCheckedIn.toFixed(1)}h</span>
+      </div>
+    );
+  }
+
+  if (locationStatus === "near_site") {
+    return (
+      <div data-testid="location-near-site-badge" className="flex items-center gap-1.5 text-xs text-yellow-600 dark:text-yellow-400">
+        <MapPin className="h-3.5 w-3.5" />
+        <span>Near site{distanceMeters ? ` (${distanceMeters}m)` : ""} · {hoursCheckedIn.toFixed(1)}h</span>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
   const { toast } = useToast();
   const [signatureOpen, setSignatureOpen] = useState(false);
   const CategoryIcon = categoryIcons[ticket.category] || Wrench;
   let deliverables: any[] = [];
   try { deliverables = JSON.parse(ticket.deliverables || "[]"); } catch { deliverables = []; }
+
+  const locationInfo = useLocationTracking(
+    ticket.id,
+    !!ticket.checkInTime,
+    !!ticket.checkOutTime
+  );
 
   const setEta = useMutation({
     mutationFn: (etaStatus: string) => apiRequest("PATCH", `/api/it/tech/eta/${ticket.id}`, { etaStatus }),
@@ -570,6 +690,10 @@ function ActiveTicketCard({ ticket }: { ticket: ItServiceTicket }) {
               </div>
             )}
           </div>
+        )}
+
+        {ticket.checkInTime && !ticket.checkOutTime && (
+          <LocationStatusBanner locationInfo={locationInfo} onCheckout={() => checkOut.mutate()} />
         )}
 
         {deliverables.length > 0 && (

@@ -9765,6 +9765,133 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
     }
   });
 
+  app.post("/api/it/tech/location-ping/:id", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.assignedTo !== userId) return res.status(403).json({ message: "Not assigned to you" });
+      if (!ticket.checkInTime || ticket.checkOutTime) {
+        return res.status(400).json({ message: "Must be checked in and not checked out" });
+      }
+
+      const { lat, lng } = req.body;
+      if (!lat || !lng) return res.status(400).json({ message: "GPS coordinates required" });
+
+      const now = new Date();
+      let distanceMeters: number | null = null;
+      let onSite = false;
+      const ON_SITE_RADIUS = 500;
+      const LEFT_SITE_RADIUS = 800;
+
+      if (ticket.siteLat && ticket.siteLng) {
+        const toRad = (d: number) => d * Math.PI / 180;
+        const R = 6371000;
+        const dLat = toRad(parseFloat(ticket.siteLat) - lat);
+        const dLng = toRad(parseFloat(ticket.siteLng) - lng);
+        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat)) * Math.cos(toRad(parseFloat(ticket.siteLat))) * Math.sin(dLng/2)**2;
+        distanceMeters = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        onSite = distanceMeters <= ON_SITE_RADIUS;
+      }
+
+      let locationStatus = ticket.locationStatus || "unknown";
+      let leftSiteAt = ticket.leftSiteAt;
+      let checkoutReminderSent = ticket.checkoutReminderSent || false;
+
+      if (distanceMeters !== null) {
+        if (onSite) {
+          locationStatus = "on_site";
+          leftSiteAt = null;
+          checkoutReminderSent = false;
+        } else if (distanceMeters > LEFT_SITE_RADIUS) {
+          if (locationStatus !== "left_site") {
+            locationStatus = "left_site";
+            leftSiteAt = now;
+          }
+        } else {
+          locationStatus = "near_site";
+        }
+      }
+
+      let shouldRemind = false;
+      const hoursCheckedIn = (now.getTime() - new Date(ticket.checkInTime).getTime()) / 3600000;
+
+      if (locationStatus === "left_site" && !checkoutReminderSent) {
+        const minutesAway = leftSiteAt ? (now.getTime() - new Date(leftSiteAt).getTime()) / 60000 : 0;
+        if (minutesAway >= 5) {
+          shouldRemind = true;
+          checkoutReminderSent = true;
+        }
+      }
+
+      if (hoursCheckedIn > 8 && !checkoutReminderSent) {
+        shouldRemind = true;
+        checkoutReminderSent = true;
+      }
+
+      const [updated] = await db.update(itServiceTickets)
+        .set({
+          lastKnownLat: String(lat),
+          lastKnownLng: String(lng),
+          lastLocationUpdate: now,
+          lastLocationDistance: distanceMeters !== null ? String(Math.round(distanceMeters)) : null,
+          locationStatus,
+          leftSiteAt,
+          checkoutReminderSent,
+          updatedAt: now,
+        })
+        .where(eq(itServiceTickets.id, req.params.id))
+        .returning();
+
+      if (shouldRemind && locationStatus === "left_site") {
+        const distanceStr = distanceMeters ? `${Math.round(distanceMeters)}m` : "unknown distance";
+        notifyItCompanyOfTicketUpdate(
+          ticket.createdBy, ticket.ticketNumber, ticket.title,
+          `Tech appears to have left the site (${distanceStr} away). Still checked in.`, ""
+        ).catch(err => console.error("Failed to send location alert:", err));
+      }
+
+      res.json({
+        locationStatus,
+        distanceMeters: distanceMeters !== null ? Math.round(distanceMeters) : null,
+        onSite,
+        shouldRemind,
+        hoursCheckedIn: Number(hoursCheckedIn.toFixed(2)),
+        reminderReason: shouldRemind
+          ? (locationStatus === "left_site" ? "left_site" : "long_shift")
+          : null,
+      });
+    } catch (error) {
+      console.error("Location ping error:", error);
+      res.status(500).json({ message: "Failed to update location" });
+    }
+  });
+
+  app.get("/api/it/tech/location-status/:id", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId;
+      const [ticket] = await db.select().from(itServiceTickets).where(eq(itServiceTickets.id, req.params.id));
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (ticket.assignedTo !== userId) return res.status(403).json({ message: "Not assigned to you" });
+
+      const hoursCheckedIn = ticket.checkInTime
+        ? (new Date().getTime() - new Date(ticket.checkInTime).getTime()) / 3600000
+        : 0;
+
+      res.json({
+        locationStatus: ticket.locationStatus || "unknown",
+        lastLocationDistance: ticket.lastLocationDistance ? Number(ticket.lastLocationDistance) : null,
+        lastLocationUpdate: ticket.lastLocationUpdate,
+        leftSiteAt: ticket.leftSiteAt,
+        checkoutReminderSent: ticket.checkoutReminderSent,
+        hoursCheckedIn: Number(hoursCheckedIn.toFixed(2)),
+        locationVerified: ticket.locationVerified,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get location status" });
+    }
+  });
+
   app.post("/api/it/tickets/:id/signature", requireAuth, async (req: any, res) => {
     try {
       const ticket = await db.select().from(itServiceTickets)
