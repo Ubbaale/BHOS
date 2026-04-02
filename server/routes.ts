@@ -435,14 +435,49 @@ export async function registerRoutes(
       
       if (!existingDriver) {
         const driverHash = await bcrypt.hash("TestDriver123!", 10);
-        await storage.createUser({
+        const driverUser = await storage.createUser({
           username: "driver@test.com",
           password: driverHash,
           role: "driver"
         });
-        results.push("Driver account created: driver@test.com / TestDriver123!");
+        const [driverProfile] = await db.insert(driverProfiles).values({
+          userId: driverUser.id,
+          fullName: "Test Driver",
+          phone: "555-000-0002",
+          email: "driver@test.com",
+          vehicleType: "sedan",
+          vehiclePlate: "TEST-DRV",
+          wheelchairAccessible: false,
+          stretcherCapable: false,
+          isAvailable: true,
+          patientTransportEnabled: true,
+          medicalCourierEnabled: false,
+          applicationStatus: "approved",
+          kycStatus: "verified",
+        }).returning();
+        results.push("Driver account + profile created: driver@test.com / TestDriver123!");
       } else {
-        results.push("Driver account already exists: driver@test.com");
+        const [existingProfile] = await db.select().from(driverProfiles).where(eq(driverProfiles.userId, existingDriver.id));
+        if (!existingProfile) {
+          await db.insert(driverProfiles).values({
+            userId: existingDriver.id,
+            fullName: "Test Driver",
+            phone: "555-000-0002",
+            email: "driver@test.com",
+            vehicleType: "sedan",
+            vehiclePlate: "TEST-DRV",
+            wheelchairAccessible: false,
+            stretcherCapable: false,
+            isAvailable: true,
+            patientTransportEnabled: true,
+            medicalCourierEnabled: false,
+            applicationStatus: "approved",
+            kycStatus: "verified",
+          });
+          results.push("Driver profile created for existing driver@test.com");
+        } else {
+          results.push("Driver account already exists: driver@test.com");
+        }
       }
       
       if (!existingPatient) {
