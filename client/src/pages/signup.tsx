@@ -34,6 +34,7 @@ import {
   ShieldCheck,
   RefreshCw,
   CheckCircle2,
+  Car,
 } from "lucide-react";
 import logoImg from "@assets/Logocare-Picsart-BackgroundRemover_1767809315800.jpg";
 
@@ -46,7 +47,7 @@ const signupSchema = z.object({
     .regex(/[a-z]/, "Must contain a lowercase letter")
     .regex(/[0-9]/, "Must contain a number"),
   confirmPassword: z.string().min(1, "Please confirm your password"),
-  accountType: z.enum(["individual", "company", "courier"]).default("individual"),
+  accountType: z.enum(["individual", "company", "courier", "driver"]).default("individual"),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -218,6 +219,7 @@ function VerificationStep({
 
 export default function SignupPage() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -286,7 +288,7 @@ export default function SignupPage() {
               <img src={logoImg} alt="CareHub" className="h-16 w-auto object-contain" />
             </div>
             <CardTitle className="text-2xl" data-testid="text-signup-title">Create Your Account</CardTitle>
-            <CardDescription>Join CareHub to access IT services and more</CardDescription>
+            <CardDescription>Join CareHub as a patient, driver, IT company, or courier</CardDescription>
           </CardHeader>
           <CardContent>
             {error && (
@@ -301,7 +303,7 @@ export default function SignupPage() {
                 <FormField control={form.control} name="accountType" render={({ field }) => (
                   <FormItem>
                     <FormLabel>I am signing up as</FormLabel>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 gap-3">
                       <Button
                         type="button"
                         variant={field.value === "individual" ? "default" : "outline"}
@@ -311,6 +313,16 @@ export default function SignupPage() {
                       >
                         <User className="mr-2 h-4 w-4" />
                         Individual
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={field.value === "driver" ? "default" : "outline"}
+                        className="w-full"
+                        onClick={() => navigate("/driver/apply")}
+                        data-testid="button-type-driver"
+                      >
+                        <Car className="mr-2 h-4 w-4" />
+                        Driver
                       </Button>
                       <Button
                         type="button"
