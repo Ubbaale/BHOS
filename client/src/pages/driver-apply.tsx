@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -550,6 +550,13 @@ export default function DriverApply() {
                   >
                     {submitMutation.isPending ? "Submitting..." : "Submit Application"}
                   </Button>
+
+                  <div className="text-center text-sm text-muted-foreground pt-2">
+                    Already have an account?{" "}
+                    <Link href="/login" className="text-primary hover:underline font-medium" data-testid="link-driver-login">
+                      Sign In
+                    </Link>
+                  </div>
                 </form>
               </Form>
             </CardContent>
