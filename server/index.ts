@@ -140,27 +140,30 @@ app.use((req, res, next) => {
     'https://app.carehubapp.com',
   ]);
   
-  // For /api/mobile/* endpoints (JWT token-based auth, no cookies needed)
-  if (req.path.startsWith('/api/mobile/')) {
-    // Only allow known mobile app origins, not arbitrary origins
-    if (origin && allowedOrigins.has(origin)) {
-      res.header('Access-Control-Allow-Origin', origin);
-    } else {
-      // For mobile apps without origin header (native apps)
-      res.header('Access-Control-Allow-Origin', '*');
-    }
+  if (origin && allowedOrigins.has(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Device-ID');
-    // No credentials needed for JWT-only endpoints
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Device-ID, Accept, Origin');
     res.header('Access-Control-Max-Age', '86400');
-    
+
+    if (req.path.startsWith('/api/mobile/')) {
+      // JWT-only endpoints don't need credentials
+    } else {
+      res.header('Access-Control-Allow-Credentials', 'true');
+    }
+
     if (req.method === 'OPTIONS') {
       return res.status(204).end();
     }
-  } else if (origin && allowedOrigins.has(origin)) {
-    // Exact match for session-based endpoints
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
+  } else if (!origin && req.path.startsWith('/api/mobile/')) {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Device-ID, Accept, Origin');
+    res.header('Access-Control-Max-Age', '86400');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
   }
   
   next();
