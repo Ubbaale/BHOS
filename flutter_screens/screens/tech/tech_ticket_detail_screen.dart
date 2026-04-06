@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../models/it_models.dart';
 import '../../services/it_api_service.dart';
 import '../../widgets/eta_controls.dart';
 import '../../widgets/deliverables_form.dart';
 import '../../widgets/rating_dialog.dart';
+import '../../widgets/signature_pad.dart';
 
 class TechTicketDetailScreen extends StatefulWidget {
   final ItApiService apiService;
@@ -25,6 +28,8 @@ class _TechTicketDetailScreenState extends State<TechTicketDetailScreen> {
   Map<String, dynamic>? _ticketData;
   bool _isLoading = true;
   String? _error;
+  Timer? _locationTimer;
+  Map<String, dynamic>? _locationInfo;
 
   @override
   void initState() {
@@ -32,11 +37,50 @@ class _TechTicketDetailScreenState extends State<TechTicketDetailScreen> {
     _loadTicket();
   }
 
+  @override
+  void dispose() {
+    _locationTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startLocationTracking() {
+    _locationTimer?.cancel();
+    _sendLocationPing();
+    _locationTimer = Timer.periodic(const Duration(minutes: 2), (_) => _sendLocationPing());
+  }
+
+  void _stopLocationTracking() {
+    _locationTimer?.cancel();
+    _locationTimer = null;
+    setState(() => _locationInfo = null);
+  }
+
+  Future<void> _sendLocationPing() async {
+    final ticket = _ticket;
+    if (ticket == null || ticket.checkInTime == null || ticket.checkOutTime != null) return;
+    try {
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final data = await widget.apiService.sendLocationPing(ticket.id, position.latitude, position.longitude);
+      if (mounted) setState(() => _locationInfo = data);
+    } catch (_) {
+      try {
+        final data = await widget.apiService.getLocationStatus(ticket.id);
+        if (mounted) setState(() => _locationInfo = data);
+      } catch (_) {}
+    }
+  }
+
   Future<void> _loadTicket() async {
     setState(() { _isLoading = true; _error = null; });
     try {
       final data = await widget.apiService.getTicketDetail(widget.ticketId);
       setState(() { _ticketData = data; _isLoading = false; });
+      final ticket = _ticket;
+      if (ticket != null && ticket.checkInTime != null && ticket.checkOutTime == null) {
+        _startLocationTracking();
+      } else {
+        _stopLocationTracking();
+      }
     } catch (e) {
       setState(() { _error = e.toString(); _isLoading = false; });
     }
@@ -81,6 +125,10 @@ class _TechTicketDetailScreenState extends State<TechTicketDetailScreen> {
           ),
           const SizedBox(height: 16),
           _buildCheckInOutCard(ticket),
+          if (_locationInfo != null && ticket.checkInTime != null && ticket.checkOutTime == null) ...[
+            const SizedBox(height: 8),
+            _buildLocationBanner(),
+          ],
           const SizedBox(height: 16),
           DeliverablesForm(
             existingDeliverables: ticket.deliverables,
@@ -308,6 +356,39 @@ class _TechTicketDetailScreenState extends State<TechTicketDetailScreen> {
     );
   }
 
+  Widget _buildLocationBanner() {
+    final status = _locationInfo?['locationStatus'] as String? ?? 'unknown';
+    final isOnSite = status == 'on_site';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isOnSite ? Colors.green[50] : Colors.orange[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isOnSite ? Colors.green[300]! : Colors.orange[300]!),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isOnSite ? Icons.location_on : Icons.location_off,
+            color: isOnSite ? Colors.green[700] : Colors.orange[700],
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isOnSite ? 'On Site - GPS tracking active' : 'Away from site - Please return to work area',
+              style: TextStyle(
+                color: isOnSite ? Colors.green[800] : Colors.orange[800],
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _infoRow(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -343,7 +424,13 @@ class _TechTicketDetailScreenState extends State<TechTicketDetailScreen> {
 
   Future<void> _handleCheckIn() async {
     try {
-      await widget.apiService.checkIn(widget.ticketId, 0, 0);
+      double lat = 0, lng = 0;
+      try {
+        final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+        lat = position.latitude;
+        lng = position.longitude;
+      } catch (_) {}
+      await widget.apiService.checkIn(widget.ticketId, lat, lng);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Checked in successfully'), backgroundColor: Colors.green),
       );
@@ -372,18 +459,41 @@ class _TechTicketDetailScreenState extends State<TechTicketDetailScreen> {
   }
 
   Future<void> _handleComplete(ItServiceTicket ticket) async {
-    final confirm = await showDialog<bool>(
+    final hasSignature = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Complete Job'),
-        content: const Text('Mark this job as complete? Make sure you have uploaded all deliverables.'),
+        content: const Text('Would you like to capture the customer\'s signature before completing?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Complete')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Skip Signature')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Get Signature')),
         ],
       ),
     );
-    if (confirm != true) return;
+    if (hasSignature == null) return;
+
+    if (hasSignature) {
+      final result = await showModalBottomSheet<Map<String, String>>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => Padding(
+          padding: EdgeInsets.only(
+            left: 16, right: 16, top: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          ),
+          child: SignaturePad(
+            onComplete: (dataUrl, name) => Navigator.pop(context, {'dataUrl': dataUrl, 'name': name}),
+            onCancel: () => Navigator.pop(context),
+          ),
+        ),
+      );
+      if (result != null) {
+        try {
+          await widget.apiService.captureSignature(ticket.id, result['dataUrl']!, result['name']!);
+        } catch (_) {}
+      }
+    }
+
     try {
       await widget.apiService.completeTicket(ticket.id);
       ScaffoldMessenger.of(context).showSnackBar(

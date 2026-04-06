@@ -32,6 +32,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     {'value': 'patient', 'label': 'Patient / Rider', 'icon': Icons.person},
     {'value': 'driver', 'label': 'Driver', 'icon': Icons.directions_car},
     {'value': 'employer', 'label': 'Employer', 'icon': Icons.business},
+    {'value': 'it_company', 'label': 'IT Company', 'icon': Icons.computer},
+    {'value': 'courier', 'label': 'Courier', 'icon': Icons.local_shipping},
   ];
 
   Future<void> _register() async {

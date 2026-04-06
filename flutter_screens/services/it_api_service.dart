@@ -97,6 +97,21 @@ class ItApiService {
     return await _post('/api/it/tech/checkout/$ticketId');
   }
 
+  Future<Map<String, dynamic>> sendLocationPing(String ticketId, double lat, double lng) async {
+    return await _post('/api/it/tech/location-ping/$ticketId', {'lat': lat, 'lng': lng});
+  }
+
+  Future<Map<String, dynamic>> getLocationStatus(String ticketId) async {
+    return await _get('/api/it/tech/location-status/$ticketId');
+  }
+
+  Future<Map<String, dynamic>> captureSignature(String ticketId, String signatureDataUrl, String signedName) async {
+    return await _post('/api/it/tickets/$ticketId/signature', {
+      'signatureDataUrl': signatureDataUrl,
+      'signedName': signedName,
+    });
+  }
+
   Future<Map<String, dynamic>> addDeliverables(String ticketId, String notes, List<String> urls) async {
     return await _post('/api/it/tech/deliverables/$ticketId', {'notes': notes, 'urls': urls});
   }
