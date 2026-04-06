@@ -6,12 +6,14 @@ import 'services/driver_service.dart';
 import 'services/job_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/it_api_service.dart';
+import 'services/courier_api_service.dart';
 import 'models/auth_models.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/patient/patient_home_screen.dart';
 import 'screens/driver/driver_dashboard_screen.dart';
 import 'screens/tech/tech_dashboard_screen.dart';
 import 'screens/company/company_ticket_list_screen.dart';
+import 'screens/courier/courier_dashboard_screen.dart';
 
 const String kBaseUrl = 'https://app.carehubapp.com';
 const String kAppStoreId = 'id6444679914';
@@ -32,6 +34,7 @@ class _CareHubAppState extends State<CareHubApp> {
   late final JobService _jobService;
   late final PushNotificationService _pushService;
   late final ItApiService _itApiService;
+  late final CourierApiService _courierApiService;
 
   User? _currentUser;
   bool _isInitialized = false;
@@ -49,6 +52,10 @@ class _CareHubAppState extends State<CareHubApp> {
     _jobService = JobService(client: _apiClient);
     _pushService = PushNotificationService(client: _apiClient);
     _itApiService = ItApiService(
+      baseUrl: kBaseUrl,
+      getAuthToken: () => _apiClient.accessToken ?? '',
+    );
+    _courierApiService = CourierApiService(
       baseUrl: kBaseUrl,
       getAuthToken: () => _apiClient.accessToken ?? '',
     );
@@ -119,6 +126,8 @@ class _CareHubAppState extends State<CareHubApp> {
         return TechDashboardScreen(apiService: _itApiService);
       case 'it_company':
         return CompanyTicketListScreen(apiService: _itApiService);
+      case 'courier':
+        return CourierDashboardScreen(apiService: _courierApiService);
       default:
         return PatientHomeScreen(
           rideService: _rideService,

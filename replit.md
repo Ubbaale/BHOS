@@ -33,6 +33,14 @@ The platform is built as a monorepo.
 -   **Admin Dashboard**: Comprehensive panel with sidebar navigation and custom permission management. Allows full ride/driver detail view, earnings breakdown, user account management (creation, roles, verification, blocking), ride cancellation/refunds, and complaint/enforcement management for both drivers and IT techs.
 -   **Web Authentication**: Unified `/login` page for all user types with smart mobile detection and role-based redirects. Multi-step forgot password flow.
 
+### Flutter App Integration (flutter_screens/)
+Reference Flutter/Dart screens for the native mobile app (iOS: id6444679914, Google Play: com.fieldhcp.app).
+-   **Services**: `auth_service.dart`, `ride_service.dart`, `driver_service.dart`, `job_service.dart`, `it_api_service.dart`, `courier_api_service.dart`, `push_notification_service.dart`
+-   **Screens**: Patient home, Driver dashboard, IT Tech dashboard (with GPS location tracking + signature capture), IT Company ticket management, Courier dashboard (pool/active/history + chain of custody logging)
+-   **Widgets**: `signature_pad.dart` (canvas-based signature capture), `eta_controls.dart`, `deliverables_form.dart`, `rating_dialog.dart`, `ticket_card.dart`, `ride_card.dart`, `chat_bubble.dart`, `fare_breakdown_widget.dart`, `account_status_banner.dart`
+-   **Models**: `auth_models.dart`, `it_models.dart`, `courier_models.dart`
+-   **Key Features**: Location tracking pings every 2min during checked-in IT jobs, real-time GPS for check-in, customer signature capture before job completion, courier delivery chain of custody with GPS/temperature logging
+
 ## External Dependencies
 
 -   **Database**: PostgreSQL
