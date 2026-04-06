@@ -317,7 +317,7 @@ export default function Header({ title, showBack }: { title?: string; showBack?:
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden py-3 border-t animate-in slide-in-from-top-2 duration-200">
+          <div className="md:hidden py-3 border-t animate-in slide-in-from-top-2 duration-200 max-h-[calc(100vh-4rem)] overflow-y-auto overscroll-contain">
             <nav className="flex flex-col gap-1">
               {navLinks.map((link) => (
                 link.isAnchor ? (
