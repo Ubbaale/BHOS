@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +49,37 @@ export default function Header({ title, showBack }: { title?: string; showBack?:
   const [location, setLocation] = useLocation();
   const { showMobileUI, isIOS } = usePlatform();
   const { isAuthenticated, user, logout } = useAuth();
+  const scrollYRef = useRef(0);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      scrollYRef.current = window.scrollY;
+      document.body.classList.add("body-scroll-lock");
+      document.body.style.top = `-${scrollYRef.current}px`;
+    } else {
+      document.body.classList.remove("body-scroll-lock");
+      document.body.style.top = "";
+      window.scrollTo(0, scrollYRef.current);
+    }
+    return () => {
+      document.body.classList.remove("body-scroll-lock");
+      document.body.style.top = "";
+    };
+  }, [mobileMenuOpen]);
+
+  const handleMenuTouchMove = useCallback((e: React.TouchEvent) => {
+    const el = menuRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const isAtTop = scrollTop <= 0;
+    const isAtBottom = scrollTop + clientHeight >= scrollHeight;
+    const touchDelta = e.touches[0]?.clientY;
+    if (!touchDelta) return;
+    if ((isAtTop && scrollTop === 0) || (isAtBottom && scrollTop > 0)) {
+      // let the scroll container handle it naturally
+    }
+  }, []);
 
   const isHomePage = location === "/";
 
@@ -317,7 +348,11 @@ export default function Header({ title, showBack }: { title?: string; showBack?:
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden py-3 border-t animate-in slide-in-from-top-2 duration-200 max-h-[calc(100vh-4rem)] overflow-y-auto overscroll-contain">
+          <div
+            ref={menuRef}
+            onTouchMove={handleMenuTouchMove}
+            className="md:hidden py-3 border-t animate-in slide-in-from-top-2 duration-200 max-h-[calc(100vh-4rem)] ios-scroll-container safe-bottom"
+          >
             <nav className="flex flex-col gap-1">
               {navLinks.map((link) => (
                 link.isAnchor ? (

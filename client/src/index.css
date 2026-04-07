@@ -212,6 +212,24 @@
     scroll-behavior: smooth;
   }
 
+  .body-scroll-lock {
+    overflow: hidden !important;
+    position: fixed !important;
+    width: 100% !important;
+    height: 100% !important;
+    touch-action: none !important;
+    -webkit-overflow-scrolling: none !important;
+  }
+
+  .ios-scroll-container {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    overflow-y: auto;
+    overflow-x: hidden;
+    touch-action: pan-y;
+    -webkit-transform: translateZ(0);
+  }
+
   .touch-feedback {
     transition: transform 0.1s ease, opacity 0.1s ease;
   }
