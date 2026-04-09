@@ -25,7 +25,8 @@ const footerLinks = {
     { name: "Contact Us", href: "#contact" },
     { name: "Report Issue", href: "#report" },
     { name: "FAQ", href: "#" },
-    { name: "Terms of Service", href: "#" },
+    { name: "Terms of Service", href: "/terms" },
+    { name: "Privacy Policy", href: "/privacy" },
   ],
 };
 
@@ -37,7 +38,7 @@ export default function Footer() {
   return (
     <footer id="contact" className="bg-foreground text-background py-16">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-12 mb-12">
+        <div className="grid md:grid-cols-2 lg:grid-cols-6 gap-12 mb-12">
           <div className="lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
               <span className="font-semibold text-lg">Carehub</span>
@@ -120,6 +121,23 @@ export default function Footer() {
             </ul>
           </div>
 
+          <div>
+            <h4 className="font-semibold mb-4">Support & Legal</h4>
+            <ul className="space-y-2">
+              {footerLinks.support.map((link) => (
+                <li key={link.name}>
+                  <a
+                    href={link.href}
+                    className="text-sm opacity-70 hover:opacity-100 transition-opacity"
+                    data-testid={`link-footer-${link.name.toLowerCase().replace(" ", "-")}`}
+                  >
+                    {link.name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+
         </div>
 
         <div className="border-t border-background/20 pt-8 pb-8">
@@ -160,9 +178,13 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-background/20 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-sm opacity-70">
-            {new Date().getFullYear()} Carehub. All rights reserved.
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="text-sm opacity-70">
+              {new Date().getFullYear()} Carehub. All rights reserved.
+            </p>
+            <a href="/privacy" className="text-sm opacity-70 hover:opacity-100 transition-opacity" data-testid="link-footer-bottom-privacy">Privacy</a>
+            <a href="/terms" className="text-sm opacity-70 hover:opacity-100 transition-opacity" data-testid="link-footer-bottom-terms">Terms</a>
+          </div>
           <div className="flex items-center gap-4">
             <a
               href="#"
