@@ -1,0 +1,62 @@
+APP NAME: BHOS - Behavioral Home OS
+
+SUBTITLE: Group Home Management Platform
+
+PROMOTIONAL TEXT:
+Streamline your behavioral health group home operations with BHOS — the all-in-one platform for medication safety, clinical compliance, and team coordination.
+
+DESCRIPTION:
+BHOS (Behavioral Home Operating System) is the complete mobile platform for behavioral health group home staff. Designed for direct care workers, nurses, and managers, BHOS puts everything you need at your fingertips.
+
+MEDICATION MANAGEMENT
+• Electronic Medication Administration Record (eMAR)
+• 5 Rights verification before every medication pass
+• Controlled substance tracking and counts
+• PRN medication timers and follow-ups
+• Drug interaction warnings
+• Barcode scanning — scan medication barcodes with your phone camera to verify NDC codes, Rx numbers, and lot numbers before administering
+• Auto-match scanned medications to patient records for Right Drug verification
+• Barcode verification status recorded on every administration for audit compliance
+• Medication refusal and side effect documentation
+
+SHIFT & ATTENDANCE
+• GPS-verified clock-in/out at authorized locations
+• Shift schedules and availability management
+• Real-time shift coverage visibility
+• Geofence-based fraud detection
+
+PATIENT CARE
+• Daily log documentation
+• Incident reporting with photo attachments
+• Vital signs recording
+• Progress notes
+• Treatment plan tracking
+• Crisis event management
+
+SECURITY & COMPLIANCE
+• Biometric authentication (Face ID / Fingerprint)
+• Med-pass PIN verification
+• HIPAA-compliant data handling
+• Complete audit trail
+• Push notification alerts for critical events
+
+TEAM COORDINATION
+• Internal staff messaging
+• Daily assignments
+• Meeting schedules
+• Training and certification tracking
+
+BHOS is used by behavioral health organizations to manage their group homes safely, efficiently, and in full regulatory compliance.
+
+KEYWORDS:
+behavioral health, group home, medication management, eMAR, HIPAA, nursing, caregiver, mental health, shift management, compliance
+
+CATEGORIES:
+Primary: Medical
+Secondary: Business
+
+CONTENT RATING: 17+ (Medical/Treatment Information)
+
+PRIVACY URL: https://app.bhos.com/privacy
+SUPPORT URL: https://app.bhos.com/support
+MARKETING URL: https://app.bhos.com

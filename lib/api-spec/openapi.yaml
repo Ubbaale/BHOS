@@ -1,0 +1,3510 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: Behavioral Home Operating System API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: homes
+    description: Home management
+  - name: staff
+    description: Staff management
+  - name: patients
+    description: Patient management
+  - name: medications
+    description: Medication tracking
+  - name: incidents
+    description: Incident reporting
+  - name: daily-logs
+    description: Daily patient logs
+  - name: shifts
+    description: Shift management
+  - name: dashboard
+    description: Dashboard and analytics
+  - name: medication-safety
+    description: Medication safety, eMAR, controlled substances, and compliance
+  - name: billing
+    description: Billing, claims, payers, and payment management
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /homes:
+    get:
+      operationId: listHomes
+      tags: [homes]
+      summary: List all homes
+      responses:
+        "200":
+          description: List of homes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Home"
+    post:
+      operationId: createHome
+      tags: [homes]
+      summary: Create a new home
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHomeBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Home"
+
+  /homes/{id}:
+    get:
+      operationId: getHome
+      tags: [homes]
+      summary: Get home by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Home details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Home"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateHome
+      tags: [homes]
+      summary: Update home
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateHomeBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Home"
+
+  /staff:
+    get:
+      operationId: listStaff
+      tags: [staff]
+      summary: List all staff
+      parameters:
+        - name: homeId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of staff
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffMember"
+    post:
+      operationId: createStaff
+      tags: [staff]
+      summary: Create staff member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStaffBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffMember"
+
+  /staff/{id}:
+    get:
+      operationId: getStaffMember
+      tags: [staff]
+      summary: Get staff member by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Staff details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffMember"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateStaff
+      tags: [staff]
+      summary: Update staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStaffBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffMember"
+
+  /patients:
+    get:
+      operationId: listPatients
+      tags: [patients]
+      summary: List all patients
+      parameters:
+        - name: homeId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of patients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Patient"
+    post:
+      operationId: createPatient
+      tags: [patients]
+      summary: Create patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePatientBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+
+  /patients/{id}:
+    get:
+      operationId: getPatient
+      tags: [patients]
+      summary: Get patient by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Patient details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+        "404":
+          description: Not found
+    patch:
+      operationId: updatePatient
+      tags: [patients]
+      summary: Update patient
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePatientBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+
+  /medications:
+    get:
+      operationId: listMedications
+      tags: [medications]
+      summary: List medications
+      parameters:
+        - name: patientId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of medications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Medication"
+    post:
+      operationId: createMedication
+      tags: [medications]
+      summary: Create medication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMedicationBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Medication"
+
+  /medication-administrations:
+    get:
+      operationId: listMedicationAdministrations
+      tags: [medications]
+      summary: List medication administrations
+      parameters:
+        - name: patientId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: homeId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of administrations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicationAdministration"
+    post:
+      operationId: createMedicationAdministration
+      tags: [medications]
+      summary: Record medication administration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMedicationAdministrationBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationAdministration"
+
+  /incidents:
+    get:
+      operationId: listIncidents
+      tags: [incidents]
+      summary: List incidents
+      parameters:
+        - name: homeId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: severity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+      responses:
+        "200":
+          description: List of incidents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Incident"
+    post:
+      operationId: createIncident
+      tags: [incidents]
+      summary: Report an incident
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIncidentBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Incident"
+
+  /incidents/{id}:
+    get:
+      operationId: getIncident
+      tags: [incidents]
+      summary: Get incident by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Incident details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Incident"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateIncident
+      tags: [incidents]
+      summary: Update incident
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateIncidentBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Incident"
+
+  /daily-logs:
+    get:
+      operationId: listDailyLogs
+      tags: [daily-logs]
+      summary: List daily logs
+      parameters:
+        - name: patientId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: homeId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of daily logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyLog"
+    post:
+      operationId: createDailyLog
+      tags: [daily-logs]
+      summary: Create daily log
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDailyLogBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyLog"
+
+  /shifts:
+    get:
+      operationId: listShifts
+      tags: [shifts]
+      summary: List shifts
+      parameters:
+        - name: homeId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: staffId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of shifts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Shift"
+    post:
+      operationId: createShift
+      tags: [shifts]
+      summary: Create shift
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShiftBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+
+  /shifts/{id}:
+    patch:
+      operationId: updateShift
+      tags: [shifts]
+      summary: Update shift
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateShiftBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+
+  /time-punches:
+    get:
+      operationId: listTimePunches
+      tags: [time-punches]
+      summary: List time punches
+      parameters:
+        - name: staffId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: homeId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of time punches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TimePunch"
+    post:
+      operationId: createTimePunch
+      tags: [time-punches]
+      summary: Clock in or clock out
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTimePunchBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimePunchResult"
+
+  /time-punches/active:
+    get:
+      operationId: getActiveTimePunch
+      tags: [time-punches]
+      summary: Get the current active clock-in for a staff member
+      parameters:
+        - name: staffId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Active time punch or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActiveTimePunchResponse"
+
+  /fraud-alerts:
+    get:
+      operationId: listFraudAlerts
+      tags: [fraud-alerts]
+      summary: List fraud alerts
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, reviewed, dismissed]
+        - name: staffId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of fraud alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FraudAlert"
+
+  /fraud-alerts/{id}:
+    patch:
+      operationId: updateFraudAlert
+      tags: [fraud-alerts]
+      summary: Review or dismiss a fraud alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFraudAlertBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FraudAlert"
+
+  /emar:
+    get:
+      operationId: getEmar
+      tags: [medication-safety]
+      summary: Get electronic medication administration record for today
+      parameters:
+        - name: homeId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: eMAR schedule
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmarEntry"
+
+  /medication-counts:
+    get:
+      operationId: listMedicationCounts
+      tags: [medication-safety]
+      summary: List controlled substance count records
+      parameters:
+        - name: medicationId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of counts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicationCount"
+    post:
+      operationId: createMedicationCount
+      tags: [medication-safety]
+      summary: Record a controlled substance count
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMedicationCountBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationCount"
+
+  /medication-errors:
+    get:
+      operationId: listMedicationErrors
+      tags: [medication-safety]
+      summary: List medication error reports
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, resolved]
+      responses:
+        "200":
+          description: List of errors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicationError"
+    post:
+      operationId: createMedicationError
+      tags: [medication-safety]
+      summary: Report a medication error
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMedicationErrorBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationError"
+
+  /medication-errors/{id}/resolve:
+    patch:
+      operationId: resolveMedicationError
+      tags: [medication-safety]
+      summary: Resolve a medication error
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveMedicationErrorBody"
+      responses:
+        "200":
+          description: Resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationError"
+
+  /medication-errors/auto-detect:
+    post:
+      operationId: runMedicationErrorAutoDetect
+      tags: [medication-safety]
+      summary: Scan eMAR records for automatic error detection
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+      responses:
+        "200":
+          description: Auto-detected errors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoDetectResult"
+
+  /medication-inventory:
+    get:
+      operationId: listMedicationInventory
+      tags: [medication-safety]
+      summary: List medication inventory changes
+      parameters:
+        - name: medicationId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of inventory records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicationInventoryRecord"
+    post:
+      operationId: createMedicationInventoryChange
+      tags: [medication-safety]
+      summary: Record an inventory change
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMedicationInventoryBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationInventoryRecord"
+
+  /medication-inventory/refill-alerts:
+    get:
+      operationId: getRefillAlerts
+      tags: [medication-safety]
+      summary: Get medications needing refill
+      responses:
+        "200":
+          description: Medications below refill threshold
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RefillAlert"
+
+  /physician-orders:
+    get:
+      operationId: listPhysicianOrders
+      tags: [medication-safety]
+      summary: List physician orders
+      parameters:
+        - name: patientId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, active, completed, discontinued]
+      responses:
+        "200":
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PhysicianOrder"
+    post:
+      operationId: createPhysicianOrder
+      tags: [medication-safety]
+      summary: Create a physician order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePhysicianOrderBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhysicianOrder"
+
+  /physician-orders/{id}:
+    patch:
+      operationId: updatePhysicianOrder
+      tags: [medication-safety]
+      summary: Update a physician order status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePhysicianOrderBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhysicianOrder"
+
+  /drug-interactions/check:
+    get:
+      operationId: checkDrugInteractions
+      tags: [medication-safety]
+      summary: Check for drug interactions for a patient
+      parameters:
+        - name: patientId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Drug interaction results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DrugInteraction"
+
+  /dashboard/medication-safety:
+    get:
+      operationId: getMedicationSafetyDashboard
+      tags: [medication-safety]
+      summary: Get medication safety compliance dashboard
+      responses:
+        "200":
+          description: Safety metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationSafetyDashboard"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard overview
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/recent-activity:
+    get:
+      operationId: getRecentActivity
+      tags: [dashboard]
+      summary: Get recent activity feed
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  /dashboard/medication-compliance:
+    get:
+      operationId: getMedicationCompliance
+      tags: [dashboard]
+      summary: Get medication compliance stats per home
+      responses:
+        "200":
+          description: Medication compliance
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicationComplianceItem"
+
+  /dashboard/incident-trends:
+    get:
+      operationId: getIncidentTrends
+      tags: [dashboard]
+      summary: Get incident trends over time
+      responses:
+        "200":
+          description: Incident trends
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IncidentTrendItem"
+
+  /vital-signs:
+    get:
+      operationId: listVitalSigns
+      tags: [medication-safety]
+      summary: List vital signs records
+      parameters:
+        - name: patientId
+          in: query
+          schema:
+            type: integer
+        - name: administrationId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Vital signs list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VitalSigns"
+    post:
+      operationId: createVitalSigns
+      tags: [medication-safety]
+      summary: Record vital signs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVitalSignsBody"
+      responses:
+        "201":
+          description: Vital signs recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VitalSigns"
+
+  /medication-side-effects:
+    get:
+      operationId: listMedicationSideEffects
+      tags: [medication-safety]
+      summary: List medication side effects
+      parameters:
+        - name: patientId
+          in: query
+          schema:
+            type: integer
+        - name: medicationId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Side effects list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicationSideEffect"
+    post:
+      operationId: createMedicationSideEffect
+      tags: [medication-safety]
+      summary: Report a medication side effect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMedicationSideEffectBody"
+      responses:
+        "201":
+          description: Side effect reported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationSideEffect"
+
+  /medication-refusals:
+    get:
+      operationId: listMedicationRefusals
+      tags: [medication-safety]
+      summary: List medication refusals
+      parameters:
+        - name: patientId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Refusals list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicationRefusal"
+    post:
+      operationId: createMedicationRefusal
+      tags: [medication-safety]
+      summary: Record a medication refusal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMedicationRefusalBody"
+      responses:
+        "201":
+          description: Refusal recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationRefusal"
+
+  /medication-audit-log:
+    get:
+      operationId: listMedicationAuditLog
+      tags: [medication-safety]
+      summary: List medication audit trail
+      parameters:
+        - name: entityType
+          in: query
+          schema:
+            type: string
+        - name: entityId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicationAuditLogEntry"
+
+  /medication-administrations/{id}/prn-followup:
+    put:
+      operationId: updatePrnFollowup
+      tags: [medication-safety]
+      summary: Record PRN effectiveness follow-up
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrnFollowupBody"
+      responses:
+        "200":
+          description: PRN follow-up recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationAdministration"
+
+  /medication-administrations/pending-followups:
+    get:
+      operationId: getPendingPrnFollowups
+      tags: [medication-safety]
+      summary: Get PRN administrations needing follow-up
+      responses:
+        "200":
+          description: Pending PRN follow-ups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PrnFollowupItem"
+
+  /billing/payers:
+    get:
+      operationId: listPayers
+      tags: [billing]
+      summary: List all payers
+      responses:
+        "200":
+          description: List of payers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payer"
+    post:
+      operationId: createPayer
+      tags: [billing]
+      summary: Create a payer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePayerBody"
+      responses:
+        "201":
+          description: Payer created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payer"
+
+  /billing/services:
+    get:
+      operationId: listBillableServices
+      tags: [billing]
+      summary: List billable services
+      parameters:
+        - name: patientId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of billable services
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BillableService"
+    post:
+      operationId: createBillableService
+      tags: [billing]
+      summary: Create a billable service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBillableServiceBody"
+      responses:
+        "201":
+          description: Billable service created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillableService"
+
+  /billing/claims:
+    get:
+      operationId: listClaims
+      tags: [billing]
+      summary: List all claims
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: payerId
+          in: query
+          schema:
+            type: integer
+        - name: patientId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of claims
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Claim"
+    post:
+      operationId: createClaim
+      tags: [billing]
+      summary: Create a claim
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClaimBody"
+      responses:
+        "201":
+          description: Claim created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Claim"
+
+  /billing/claims/{id}:
+    get:
+      operationId: getClaim
+      tags: [billing]
+      summary: Get a claim by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Claim details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Claim"
+    put:
+      operationId: updateClaim
+      tags: [billing]
+      summary: Update a claim
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateClaimBody"
+      responses:
+        "200":
+          description: Claim updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Claim"
+
+  /billing/payments:
+    get:
+      operationId: listPayments
+      tags: [billing]
+      summary: List all payments
+      parameters:
+        - name: claimId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+    post:
+      operationId: createPayment
+      tags: [billing]
+      summary: Record a payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentBody"
+      responses:
+        "201":
+          description: Payment recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /billing/summary:
+    get:
+      operationId: getBillingSummary
+      tags: [billing]
+      summary: Get billing summary and analytics
+      responses:
+        "200":
+          description: Billing summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingSummary"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    Home:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        region:
+          type: string
+        capacity:
+          type: integer
+        currentOccupancy:
+          type: integer
+        status:
+          type: string
+          enum: [active, inactive, maintenance]
+        phone:
+          type: ["string", "null"]
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        geofenceRadiusMeters:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, address, city, state, region, capacity, currentOccupancy, status, phone, latitude, longitude, geofenceRadiusMeters, createdAt]
+
+    CreateHomeBody:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        region:
+          type: string
+        capacity:
+          type: integer
+        phone:
+          type: ["string", "null"]
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        geofenceRadiusMeters:
+          type: integer
+      required: [name, address, city, state, region, capacity]
+
+    UpdateHomeBody:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        region:
+          type: string
+        capacity:
+          type: integer
+        status:
+          type: string
+          enum: [active, inactive, maintenance]
+        phone:
+          type: ["string", "null"]
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        geofenceRadiusMeters:
+          type: integer
+
+    StaffMember:
+      type: object
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [nurse, caregiver, admin, manager, supervisor, direct_care]
+        homeId:
+          type: ["integer", "null"]
+        homeName:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, inactive, on_leave]
+        employeeType:
+          type: string
+          enum: [permanent, contractor, agency, part_time]
+        agencyName:
+          type: ["string", "null"]
+        contractEndDate:
+          type: ["string", "null"]
+          format: date-time
+        hourlyRate:
+          type: ["number", "null"]
+        hireDate:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, firstName, lastName, email, phone, role, homeId, homeName, status, employeeType, agencyName, contractEndDate, hourlyRate, hireDate, createdAt]
+
+    CreateStaffBody:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [nurse, caregiver, admin, manager, supervisor, direct_care]
+        homeId:
+          type: ["integer", "null"]
+        employeeType:
+          type: string
+          enum: [permanent, contractor, agency, part_time]
+        agencyName:
+          type: ["string", "null"]
+        contractEndDate:
+          type: ["string", "null"]
+          format: date-time
+        hourlyRate:
+          type: ["number", "null"]
+        hireDate:
+          type: string
+          format: date-time
+      required: [firstName, lastName, email, role]
+
+    UpdateStaffBody:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [nurse, caregiver, admin, manager, supervisor, direct_care]
+        homeId:
+          type: ["integer", "null"]
+        status:
+          type: string
+          enum: [active, inactive, on_leave]
+        employeeType:
+          type: string
+          enum: [permanent, contractor, agency, part_time]
+        agencyName:
+          type: ["string", "null"]
+        contractEndDate:
+          type: ["string", "null"]
+          format: date-time
+        hourlyRate:
+          type: ["number", "null"]
+
+    Patient:
+      type: object
+      properties:
+        id:
+          type: integer
+        mrn:
+          type: ["string", "null"]
+        externalEhrId:
+          type: ["string", "null"]
+        ehrSystem:
+          type: ["string", "null"]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        middleName:
+          type: ["string", "null"]
+        dateOfBirth:
+          type: string
+          format: date-time
+        gender:
+          type: string
+          enum: [male, female, other]
+        homeId:
+          type: integer
+        homeName:
+          type: ["string", "null"]
+        admissionDate:
+          type: string
+          format: date-time
+        dischargeDate:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, discharged, transferred]
+        diagnosis:
+          type: ["string", "null"]
+        primaryDiagnosisCode:
+          type: ["string", "null"]
+        secondaryDiagnoses:
+          type: ["string", "null"]
+        emergencyContact:
+          type: ["string", "null"]
+        emergencyPhone:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        allergies:
+          type: ["string", "null"]
+        weight:
+          type: ["string", "null"]
+        photoUrl:
+          type: ["string", "null"]
+        insuranceProvider:
+          type: ["string", "null"]
+        insurancePolicyNumber:
+          type: ["string", "null"]
+        insuranceGroupNumber:
+          type: ["string", "null"]
+        medicaidId:
+          type: ["string", "null"]
+        primaryPhysician:
+          type: ["string", "null"]
+        primaryPhysicianPhone:
+          type: ["string", "null"]
+        psychiatrist:
+          type: ["string", "null"]
+        psychiatristPhone:
+          type: ["string", "null"]
+        legalGuardian:
+          type: ["string", "null"]
+        legalGuardianPhone:
+          type: ["string", "null"]
+        advanceDirective:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, firstName, lastName, dateOfBirth, gender, homeId, homeName, admissionDate, status, diagnosis, emergencyContact, emergencyPhone, notes, allergies, weight, photoUrl, mrn, createdAt]
+
+    CreatePatientBody:
+      type: object
+      properties:
+        mrn:
+          type: ["string", "null"]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        middleName:
+          type: ["string", "null"]
+        dateOfBirth:
+          type: string
+          format: date-time
+        gender:
+          type: string
+          enum: [male, female, other]
+        homeId:
+          type: integer
+        admissionDate:
+          type: string
+          format: date-time
+        diagnosis:
+          type: ["string", "null"]
+        primaryDiagnosisCode:
+          type: ["string", "null"]
+        emergencyContact:
+          type: ["string", "null"]
+        emergencyPhone:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        allergies:
+          type: ["string", "null"]
+        insuranceProvider:
+          type: ["string", "null"]
+        insurancePolicyNumber:
+          type: ["string", "null"]
+        medicaidId:
+          type: ["string", "null"]
+        primaryPhysician:
+          type: ["string", "null"]
+        psychiatrist:
+          type: ["string", "null"]
+      required: [firstName, lastName, dateOfBirth, gender, homeId]
+
+    UpdatePatientBody:
+      type: object
+      properties:
+        mrn:
+          type: ["string", "null"]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        middleName:
+          type: ["string", "null"]
+        dateOfBirth:
+          type: string
+          format: date-time
+        gender:
+          type: string
+          enum: [male, female, other]
+        homeId:
+          type: integer
+        status:
+          type: string
+          enum: [active, discharged, transferred]
+        diagnosis:
+          type: ["string", "null"]
+        primaryDiagnosisCode:
+          type: ["string", "null"]
+        emergencyContact:
+          type: ["string", "null"]
+        emergencyPhone:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        allergies:
+          type: ["string", "null"]
+        insuranceProvider:
+          type: ["string", "null"]
+        insurancePolicyNumber:
+          type: ["string", "null"]
+        medicaidId:
+          type: ["string", "null"]
+        primaryPhysician:
+          type: ["string", "null"]
+        psychiatrist:
+          type: ["string", "null"]
+
+    Medication:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientId:
+          type: integer
+        patientName:
+          type: ["string", "null"]
+        name:
+          type: string
+        dosage:
+          type: string
+        frequency:
+          type: string
+        route:
+          type: string
+          enum: [oral, injection, topical, inhalation, other]
+        prescribedBy:
+          type: ["string", "null"]
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: ["string", "null"]
+          format: date-time
+        active:
+          type: boolean
+        instructions:
+          type: ["string", "null"]
+        controlledSubstance:
+          type: boolean
+        deaSchedule:
+          type: ["string", "null"]
+        ndcCode:
+          type: ["string", "null"]
+        medicationType:
+          type: string
+          enum: [scheduled, prn]
+        quantityOnHand:
+          type: ["integer", "null"]
+        quantityPerRefill:
+          type: ["integer", "null"]
+        refillThreshold:
+          type: ["integer", "null"]
+        pharmacyName:
+          type: ["string", "null"]
+        pharmacyPhone:
+          type: ["string", "null"]
+        rxNumber:
+          type: ["string", "null"]
+        scheduleTimesJson:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        lotNumber:
+          type: ["string", "null"]
+        expirationDate:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, patientId, patientName, name, dosage, frequency, route, prescribedBy, startDate, endDate, active, instructions, controlledSubstance, deaSchedule, ndcCode, medicationType, quantityOnHand, quantityPerRefill, refillThreshold, pharmacyName, pharmacyPhone, rxNumber, scheduleTimesJson, imageUrl, lotNumber, expirationDate, createdAt]
+
+    CreateMedicationBody:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        name:
+          type: string
+        dosage:
+          type: string
+        frequency:
+          type: string
+        route:
+          type: string
+          enum: [oral, injection, topical, inhalation, other]
+        prescribedBy:
+          type: ["string", "null"]
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: ["string", "null"]
+          format: date-time
+        instructions:
+          type: ["string", "null"]
+        controlledSubstance:
+          type: boolean
+        deaSchedule:
+          type: ["string", "null"]
+        ndcCode:
+          type: ["string", "null"]
+        medicationType:
+          type: string
+          enum: [scheduled, prn]
+        quantityOnHand:
+          type: ["integer", "null"]
+        quantityPerRefill:
+          type: ["integer", "null"]
+        refillThreshold:
+          type: ["integer", "null"]
+        pharmacyName:
+          type: ["string", "null"]
+        pharmacyPhone:
+          type: ["string", "null"]
+        rxNumber:
+          type: ["string", "null"]
+        scheduleTimesJson:
+          type: ["string", "null"]
+      required: [patientId, name, dosage, frequency, route]
+
+    MedicationAdministration:
+      type: object
+      properties:
+        id:
+          type: integer
+        medicationId:
+          type: integer
+        medicationName:
+          type: ["string", "null"]
+        patientId:
+          type: integer
+        patientName:
+          type: ["string", "null"]
+        staffId:
+          type: integer
+        staffName:
+          type: ["string", "null"]
+        administeredAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [given, missed, refused, held]
+        notes:
+          type: ["string", "null"]
+        scheduledTime:
+          type: ["string", "null"]
+          format: date-time
+        windowStart:
+          type: ["string", "null"]
+          format: date-time
+        windowEnd:
+          type: ["string", "null"]
+          format: date-time
+        prnReason:
+          type: ["string", "null"]
+        prnEffectiveness:
+          type: ["string", "null"]
+        prnFollowUpAt:
+          type: ["string", "null"]
+          format: date-time
+        prnFollowUpNotes:
+          type: ["string", "null"]
+        barcodeScanVerified:
+          type: boolean
+        witnessStaffId:
+          type: ["integer", "null"]
+        relatedIncidentId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, medicationId, medicationName, patientId, patientName, staffId, staffName, administeredAt, status, notes, scheduledTime, windowStart, windowEnd, prnReason, prnEffectiveness, prnFollowUpAt, prnFollowUpNotes, barcodeScanVerified, witnessStaffId, relatedIncidentId, createdAt]
+
+    CreateMedicationAdministrationBody:
+      type: object
+      properties:
+        medicationId:
+          type: integer
+        patientId:
+          type: integer
+        staffId:
+          type: integer
+        administeredAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [given, missed, refused, held]
+        notes:
+          type: ["string", "null"]
+        scheduledTime:
+          type: ["string", "null"]
+          format: date-time
+        prnReason:
+          type: ["string", "null"]
+        prnEffectiveness:
+          type: ["string", "null"]
+        prnFollowUpAt:
+          type: ["string", "null"]
+          format: date-time
+        prnFollowUpNotes:
+          type: ["string", "null"]
+        barcodeScanVerified:
+          type: boolean
+        fiveRightsVerified:
+          type: boolean
+        witnessStaffId:
+          type: ["integer", "null"]
+        relatedIncidentId:
+          type: ["integer", "null"]
+      required: [medicationId, patientId, staffId, status]
+
+    Incident:
+      type: object
+      properties:
+        id:
+          type: integer
+        homeId:
+          type: integer
+        homeName:
+          type: ["string", "null"]
+        patientId:
+          type: ["integer", "null"]
+        patientName:
+          type: ["string", "null"]
+        reportedBy:
+          type: integer
+        reporterName:
+          type: ["string", "null"]
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        category:
+          type: string
+          enum: [behavioral, medical, environmental, medication, elopement, fall, other]
+        status:
+          type: string
+          enum: [open, investigating, resolved, closed]
+        occurredAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: ["string", "null"]
+          format: date-time
+        resolution:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, homeId, homeName, patientId, patientName, reportedBy, reporterName, title, description, severity, category, status, occurredAt, resolvedAt, resolution, createdAt]
+
+    CreateIncidentBody:
+      type: object
+      properties:
+        homeId:
+          type: integer
+        patientId:
+          type: ["integer", "null"]
+        reportedBy:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        category:
+          type: string
+          enum: [behavioral, medical, environmental, medication, elopement, fall, other]
+        occurredAt:
+          type: string
+          format: date-time
+      required: [homeId, reportedBy, title, description, severity, category]
+
+    UpdateIncidentBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        category:
+          type: string
+          enum: [behavioral, medical, environmental, medication, elopement, fall, other]
+        status:
+          type: string
+          enum: [open, investigating, resolved, closed]
+        resolution:
+          type: ["string", "null"]
+        resolvedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    DailyLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientId:
+          type: integer
+        patientName:
+          type: ["string", "null"]
+        staffId:
+          type: integer
+        staffName:
+          type: ["string", "null"]
+        homeId:
+          type: integer
+        date:
+          type: string
+          format: date-time
+        mood:
+          type: string
+          enum: [excellent, good, fair, poor, agitated]
+        appetite:
+          type: string
+          enum: [good, fair, poor, refused]
+        sleep:
+          type: string
+          enum: [good, fair, poor, none]
+        activities:
+          type: ["string", "null"]
+        behaviors:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, patientId, patientName, staffId, staffName, homeId, date, mood, appetite, sleep, activities, behaviors, notes, createdAt]
+
+    CreateDailyLogBody:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        staffId:
+          type: integer
+        homeId:
+          type: integer
+        date:
+          type: string
+          format: date-time
+        mood:
+          type: string
+          enum: [excellent, good, fair, poor, agitated]
+        appetite:
+          type: string
+          enum: [good, fair, poor, refused]
+        sleep:
+          type: string
+          enum: [good, fair, poor, none]
+        activities:
+          type: ["string", "null"]
+        behaviors:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+      required: [patientId, staffId, homeId, mood, appetite, sleep]
+
+    Shift:
+      type: object
+      properties:
+        id:
+          type: integer
+        staffId:
+          type: integer
+        staffName:
+          type: ["string", "null"]
+        homeId:
+          type: integer
+        homeName:
+          type: ["string", "null"]
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [scheduled, in_progress, completed, cancelled, no_show]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, staffId, staffName, homeId, homeName, startTime, endTime, status, notes, createdAt]
+
+    CreateShiftBody:
+      type: object
+      properties:
+        staffId:
+          type: integer
+        homeId:
+          type: integer
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        notes:
+          type: ["string", "null"]
+      required: [staffId, homeId, startTime, endTime]
+
+    UpdateShiftBody:
+      type: object
+      properties:
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [scheduled, in_progress, completed, cancelled, no_show]
+        notes:
+          type: ["string", "null"]
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalHomes:
+          type: integer
+        totalPatients:
+          type: integer
+        totalStaff:
+          type: integer
+        activeIncidents:
+          type: integer
+        todayShifts:
+          type: integer
+        medicationsDueToday:
+          type: integer
+        complianceRate:
+          type: number
+        incidentsByseverity:
+          type: object
+          properties:
+            low:
+              type: integer
+            medium:
+              type: integer
+            high:
+              type: integer
+            critical:
+              type: integer
+          required: [low, medium, high, critical]
+      required: [totalHomes, totalPatients, totalStaff, activeIncidents, todayShifts, medicationsDueToday, complianceRate, incidentsByseverity]
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [incident, medication, daily_log, shift, patient, staff]
+        title:
+          type: string
+        description:
+          type: string
+        homeName:
+          type: ["string", "null"]
+        timestamp:
+          type: string
+          format: date-time
+      required: [id, type, title, description, homeName, timestamp]
+
+    MedicationComplianceItem:
+      type: object
+      properties:
+        homeId:
+          type: integer
+        homeName:
+          type: string
+        totalDoses:
+          type: integer
+        givenDoses:
+          type: integer
+        missedDoses:
+          type: integer
+        complianceRate:
+          type: number
+      required: [homeId, homeName, totalDoses, givenDoses, missedDoses, complianceRate]
+
+    IncidentTrendItem:
+      type: object
+      properties:
+        date:
+          type: string
+        count:
+          type: integer
+        bySeverity:
+          type: object
+          properties:
+            low:
+              type: integer
+            medium:
+              type: integer
+            high:
+              type: integer
+            critical:
+              type: integer
+          required: [low, medium, high, critical]
+      required: [date, count, bySeverity]
+
+    TimePunch:
+      type: object
+      properties:
+        id:
+          type: integer
+        staffId:
+          type: integer
+        staffName:
+          type: ["string", "null"]
+        homeId:
+          type: integer
+        homeName:
+          type: ["string", "null"]
+        type:
+          type: string
+          enum: [clock_in, clock_out]
+        punchTime:
+          type: string
+          format: date-time
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        isWithinGeofence:
+          type: ["boolean", "null"]
+        distanceFromHome:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, staffId, staffName, homeId, homeName, type, punchTime, latitude, longitude, isWithinGeofence, distanceFromHome, notes, createdAt]
+
+    CreateTimePunchBody:
+      type: object
+      properties:
+        staffId:
+          type: integer
+        homeId:
+          type: integer
+        type:
+          type: string
+          enum: [clock_in, clock_out]
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+      required: [staffId, homeId, type]
+
+    TimePunchResult:
+      type: object
+      properties:
+        timePunch:
+          $ref: "#/components/schemas/TimePunch"
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/FraudAlert"
+      required: [timePunch, alerts]
+
+    ActiveTimePunchResponse:
+      type: object
+      properties:
+        activePunch:
+          oneOf:
+            - $ref: "#/components/schemas/TimePunch"
+            - type: "null"
+      required: [activePunch]
+
+    FraudAlert:
+      type: object
+      properties:
+        id:
+          type: integer
+        staffId:
+          type: integer
+        staffName:
+          type: ["string", "null"]
+        homeId:
+          type: ["integer", "null"]
+        homeName:
+          type: ["string", "null"]
+        timePunchId:
+          type: ["integer", "null"]
+        alertType:
+          type: string
+          enum: [off_site_clock_in, overlapping_shift, rapid_punch, ghost_employee, excessive_overtime]
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        description:
+          type: string
+        status:
+          type: string
+          enum: [open, reviewed, dismissed]
+        reviewedBy:
+          type: ["integer", "null"]
+        reviewedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, staffId, staffName, homeId, homeName, timePunchId, alertType, severity, description, status, reviewedBy, reviewedAt, createdAt]
+
+    UpdateFraudAlertBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [open, reviewed, dismissed]
+        reviewedBy:
+          type: ["integer", "null"]
+      required: [status]
+
+    ListTimePunchesQueryParams:
+      type: object
+      properties:
+        staffId:
+          type: integer
+        homeId:
+          type: integer
+
+    GetActiveTimePunchQueryParams:
+      type: object
+      properties:
+        staffId:
+          type: integer
+      required: [staffId]
+
+    ListFraudAlertsQueryParams:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [open, reviewed, dismissed]
+        staffId:
+          type: integer
+
+    UpdateFraudAlertParams:
+      type: object
+      properties:
+        id:
+          type: integer
+      required: [id]
+
+    EmarEntry:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        patientName:
+          type: string
+        homeId:
+          type: integer
+        homeName:
+          type: ["string", "null"]
+        medicationId:
+          type: integer
+        medicationName:
+          type: string
+        dosage:
+          type: string
+        route:
+          type: string
+        frequency:
+          type: string
+        controlledSubstance:
+          type: boolean
+        deaSchedule:
+          type: ["string", "null"]
+        medicationType:
+          type: string
+        scheduledTime:
+          type: string
+          format: date-time
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, given, missed, refused, held, overdue]
+        administeredAt:
+          type: ["string", "null"]
+          format: date-time
+        administeredBy:
+          type: ["string", "null"]
+        administrationId:
+          type: ["integer", "null"]
+        instructions:
+          type: ["string", "null"]
+      required: [patientId, patientName, homeId, homeName, medicationId, medicationName, dosage, route, frequency, controlledSubstance, deaSchedule, medicationType, scheduledTime, windowStart, windowEnd, status, administeredAt, administeredBy, administrationId, instructions]
+
+    MedicationCount:
+      type: object
+      properties:
+        id:
+          type: integer
+        medicationId:
+          type: integer
+        medicationName:
+          type: ["string", "null"]
+        staffId:
+          type: integer
+        staffName:
+          type: ["string", "null"]
+        witnessStaffId:
+          type: ["integer", "null"]
+        witnessName:
+          type: ["string", "null"]
+        shiftId:
+          type: ["integer", "null"]
+        countBefore:
+          type: integer
+        countAfter:
+          type: integer
+        discrepancy:
+          type: integer
+        countedAt:
+          type: string
+          format: date-time
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, medicationId, medicationName, staffId, staffName, witnessStaffId, witnessName, shiftId, countBefore, countAfter, discrepancy, countedAt, notes, createdAt]
+
+    CreateMedicationCountBody:
+      type: object
+      properties:
+        medicationId:
+          type: integer
+        staffId:
+          type: integer
+        witnessStaffId:
+          type: ["integer", "null"]
+        shiftId:
+          type: ["integer", "null"]
+        countBefore:
+          type: integer
+        countAfter:
+          type: integer
+        notes:
+          type: ["string", "null"]
+      required: [medicationId, staffId, countBefore, countAfter]
+
+    MedicationError:
+      type: object
+      properties:
+        id:
+          type: integer
+        medicationId:
+          type: integer
+        medicationName:
+          type: ["string", "null"]
+        patientId:
+          type: integer
+        patientName:
+          type: ["string", "null"]
+        staffId:
+          type: integer
+        staffName:
+          type: ["string", "null"]
+        errorType:
+          type: string
+          enum: [wrong_dose, wrong_patient, wrong_time, wrong_medication, wrong_route, omission, other]
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        description:
+          type: string
+        actionTaken:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [open, resolved]
+        occurredAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, medicationId, medicationName, patientId, patientName, staffId, staffName, errorType, severity, description, actionTaken, status, occurredAt, resolvedAt, createdAt]
+
+    CreateMedicationErrorBody:
+      type: object
+      properties:
+        medicationId:
+          type: integer
+        patientId:
+          type: integer
+        staffId:
+          type: integer
+        errorType:
+          type: string
+          enum: [wrong_dose, wrong_patient, wrong_time, wrong_medication, wrong_route, omission, other]
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        description:
+          type: string
+        actionTaken:
+          type: ["string", "null"]
+        occurredAt:
+          type: string
+          format: date-time
+      required: [medicationId, patientId, staffId, errorType, severity, description]
+
+    ResolveMedicationErrorBody:
+      type: object
+      properties:
+        actionTaken:
+          type: string
+        resolvedBy:
+          type: integer
+        notes:
+          type: string
+      required: [actionTaken]
+
+    AutoDetectResult:
+      type: object
+      properties:
+        detected:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectedError"
+        created:
+          type: integer
+        scannedDate:
+          type: string
+      required: [detected, created, scannedDate]
+
+    DetectedError:
+      type: object
+      properties:
+        errorType:
+          type: string
+        severity:
+          type: string
+        medicationName:
+          type: string
+        patientName:
+          type: string
+        staffName:
+          type: ["string", "null"]
+        description:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+        autoCreated:
+          type: boolean
+      required: [errorType, severity, medicationName, patientName, description, occurredAt, autoCreated]
+
+    MedicationInventoryRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        medicationId:
+          type: integer
+        medicationName:
+          type: ["string", "null"]
+        changeType:
+          type: string
+          enum: [received, administered, wasted, returned, adjustment]
+        quantity:
+          type: integer
+        previousQuantity:
+          type: ["integer", "null"]
+        newQuantity:
+          type: ["integer", "null"]
+        performedBy:
+          type: integer
+        performedByName:
+          type: ["string", "null"]
+        witnessedBy:
+          type: ["integer", "null"]
+        witnessName:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, medicationId, medicationName, changeType, quantity, previousQuantity, newQuantity, performedBy, performedByName, witnessedBy, witnessName, notes, createdAt]
+
+    CreateMedicationInventoryBody:
+      type: object
+      properties:
+        medicationId:
+          type: integer
+        changeType:
+          type: string
+          enum: [received, administered, wasted, returned, adjustment]
+        quantity:
+          type: integer
+        performedBy:
+          type: integer
+        witnessedBy:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+      required: [medicationId, changeType, quantity, performedBy]
+
+    RefillAlert:
+      type: object
+      properties:
+        medicationId:
+          type: integer
+        medicationName:
+          type: string
+        patientName:
+          type: string
+        dosage:
+          type: string
+        quantityOnHand:
+          type: integer
+        refillThreshold:
+          type: integer
+        pharmacyName:
+          type: ["string", "null"]
+        pharmacyPhone:
+          type: ["string", "null"]
+        rxNumber:
+          type: ["string", "null"]
+        daysRemaining:
+          type: ["integer", "null"]
+      required: [medicationId, medicationName, patientName, dosage, quantityOnHand, refillThreshold, pharmacyName, pharmacyPhone, rxNumber, daysRemaining]
+
+    PhysicianOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientId:
+          type: integer
+        patientName:
+          type: ["string", "null"]
+        medicationId:
+          type: ["integer", "null"]
+        medicationName:
+          type: ["string", "null"]
+        orderType:
+          type: string
+          enum: [new, change, discontinue]
+        orderedBy:
+          type: string
+        details:
+          type: ["string", "null"]
+        effectiveDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, active, completed, discontinued]
+        processedBy:
+          type: ["integer", "null"]
+        processedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, patientId, patientName, medicationId, medicationName, orderType, orderedBy, details, effectiveDate, status, processedBy, processedAt, createdAt]
+
+    CreatePhysicianOrderBody:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        medicationId:
+          type: ["integer", "null"]
+        orderType:
+          type: string
+          enum: [new, change, discontinue]
+        orderedBy:
+          type: string
+        details:
+          type: ["string", "null"]
+        effectiveDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, active, completed, discontinued]
+      required: [patientId, orderType, orderedBy]
+
+    UpdatePhysicianOrderBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, active, completed, discontinued]
+        processedBy:
+          type: ["integer", "null"]
+
+    DrugInteraction:
+      type: object
+      properties:
+        id:
+          type: integer
+        drugA:
+          type: string
+        drugB:
+          type: string
+        severity:
+          type: string
+          enum: [mild, moderate, severe, contraindicated]
+        description:
+          type: string
+        recommendation:
+          type: ["string", "null"]
+      required: [id, drugA, drugB, severity, description, recommendation]
+
+    MedicationSafetyDashboard:
+      type: object
+      properties:
+        overallComplianceRate:
+          type: number
+        overdueMedications:
+          type: integer
+        controlledSubstanceDiscrepancies:
+          type: integer
+        openMedicationErrors:
+          type: integer
+        refillsNeeded:
+          type: integer
+        pendingOrders:
+          type: integer
+        todayAdministrations:
+          type: integer
+        todayMissed:
+          type: integer
+      required: [overallComplianceRate, overdueMedications, controlledSubstanceDiscrepancies, openMedicationErrors, refillsNeeded, pendingOrders, todayAdministrations, todayMissed]
+
+    VitalSigns:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientId:
+          type: integer
+        patientName:
+          type: string
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        administrationId:
+          type: ["integer", "null"]
+        systolicBp:
+          type: ["integer", "null"]
+        diastolicBp:
+          type: ["integer", "null"]
+        heartRate:
+          type: ["integer", "null"]
+        temperature:
+          type: ["number", "null"]
+        respiratoryRate:
+          type: ["integer", "null"]
+        oxygenSaturation:
+          type: ["integer", "null"]
+        painLevel:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        recordedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, patientId, patientName, staffId, staffName, recordedAt, createdAt]
+
+    CreateVitalSignsBody:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        staffId:
+          type: integer
+        administrationId:
+          type: ["integer", "null"]
+        systolicBp:
+          type: ["integer", "null"]
+        diastolicBp:
+          type: ["integer", "null"]
+        heartRate:
+          type: ["integer", "null"]
+        temperature:
+          type: ["number", "null"]
+        respiratoryRate:
+          type: ["integer", "null"]
+        oxygenSaturation:
+          type: ["integer", "null"]
+        painLevel:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        recordedAt:
+          type: string
+          format: date-time
+      required: [patientId, staffId]
+
+    MedicationSideEffect:
+      type: object
+      properties:
+        id:
+          type: integer
+        medicationId:
+          type: integer
+        medicationName:
+          type: string
+        patientId:
+          type: integer
+        patientName:
+          type: string
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        administrationId:
+          type: ["integer", "null"]
+        sideEffect:
+          type: string
+        severity:
+          type: string
+          enum: [mild, moderate, severe, life_threatening]
+        onsetTime:
+          type: string
+          format: date-time
+        resolved:
+          type: boolean
+        resolvedAt:
+          type: ["string", "null"]
+          format: date-time
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, medicationId, medicationName, patientId, patientName, staffId, staffName, sideEffect, severity, onsetTime, resolved, createdAt]
+
+    CreateMedicationSideEffectBody:
+      type: object
+      properties:
+        medicationId:
+          type: integer
+        patientId:
+          type: integer
+        staffId:
+          type: integer
+        administrationId:
+          type: ["integer", "null"]
+        sideEffect:
+          type: string
+        severity:
+          type: string
+          enum: [mild, moderate, severe, life_threatening]
+        onsetTime:
+          type: string
+          format: date-time
+        notes:
+          type: ["string", "null"]
+      required: [medicationId, patientId, staffId, sideEffect, severity]
+
+    MedicationRefusal:
+      type: object
+      properties:
+        id:
+          type: integer
+        medicationId:
+          type: integer
+        medicationName:
+          type: string
+        patientId:
+          type: integer
+        patientName:
+          type: string
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        scheduledTime:
+          type: ["string", "null"]
+          format: date-time
+        reason:
+          type: string
+        physicianNotified:
+          type: boolean
+        physicianNotifiedAt:
+          type: ["string", "null"]
+          format: date-time
+        physicianName:
+          type: ["string", "null"]
+        followUpAction:
+          type: ["string", "null"]
+        followUpNotes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, medicationId, medicationName, patientId, patientName, staffId, staffName, reason, physicianNotified, createdAt]
+
+    CreateMedicationRefusalBody:
+      type: object
+      properties:
+        medicationId:
+          type: integer
+        patientId:
+          type: integer
+        staffId:
+          type: integer
+        scheduledTime:
+          type: ["string", "null"]
+          format: date-time
+        reason:
+          type: string
+        physicianNotified:
+          type: boolean
+        physicianName:
+          type: ["string", "null"]
+        followUpAction:
+          type: ["string", "null"]
+        followUpNotes:
+          type: ["string", "null"]
+      required: [medicationId, patientId, staffId, reason]
+
+    MedicationAuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        entityType:
+          type: string
+        entityId:
+          type: integer
+        action:
+          type: string
+        performedBy:
+          type: integer
+        performedByName:
+          type: ["string", "null"]
+        details:
+          type: ["string", "null"]
+        previousValue:
+          type: ["string", "null"]
+        newValue:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, entityType, entityId, action, performedBy, createdAt]
+
+    PrnFollowupBody:
+      type: object
+      properties:
+        prnEffectivenessScore:
+          type: integer
+          minimum: 1
+          maximum: 10
+        prnFollowUpNotes:
+          type: string
+        prnEffectiveness:
+          type: string
+          enum: [effective, partially_effective, ineffective]
+      required: [prnEffectivenessScore, prnEffectiveness]
+
+    PrnFollowupItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        medicationId:
+          type: integer
+        medicationName:
+          type: string
+        patientId:
+          type: integer
+        patientName:
+          type: string
+        staffName:
+          type: string
+        prnReason:
+          type: string
+        administeredAt:
+          type: string
+          format: date-time
+        prnFollowUpDueAt:
+          type: string
+          format: date-time
+        minutesRemaining:
+          type: integer
+      required: [id, medicationId, medicationName, patientId, patientName, staffName, prnReason, administeredAt, prnFollowUpDueAt, minutesRemaining]
+
+    Payer:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [commercial, medicaid, medicare, state_agency, self_pay]
+        payerId:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        contactName:
+          type: string
+        website:
+          type: string
+        isActive:
+          type: boolean
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, type, isActive, createdAt]
+
+    CreatePayerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [commercial, medicaid, medicare, state_agency, self_pay]
+        payerId:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        contactName:
+          type: string
+        website:
+          type: string
+        notes:
+          type: string
+      required: [name, type]
+
+    BillableService:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientId:
+          type: integer
+        patientName:
+          type: string
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        serviceDate:
+          type: string
+          format: date-time
+        serviceType:
+          type: string
+        cptCode:
+          type: string
+        hcpcsCode:
+          type: string
+        revenueCode:
+          type: string
+        modifiers:
+          type: string
+        units:
+          type: number
+        unitRate:
+          type: number
+        totalCharge:
+          type: number
+        diagnosisCode:
+          type: string
+        placeOfService:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [unbilled, billed, void]
+        claimId:
+          type: integer
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, patientId, serviceDate, serviceType, units, unitRate, totalCharge, status, createdAt]
+
+    CreateBillableServiceBody:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        staffId:
+          type: integer
+        serviceDate:
+          type: string
+          format: date-time
+        serviceType:
+          type: string
+        cptCode:
+          type: string
+        hcpcsCode:
+          type: string
+        revenueCode:
+          type: string
+        modifiers:
+          type: string
+        units:
+          type: number
+        unitRate:
+          type: number
+        totalCharge:
+          type: number
+        diagnosisCode:
+          type: string
+        placeOfService:
+          type: string
+        description:
+          type: string
+        notes:
+          type: string
+      required: [patientId, serviceType, unitRate, totalCharge]
+
+    Claim:
+      type: object
+      properties:
+        id:
+          type: integer
+        claimNumber:
+          type: string
+        patientId:
+          type: integer
+        patientName:
+          type: string
+        payerId:
+          type: integer
+        payerName:
+          type: string
+        serviceStartDate:
+          type: string
+          format: date-time
+        serviceEndDate:
+          type: string
+          format: date-time
+        totalCharged:
+          type: number
+        totalAllowed:
+          type: number
+        totalPaid:
+          type: number
+        patientResponsibility:
+          type: number
+        status:
+          type: string
+          enum: [draft, ready, submitted, accepted, paid, denied, appealed, void]
+        claimType:
+          type: string
+        primaryDiagnosisCode:
+          type: string
+        secondaryDiagnosisCodes:
+          type: string
+        renderingProvider:
+          type: string
+        referringProvider:
+          type: string
+        authorizationNumber:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+        denialReason:
+          type: string
+        denialCode:
+          type: string
+        appealDeadline:
+          type: string
+          format: date-time
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        serviceCount:
+          type: integer
+      required: [id, patientId, payerId, serviceStartDate, serviceEndDate, totalCharged, totalPaid, status, claimType, createdAt, updatedAt]
+
+    CreateClaimBody:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        payerId:
+          type: integer
+        serviceStartDate:
+          type: string
+          format: date-time
+        serviceEndDate:
+          type: string
+          format: date-time
+        totalCharged:
+          type: number
+        claimType:
+          type: string
+        primaryDiagnosisCode:
+          type: string
+        secondaryDiagnosisCodes:
+          type: string
+        renderingProvider:
+          type: string
+        referringProvider:
+          type: string
+        authorizationNumber:
+          type: string
+        notes:
+          type: string
+      required: [patientId, payerId, serviceStartDate, serviceEndDate, totalCharged]
+
+    UpdateClaimBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [draft, ready, submitted, accepted, paid, denied, appealed, void]
+        totalAllowed:
+          type: number
+        totalPaid:
+          type: number
+        patientResponsibility:
+          type: number
+        denialReason:
+          type: string
+        denialCode:
+          type: string
+        notes:
+          type: string
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: integer
+        claimId:
+          type: integer
+        claimNumber:
+          type: string
+        payerId:
+          type: integer
+        payerName:
+          type: string
+        paymentDate:
+          type: string
+          format: date-time
+        amount:
+          type: number
+        paymentMethod:
+          type: string
+          enum: [eft, check, credit_card, cash, other]
+        checkNumber:
+          type: string
+        eftTraceNumber:
+          type: string
+        adjustmentAmount:
+          type: number
+        adjustmentReason:
+          type: string
+        remarkCode:
+          type: string
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, claimId, paymentDate, amount, paymentMethod, createdAt]
+
+    CreatePaymentBody:
+      type: object
+      properties:
+        claimId:
+          type: integer
+        payerId:
+          type: integer
+        paymentDate:
+          type: string
+          format: date-time
+        amount:
+          type: number
+        paymentMethod:
+          type: string
+          enum: [eft, check, credit_card, cash, other]
+        checkNumber:
+          type: string
+        eftTraceNumber:
+          type: string
+        adjustmentAmount:
+          type: number
+        adjustmentReason:
+          type: string
+        remarkCode:
+          type: string
+        notes:
+          type: string
+      required: [claimId, amount, paymentMethod]
+
+    BillingSummary:
+      type: object
+      properties:
+        totalCharged:
+          type: number
+        totalPaid:
+          type: number
+        totalOutstanding:
+          type: number
+        totalDenied:
+          type: number
+        claimsByStatus:
+          type: object
+          additionalProperties:
+            type: integer
+        revenueByPayer:
+          type: array
+          items:
+            type: object
+            properties:
+              payerName:
+                type: string
+              totalCharged:
+                type: number
+              totalPaid:
+                type: number
+              claimCount:
+                type: integer
+            required: [payerName, totalCharged, totalPaid, claimCount]
+        agingBuckets:
+          type: object
+          properties:
+            current:
+              type: number
+            thirtyDays:
+              type: number
+            sixtyDays:
+              type: number
+            ninetyDays:
+              type: number
+            overNinety:
+              type: number
+          required: [current, thirtyDays, sixtyDays, ninetyDays, overNinety]
+        monthlyRevenue:
+          type: array
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+              charged:
+                type: number
+              paid:
+                type: number
+            required: [month, charged, paid]
+      required: [totalCharged, totalPaid, totalOutstanding, totalDenied, claimsByStatus, revenueByPayer, agingBuckets, monthlyRevenue]

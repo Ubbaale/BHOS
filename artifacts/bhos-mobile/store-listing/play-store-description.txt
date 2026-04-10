@@ -1,0 +1,28 @@
+APP NAME: BHOS - Behavioral Home OS
+
+SHORT DESCRIPTION (80 chars max):
+Complete group home management: eMAR, shifts, compliance & team coordination.
+
+FULL DESCRIPTION:
+BHOS (Behavioral Home Operating System) is the complete mobile platform for behavioral health group home staff. Built for direct care workers, nurses, and managers.
+
+★ MEDICATION MANAGEMENT
+Electronic Medication Administration Record (eMAR) with 5 Rights verification, controlled substance tracking, PRN timers, and drug interaction warnings. Scan medication barcodes with your phone camera to verify NDC codes, Rx numbers, and lot numbers — automatically matching to patient records for Right Drug verification. Barcode verification status is recorded on every administration for full audit compliance.
+
+★ SHIFT & ATTENDANCE
+GPS-verified clock-in/out at authorized locations, shift schedules, real-time coverage visibility, and geofence-based fraud detection.
+
+★ PATIENT CARE
+Daily logs, incident reporting with photos, vital signs, progress notes, treatment plans, and crisis management.
+
+★ SECURITY & COMPLIANCE
+Biometric authentication, med-pass PIN verification, HIPAA-compliant data handling, and complete audit trail.
+
+★ TEAM COORDINATION
+Staff messaging, daily assignments, meeting schedules, and training/certification tracking.
+
+BHOS is used by behavioral health organizations to manage group homes safely and in full regulatory compliance.
+
+CATEGORY: Medical
+CONTENT RATING: Everyone
+PRIVACY POLICY: https://app.bhos.com/privacy

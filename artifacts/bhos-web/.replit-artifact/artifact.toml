@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "BHOS Command Center"
+version = "1.0.0"
+id = "artifacts/bhos-web"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19809
+
+[services.development]
+run = "pnpm --filter @workspace/bhos-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/bhos-web", "run", "build" ]
+publicDir = "artifacts/bhos-web/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19809"
+BASE_PATH = "/"

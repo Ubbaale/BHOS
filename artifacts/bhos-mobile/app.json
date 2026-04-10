@@ -1,0 +1,122 @@
+{
+  "expo": {
+    "name": "BHOS",
+    "slug": "bhos-mobile",
+    "version": "1.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "bhos",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a7ea4"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.bhos.mobile",
+      "buildNumber": "2",
+      "infoPlist": {
+        "NSCameraUsageDescription": "BHOS needs camera access to scan medication barcodes and capture incident documentation photos.",
+        "NSPhotoLibraryUsageDescription": "BHOS needs photo library access to attach images to incident reports and daily logs.",
+        "NSLocationWhenInUseUsageDescription": "BHOS uses your location to verify shift clock-in/out at authorized group home locations.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "BHOS uses your location to verify shift clock-in/out at authorized group home locations.",
+        "NSFaceIDUsageDescription": "BHOS uses Face ID for secure authentication and medication administration verification.",
+        "UIBackgroundModes": ["remote-notification"]
+      },
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          }
+        ]
+      }
+    },
+    "android": {
+      "package": "com.bhos.mobile",
+      "versionCode": 2,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0a7ea4"
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://app.bhos.com"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#0a7ea4"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "BHOS uses your location to verify shift clock-in/out at authorized group home locations."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "BHOS uses Face ID for secure authentication and medication verification."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BHOS needs photo access to attach images to reports.",
+          "cameraPermission": "BHOS needs camera access to scan barcodes and capture documentation."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "BHOS needs camera access to scan medication barcodes for safety verification."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      }
+    },
+    "owner": "bhos",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID"
+    }
+  }
+}
