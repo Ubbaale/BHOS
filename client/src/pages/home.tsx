@@ -2,6 +2,7 @@ import Header from "@/components/Header";
 import Hero from "@/components/Hero";
 import QuickActions from "@/components/QuickActions";
 import Services from "@/components/Services";
+import HealthcareProducts from "@/components/HealthcareProducts";
 import Stats from "@/components/Stats";
 import JobMap from "@/components/JobMap";
 import IssueReport from "@/components/IssueReport";
@@ -20,6 +21,7 @@ export default function Home() {
         <Hero />
         <QuickActions />
         <Services />
+        <HealthcareProducts />
         <Stats />
         <JobMap />
         <IssueReport />
