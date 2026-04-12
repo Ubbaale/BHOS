@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Shield, Pill, FileCheck, DollarSign, BarChart3, Link2, ClipboardList, Users, Brain } from "lucide-react";
-import logoImg from "@assets/Logocare-Picsart-BackgroundRemover_1767809315800.jpg";
+import { Shield, Pill, FileCheck, DollarSign, BarChart3, Link2, ClipboardList, Users } from "lucide-react";
+import bhosLogoImg from "@assets/image_1776015739605.png";
 
 const bhosFeatures = [
   {
@@ -59,21 +59,18 @@ export default function HealthcareProducts() {
             <div className="p-8 md:p-12">
               <div className="flex flex-col md:flex-row items-start md:items-center gap-6 mb-10">
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  <div className="flex-shrink-0">
                     <img
-                      src={logoImg}
-                      alt="CareHub Logo"
-                      className="w-12 h-12 object-contain"
+                      src={bhosLogoImg}
+                      alt="BHOS Logo"
+                      className="h-14 md:h-16 object-contain"
                       data-testid="img-bhos-logo"
                     />
                   </div>
                   <div>
-                    <div className="flex items-center gap-3 mb-1">
-                      <Brain className="w-6 h-6 text-primary" />
-                      <h3 className="text-2xl md:text-3xl font-bold" data-testid="text-bhos-title">
-                        Behavioral Home Operating System
-                      </h3>
-                    </div>
+                    <h3 className="text-2xl md:text-3xl font-bold mb-1" data-testid="text-bhos-title">
+                      Behavioral Home Operating System
+                    </h3>
                     <p className="text-muted-foreground text-base md:text-lg max-w-2xl" data-testid="text-bhos-description">
                       The complete platform for managing behavioral health group homes — medication safety, clinical compliance, billing, and integrations in one place.
                     </p>
