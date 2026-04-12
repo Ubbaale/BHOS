@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Shield, Pill, FileCheck, DollarSign, BarChart3, Link2, ClipboardList, Users } from "lucide-react";
-import bhosLogoImg from "@assets/image_1776015739605.png";
+import bhosLogoImg from "@assets/bhos_logo_transparent.png";
 
 const bhosFeatures = [
   {
