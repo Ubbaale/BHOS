@@ -48,6 +48,14 @@ import camerasRouter from "./cameras";
 import supportTicketsRouter from "./support-tickets";
 import adminRouter from "./admin";
 import backupsRouter from "./backups";
+import documentsRouter from "./documents";
+import ispRouter from "./isp";
+import behaviorTrackingRouter from "./behavior-tracking";
+import staffCredentialsRouter from "./staff-credentials";
+import customFormsRouter from "./custom-forms";
+import stateReportingRouter from "./state-reporting";
+import careCoordinationRouter from "./care-coordination";
+import authorizationsRouter from "./authorizations";
 import { logPhiAccess, trackSession, geofenceMiddleware, enforceIpWhitelist } from "../middlewares/security";
 import { requireAuth } from "../middlewares/requireAuth";
 
@@ -118,5 +126,13 @@ router.use(adminRouter);
 router.use(backupsRouter);
 router.use(stateComplianceRouter);
 router.use(inspectorPortalRouter);
+router.use(documentsRouter);
+router.use(ispRouter);
+router.use(behaviorTrackingRouter);
+router.use(staffCredentialsRouter);
+router.use(customFormsRouter);
+router.use(stateReportingRouter);
+router.use(careCoordinationRouter);
+router.use(authorizationsRouter);
 
 export default router;

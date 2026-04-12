@@ -56,6 +56,14 @@ import BackupsPage from "@/pages/backups";
 import InspectorPortalPage from "@/pages/inspector-portal";
 import DevLoginPage from "@/pages/dev-login";
 import LandingPage from "@/pages/landing";
+import DocumentsPage from "@/pages/documents";
+import ISPPage from "@/pages/isp";
+import BehaviorTrackingPage from "@/pages/behavior-tracking";
+import StaffCredentialsPage from "@/pages/staff-credentials";
+import CustomFormsPage from "@/pages/custom-forms";
+import StateReportingPage from "@/pages/state-reporting";
+import CareCoordinationPage from "@/pages/care-coordination";
+import AuthorizationsPage from "@/pages/authorizations";
 
 const queryClient = new QueryClient();
 
@@ -179,6 +187,14 @@ function AppRoutes() {
         <Route path="/treatment-plans" component={TreatmentPlansPage} />
         <Route path="/progress-notes" component={ProgressNotesPage} />
         <Route path="/discharge" component={DischargePage} />
+        <Route path="/documents" component={DocumentsPage} />
+        <Route path="/isp" component={ISPPage} />
+        <Route path="/behavior-tracking" component={BehaviorTrackingPage} />
+        <Route path="/staff-credentials" component={StaffCredentialsPage} />
+        <Route path="/custom-forms" component={CustomFormsPage} />
+        <Route path="/state-reporting" component={StateReportingPage} />
+        <Route path="/care-coordination" component={CareCoordinationPage} />
+        <Route path="/authorizations" component={AuthorizationsPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

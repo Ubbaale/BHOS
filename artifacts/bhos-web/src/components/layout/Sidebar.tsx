@@ -43,6 +43,12 @@ import {
   LifeBuoy,
   ShieldEllipsis,
   Database,
+  FolderOpen,
+  Activity,
+  Award,
+  Layout,
+  Send,
+  Stethoscope,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GlobalSearch } from "@/components/GlobalSearch";
@@ -91,6 +97,14 @@ const navigation = [
   { name: "Organization", href: "/organization", icon: Building2, emoji: "🏢" },
   { name: "Subscription", href: "/subscription", icon: CreditCard, emoji: "💳" },
   { name: "Platform Admin", href: "/platform-admin", icon: ShieldEllipsis, emoji: "🛡️" },
+  { name: "Documents", href: "/documents", icon: FolderOpen, emoji: "📂" },
+  { name: "ISP Plans", href: "/isp", icon: ClipboardList, emoji: "📋" },
+  { name: "Behavior Tracking", href: "/behavior-tracking", icon: Activity, emoji: "📊" },
+  { name: "Staff Credentials", href: "/staff-credentials", icon: Award, emoji: "🏅" },
+  { name: "Custom Forms", href: "/custom-forms", icon: Layout, emoji: "📝" },
+  { name: "State Reporting", href: "/state-reporting", icon: Send, emoji: "📤" },
+  { name: "Care Coordination", href: "/care-coordination", icon: Stethoscope, emoji: "🩺" },
+  { name: "Authorizations", href: "/authorizations", icon: ShieldCheck, emoji: "✅" },
 ];
 
 export function Sidebar() {
