@@ -1,0 +1,1 @@
+{"version":3,"file":"incidentTrendItemBySeverity.d.ts","sourceRoot":"","sources":["../../../src/generated/types/incidentTrendItemBySeverity.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AAEH,MAAM,MAAM,2BAA2B,GAAG;IACxC,GAAG,EAAE,MAAM,CAAC;IACZ,MAAM,EAAE,MAAM,CAAC;IACf,IAAI,EAAE,MAAM,CAAC;IACb,QAAQ,EAAE,MAAM,CAAC;CAClB,CAAC"}

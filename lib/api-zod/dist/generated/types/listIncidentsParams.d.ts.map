@@ -1,0 +1,1 @@
+{"version":3,"file":"listIncidentsParams.d.ts","sourceRoot":"","sources":["../../../src/generated/types/listIncidentsParams.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AACH,OAAO,KAAK,EAAE,qBAAqB,EAAE,MAAM,yBAAyB,CAAC;AAErE,MAAM,MAAM,mBAAmB,GAAG;IAChC,MAAM,CAAC,EAAE,MAAM,CAAC;IAChB,QAAQ,CAAC,EAAE,qBAAqB,CAAC;CAClC,CAAC"}

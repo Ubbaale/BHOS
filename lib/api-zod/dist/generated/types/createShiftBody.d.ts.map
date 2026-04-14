@@ -1,0 +1,1 @@
+{"version":3,"file":"createShiftBody.d.ts","sourceRoot":"","sources":["../../../src/generated/types/createShiftBody.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AAEH,MAAM,WAAW,eAAe;IAC9B,OAAO,EAAE,MAAM,CAAC;IAChB,MAAM,EAAE,MAAM,CAAC;IACf,SAAS,EAAE,IAAI,CAAC;IAChB,OAAO,EAAE,IAAI,CAAC;IACd,gBAAgB;IAChB,KAAK,CAAC,EAAE,MAAM,GAAG,IAAI,CAAC;CACvB"}

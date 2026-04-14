@@ -1,0 +1,1 @@
+{"version":3,"file":"dashboardSummaryIncidentsByseverity.d.ts","sourceRoot":"","sources":["../../../src/generated/types/dashboardSummaryIncidentsByseverity.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AAEH,MAAM,MAAM,mCAAmC,GAAG;IAChD,GAAG,EAAE,MAAM,CAAC;IACZ,MAAM,EAAE,MAAM,CAAC;IACf,IAAI,EAAE,MAAM,CAAC;IACb,QAAQ,EAAE,MAAM,CAAC;CAClB,CAAC"}
