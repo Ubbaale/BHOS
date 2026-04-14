@@ -77,7 +77,7 @@ export default function SubscriptionPage() {
         {subData?.subscription?.stripeCustomerId && (
           <Button variant="outline" onClick={() => openPortal.mutate()} disabled={openPortal.isPending}>
             <ExternalLink className="h-4 w-4 mr-2" />
-            Manage in Stripe
+            Manage Billing
           </Button>
         )}
       </div>

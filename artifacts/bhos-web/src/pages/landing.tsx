@@ -14,7 +14,7 @@ const features = [
   { icon: ShieldCheck, title: "Compliance & Audit", desc: "Immutable audit trail, incident reporting, fraud detection with GPS geofencing" },
   { icon: FileBarChart, title: "Reports Center", desc: "14 report types across medication, clinical, operations, and compliance categories" },
   { icon: DollarSign, title: "Billing & Claims", desc: "Full revenue cycle management with EDI 837P, Medicaid, and payer integrations" },
-  { icon: Network, title: "Integrations", desc: "Clearinghouse, FHIR R4, Stripe payments, and state Medicaid portal connections" },
+  { icon: Network, title: "Integrations", desc: "Clearinghouse, FHIR R4, payment processing, and state Medicaid portal connections" },
 ];
 
 const heroImages = [heroDoctor, heroClinical, heroPatient];

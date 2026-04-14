@@ -285,7 +285,7 @@ function PaymentProcessorTab({ settings }: { settings: IntegrationSetting | unde
               </div>
               <div>
                 <CardTitle>Payment Processing</CardTitle>
-                <CardDescription>Accept patient co-pays, deductibles, and self-pay balances via Stripe</CardDescription>
+                <CardDescription>Accept patient co-pays, deductibles, and self-pay balances securely</CardDescription>
               </div>
             </div>
             <StatusIndicator status={settings?.status || "disconnected"} />
@@ -322,8 +322,8 @@ function PaymentProcessorTab({ settings }: { settings: IntegrationSetting | unde
               <div>
                 <p className="text-sm font-medium">HIPAA-Compliant Payment Processing</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Stripe is a HIPAA-eligible payment processor. Patient payment data is tokenized and never stored on our servers.
-                  All transactions are PCI DSS Level 1 compliant. BAA (Business Associate Agreement) available through Stripe Atlas.
+                  Our payment processor is HIPAA-eligible. Patient payment data is tokenized and never stored on our servers.
+                  All transactions are PCI DSS Level 1 compliant. BAA (Business Associate Agreement) available upon request.
                 </p>
               </div>
             </div>
@@ -352,11 +352,11 @@ function PaymentProcessorTab({ settings }: { settings: IntegrationSetting | unde
           </div>
 
           <div className="mt-6 p-4 border rounded-lg border-dashed">
-            <p className="text-sm font-medium text-center">Connect your Stripe account to start accepting payments</p>
+            <p className="text-sm font-medium text-center">Connect your payment account to start accepting payments</p>
             <p className="text-xs text-center text-muted-foreground mt-1">Click the button below to securely connect via OAuth</p>
             <div className="flex justify-center mt-3">
               <Button className="gap-2">
-                <Plug className="h-4 w-4" /> Connect Stripe
+                <Plug className="h-4 w-4" /> Connect Payments
               </Button>
             </div>
           </div>
