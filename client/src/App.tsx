@@ -39,6 +39,7 @@ import ITCompanyOnboard from "@/pages/it-company-onboard";
 import CourierOnboard from "@/pages/courier-onboard";
 import CourierDashboard from "@/pages/courier-dashboard";
 import SignupPage from "@/pages/signup";
+import ContactPage from "@/pages/contact";
 
 function Router() {
   return (
@@ -102,6 +103,7 @@ function Router() {
       <Route path="/it-tech" component={ITTechDashboard} />
       <Route path="/courier/onboard" component={CourierOnboard} />
       <Route path="/courier" component={CourierDashboard} />
+      <Route path="/contact" component={ContactPage} />
       <Route path="/terms" component={TermsOfService} />
       <Route path="/privacy" component={PrivacyPolicy} />
       <Route component={NotFound} />

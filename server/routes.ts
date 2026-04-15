@@ -6,7 +6,7 @@ import { insertJobSchema, insertTicketSchema, insertRideSchema, insertDriverProf
 import { db } from "./db";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { sendIssueNotification, sendRideBookedForPatientEmail, sendPasswordResetCode, sendEmailVerificationCode, FileAttachment } from "./email";
+import { sendIssueNotification, sendRideBookedForPatientEmail, sendPasswordResetCode, sendEmailVerificationCode, sendContactFormEmail, FileAttachment } from "./email";
 import { saveSubscription, removeSubscription, getVapidPublicKey, notifyDriversOfNewRide, notifyPatientOfRideUpdate, notifyItTechsOfNewTicket, notifyItCompanyOfTicketUpdate } from "./push";
 import multer from "multer";
 import path from "path";
@@ -9969,6 +9969,34 @@ This Agreement shall be governed by the laws of the state in which Contractor pr
       res.json({ message: "Signature captured", ticket: updated });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/contact", async (req, res) => {
+    try {
+      const contactSchema = z.object({
+        fullName: z.string().min(2, "Full name is required"),
+        email: z.string().email("Valid email is required"),
+        phone: z.string().min(7, "Phone number is required"),
+        company: z.string().optional(),
+        subject: z.string().min(3, "Subject is required"),
+        inquiryType: z.string().min(1, "Please select an inquiry type"),
+        message: z.string().min(10, "Message must be at least 10 characters"),
+      });
+
+      const data = contactSchema.parse(req.body);
+      const sent = await sendContactFormEmail(data);
+
+      if (sent) {
+        res.json({ message: "Your message has been sent successfully. We'll get back to you shortly." });
+      } else {
+        res.status(500).json({ message: "Failed to send your message. Please try calling us at 774-581-9700." });
+      }
+    } catch (err: any) {
+      if (err.name === "ZodError") {
+        return res.status(400).json({ message: err.errors[0]?.message || "Invalid form data" });
+      }
+      res.status(500).json({ message: "Something went wrong. Please try again." });
     }
   });
 

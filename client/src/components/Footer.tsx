@@ -22,7 +22,7 @@ const footerLinks = {
     { name: "Case Studies", href: "#" },
   ],
   support: [
-    { name: "Contact Us", href: "#contact" },
+    { name: "Contact Us", href: "/contact" },
     { name: "Report Issue", href: "#report" },
     { name: "FAQ", href: "#" },
     { name: "Terms of Service", href: "/terms" },

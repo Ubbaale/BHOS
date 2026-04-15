@@ -694,3 +694,86 @@ export async function sendPasswordResetCode(email: string, code: string): Promis
     return false;
   }
 }
+
+export async function sendContactFormEmail(data: {
+  fullName: string;
+  email: string;
+  phone: string;
+  company?: string;
+  subject: string;
+  inquiryType: string;
+  message: string;
+}): Promise<boolean> {
+  try {
+    const { client, fromEmail } = getSendGridClient();
+    const recipientEmail = process.env.SENDGRID_FROM_EMAIL || 'support@carehubapp.com';
+
+    const inquiryLabels: Record<string, string> = {
+      general: 'General Inquiry',
+      staffing: 'Healthcare Staffing',
+      transportation: 'Medical Transportation (NEMT)',
+      it_services: 'IT Services',
+      courier: 'Medical Courier',
+      partnership: 'Partnership / Business',
+      billing: 'Billing / Payments',
+      support: 'Technical Support',
+      feedback: 'Feedback / Suggestions',
+    };
+
+    const msg = {
+      to: recipientEmail,
+      from: fromEmail,
+      replyTo: data.email,
+      subject: `[CareHub Contact] ${data.subject}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #1a1a2e; color: white; padding: 20px 24px; border-radius: 8px 8px 0 0;">
+            <h2 style="margin: 0; font-size: 20px;">New Contact Form Submission</h2>
+          </div>
+          <div style="border: 1px solid #e5e7eb; border-top: none; padding: 24px; border-radius: 0 0 8px 8px;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #6b7280; width: 140px; vertical-align: top;">Full Name:</td>
+                <td style="padding: 8px 0;">${data.fullName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #6b7280; vertical-align: top;">Email:</td>
+                <td style="padding: 8px 0;"><a href="mailto:${data.email}" style="color: #2563eb;">${data.email}</a></td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #6b7280; vertical-align: top;">Phone:</td>
+                <td style="padding: 8px 0;"><a href="tel:${data.phone}" style="color: #2563eb;">${data.phone}</a></td>
+              </tr>
+              ${data.company ? `<tr><td style="padding: 8px 0; font-weight: bold; color: #6b7280; vertical-align: top;">Company:</td><td style="padding: 8px 0;">${data.company}</td></tr>` : ''}
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #6b7280; vertical-align: top;">Inquiry Type:</td>
+                <td style="padding: 8px 0;">${inquiryLabels[data.inquiryType] || data.inquiryType}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #6b7280; vertical-align: top;">Subject:</td>
+                <td style="padding: 8px 0; font-weight: 600;">${data.subject}</td>
+              </tr>
+            </table>
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+              <p style="font-weight: bold; color: #6b7280; margin-bottom: 8px;">Message:</p>
+              <div style="background: #f9fafb; padding: 16px; border-radius: 6px; white-space: pre-wrap; line-height: 1.6;">${data.message}</div>
+            </div>
+            <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">
+              This message was sent via the CareHub contact form. Reply directly to respond to ${data.fullName}.
+            </p>
+          </div>
+        </div>
+      `,
+    };
+
+    await client.send(msg);
+    console.log('Contact form email sent from:', data.email);
+    return true;
+  } catch (error: any) {
+    console.error('Failed to send contact form email:', error);
+    if (error?.response?.body) {
+      console.error('SendGrid error details:', JSON.stringify(error.response.body, null, 2));
+    }
+    return false;
+  }
+}

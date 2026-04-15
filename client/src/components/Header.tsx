@@ -89,7 +89,7 @@ export default function Header({ title, showBack }: { title?: string; showBack?:
         { name: "Find Jobs", href: "#jobs", isAnchor: true },
         { name: "Book Ride", href: "/book-ride", isAnchor: false },
         { name: "IT Services", href: "/it-services", isAnchor: false },
-        { name: "Contact", href: "#contact", isAnchor: true },
+        { name: "Contact", href: "/contact" },
       ]
     : [
         { name: "Home", href: "/", isAnchor: false },
