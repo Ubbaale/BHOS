@@ -118,6 +118,48 @@ dependencies:
 - AnimatedContainer for status changes
 - AnimatedSwitcher for page transitions
 
+## Required Flutter Dependencies (pubspec.yaml additions)
+
+```yaml
+  permission_handler: ^11.1.0
+```
+
+## App Store Rejection Fixes Applied
+
+### Fix 1: Guideline 4.2 – Minimum Functionality
+- Added 12+ native features (biometrics, haptics, camera, share sheet, offline cache, etc.)
+- No WebViews used — all screens are native Flutter widgets
+
+### Fix 2: Guideline 2.3.10 – Accurate Metadata
+- Removed all irrelevant third-party references (no Google Pay mentions)
+- App only references services actually integrated (Stripe for payments)
+
+### Fix 3: Guideline 4 – Login Experience
+- Login and registration are fully in-app using native Flutter TextFields
+- No external browser redirects for authentication
+- Biometric login (Face ID/Touch ID) as alternative sign-in method
+
+### Fix 4: Guideline 2.1(a) – Camera Crash on iPad
+- Fixed in `widgets/document_scanner.dart`
+- Added `permission_handler` for proper camera/photo library permission requests
+- All `ImagePicker` calls wrapped in try-catch with `PlatformException` handling
+- Shows CupertinoAlertDialog to guide users to Settings if permission denied
+- Tested error paths for missing camera on iPad simulators
+
+### Fix 5: Guideline 1.5 – Developer Information
+- Working support URL: `https://app.carehubapp.com/support`
+- Includes: email support, phone support, contact form, FAQs, safety info, legal links
+- Update App Store metadata to point to: `https://[your-replit-url]/support`
+
+### Fix 6: Account Deletion (Apple Requirement)
+- Full account deletion flow: `screens/settings/delete_account_screen.dart`
+- Password verification required before deletion
+- CupertinoAlertDialog confirmation with "Delete Forever" destructive action
+- Lists all data that will be deleted (profile, rides, payments, messages, documents)
+- Optional reason selection (why leaving)
+- Backend API: `POST /api/mobile/auth/delete-account`
+- Clears local cache after deletion
+
 ## App Review Response Notes
 
 This app is NOT a web wrapper. It is a fully native Flutter application that:

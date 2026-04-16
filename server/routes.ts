@@ -1159,6 +1159,39 @@ export async function registerRoutes(
     mobileSuccess(res, { message: "Logged out successfully" });
   });
 
+  // Mobile - delete account
+  app.post("/api/mobile/auth/delete-account", mobileAuthMiddleware, async (req, res) => {
+    try {
+      const mobileUser = (req as any).mobileUser as JwtPayload;
+      const { password, reason } = req.body;
+
+      if (!password) {
+        return mobileError(res, 400, "Password is required", "MISSING_PASSWORD");
+      }
+
+      const user = await storage.getUserByUsername(mobileUser.username);
+      if (!user) {
+        return mobileError(res, 404, "User not found", "USER_NOT_FOUND");
+      }
+
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
+        return mobileError(res, 401, "Incorrect password", "INVALID_PASSWORD");
+      }
+
+      // Log the deletion request
+      console.log(`Account deletion requested: userId=${user.id}, username=${user.username}, reason=${reason || 'none'}`);
+
+      // Delete the user account
+      await storage.deleteUser(user.id);
+
+      mobileSuccess(res, { message: "Account deleted successfully" });
+    } catch (error: any) {
+      console.error("Account deletion error:", error);
+      mobileError(res, 500, "Failed to delete account", "DELETE_FAILED");
+    }
+  });
+
   // Mobile - get current user (using JWT)
   app.get("/api/mobile/auth/me", mobileAuthMiddleware, async (req, res) => {
     try {

@@ -4,11 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/biometric_service.dart';
 import '../../services/local_cache_service.dart';
+import '../../services/auth_service.dart';
+import 'delete_account_screen.dart';
 
 class AppSettingsScreen extends StatefulWidget {
   final VoidCallback? onLogout;
+  final AuthService? authService;
 
-  const AppSettingsScreen({super.key, this.onLogout});
+  const AppSettingsScreen({super.key, this.onLogout, this.authService});
 
   @override
   State<AppSettingsScreen> createState() => _AppSettingsScreenState();
@@ -205,6 +208,34 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             iconColor: Colors.grey,
             title: 'Privacy Policy',
             onTap: () {},
+          ),
+          _navTile(
+            icon: Icons.help_outline,
+            iconColor: Colors.grey,
+            title: 'Help & Support',
+            subtitle: 'Get help or contact us',
+            onTap: () {},
+          ),
+
+          _sectionHeader('ACCOUNT'),
+          _navTile(
+            icon: Icons.delete_forever,
+            iconColor: Colors.red,
+            title: 'Delete Account',
+            subtitle: 'Permanently delete your account and data',
+            onTap: () {
+              if (widget.authService != null) {
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => DeleteAccountScreen(
+                    authService: widget.authService!,
+                    onAccountDeleted: () {
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                      widget.onLogout?.call();
+                    },
+                  ),
+                ));
+              }
+            },
           ),
           const SizedBox(height: 32),
         ],

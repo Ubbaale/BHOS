@@ -79,4 +79,21 @@ class AuthService {
       'newPassword': newPassword,
     });
   }
+
+  Future<AuthTokens> loginWithBiometric(String email) async {
+    final response = await client.post('/api/mobile/auth/biometric-login', {
+      'username': email,
+    });
+    final tokens = AuthTokens.fromJson(response);
+    client.setTokens(tokens.accessToken, tokens.refreshToken);
+    return tokens;
+  }
+
+  Future<void> deleteAccount({required String password, String? reason}) async {
+    await client.post('/api/mobile/auth/delete-account', {
+      'password': password,
+      if (reason != null) 'reason': reason,
+    });
+    client.clearTokens();
+  }
 }

@@ -1,0 +1,112 @@
+Here’s a clean extraction of the key points from your App Store rejection report:
+
+⸻
+
+📱 App Rejection Summary (Care Hub - Driver v1.0.0)
+
+❌ Status
+	•	App was rejected
+	•	Submission cannot be approved until all issues are fixed and resubmitted
+
+⸻
+
+🚨 Main Issues Identified
+
+1. Guideline 4.2 – Minimum Functionality
+	•	App behaves like a web browser
+	•	Not enough native iOS functionality
+	•	Features like push notifications/location are not sufficient
+
+👉 Fix:
+	•	Add real native features (offline capabilities, native UI/UX, device integrations, etc.)
+
+⸻
+
+2. Guideline 2.3.10 – Accurate Metadata
+	•	App includes irrelevant third-party references (e.g., Google Pay)
+
+👉 Fix:
+	•	Remove unnecessary third-party mentions from:
+	•	App description
+	•	Metadata
+	•	Possibly the app itself
+
+⸻
+
+3. Guideline 4 – Design (Login Experience)
+	•	Users are redirected to an external browser for login/registration
+
+👉 Fix:
+	•	Implement in-app authentication
+	•	OR use Safari View Controller (embedded browser)
+
+⚠️ Also required:
+	•	If users can create accounts → must allow account deletion inside the app
+
+⸻
+
+4. Guideline 2.1(a) – App Crash
+	•	App crashed during review
+	•	Crash occurred when tapping:
+👉 “Take Photo” button
+
+Device tested:
+	•	iPad Air (M3), iPadOS 26.4.1
+
+👉 Fix:
+	•	Debug using provided crash logs
+	•	Steps suggested by Apple:
+	1.	Symbolicate crash logs
+	2.	Identify crash pattern
+	3.	Fix root cause
+	4.	Retest on real devices
+
+⸻
+
+5. Guideline 1.5 – Developer Information
+	•	Support URL is broken or invalid
+	•	Current: https://admincarehubapp.com
+
+👉 Fix:
+	•	Provide a working support page with:
+	•	Contact info
+	•	Help resources
+	•	User support details
+
+⸻
+
+🛠️ Action Checklist (What You Should Do Next)
+
+✔ Fix crash on “Take Photo”
+✔ Add meaningful native app functionality
+✔ Move login/signup inside the app
+✔ Remove irrelevant metadata (e.g., Google Pay)
+✔ Provide a working support URL
+✔ Ensure account deletion feature exists
+
+⸻
+
+💡 Strategic Advice (Important)
+
+Right now, Apple sees your app as:
+
+“Just a wrapped website”
+
+To pass review, you should:
+	•	Convert it into a true mobile experience
+	•	Avoid heavy reliance on webviews
+
+Examples of improvements:
+	•	Native camera workflows
+	•	Offline mode
+	•	Push notifications tied to real actions
+	•	Native navigation and UI
+
+⸻
+
+If you want, I can:
+	•	￼ Review your app architecture and suggest exact fixes
+	•	￼ Help you write a response to Apple Review
+	•	Or ￼ give you a step-by-step resubmission plan
+
+Just tell me 👍
