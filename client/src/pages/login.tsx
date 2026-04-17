@@ -20,8 +20,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Eye, EyeOff, Mail, Lock, AlertCircle, Smartphone, Monitor, ShieldCheck, RefreshCw, CheckCircle2 } from "lucide-react";
-import { SiApple, SiGoogleplay } from "react-icons/si";
+import { Loader2, Eye, EyeOff, Mail, Lock, AlertCircle, Smartphone, ShieldCheck, RefreshCw, CheckCircle2 } from "lucide-react";
 import logoImg from "@assets/Logocare-Picsart-BackgroundRemover_1767809315800.jpg";
 
 const loginSchema = z.object({
@@ -217,7 +216,7 @@ export default function LoginPage() {
               </div>
               <CardTitle className="text-2xl font-bold" data-testid="text-login-title">Welcome to CareHub</CardTitle>
               <CardDescription>
-                Choose how you'd like to sign in
+                Sign in with your email and password
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -231,21 +230,6 @@ export default function LoginPage() {
                   Open CareHub App
                 </a>
               </Button>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Button variant="outline" className="h-12" asChild data-testid="button-app-store">
-                  <a href="https://apps.apple.com/app/id6444679914" target="_blank" rel="noopener noreferrer">
-                    <SiApple className="mr-2 h-4 w-4" />
-                    App Store
-                  </a>
-                </Button>
-                <Button variant="outline" className="h-12" asChild data-testid="button-play-store">
-                  <a href="https://play.google.com/store/apps/details?id=com.fieldhcp.app" target="_blank" rel="noopener noreferrer">
-                    <SiGoogleplay className="mr-2 h-4 w-4" />
-                    Google Play
-                  </a>
-                </Button>
-              </div>
 
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center">
@@ -262,12 +246,12 @@ export default function LoginPage() {
                 onClick={() => setShowWebLogin(true)}
                 data-testid="button-web-login"
               >
-                <Monitor className="mr-2 h-4 w-4" />
-                Sign in on Web
+                <Mail className="mr-2 h-4 w-4" />
+                Sign in with Email
               </Button>
 
               <p className="text-xs text-center text-muted-foreground mt-2">
-                Admins and drivers can sign in on the web to access dashboards
+                Use your CareHub email and password to access your account
               </p>
             </CardContent>
           </Card>
