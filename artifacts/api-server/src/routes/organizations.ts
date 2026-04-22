@@ -40,14 +40,13 @@ router.get("/organizations/my-org", requireAuth, async (req, res) => {
   try {
     const [staff] = await db.select().from(staffTable).where(eq(staffTable.clerkUserId, req.userId || "")).limit(1);
     if (!staff) {
-      const orgs = await db.select().from(organizationsTable).limit(1);
-      if (orgs.length === 0) return res.json({ hasOrg: false });
-      return res.json({ hasOrg: true, orgId: orgs[0].id });
+      return res.json({ hasOrg: false, alreadyOnboarded: false });
     }
-    const orgId = await resolveStaffOrgId(req);
-    if (!orgId) return res.json({ hasOrg: false });
-    const [org] = await db.select().from(organizationsTable).where(eq(organizationsTable.id, orgId));
-    return res.json({ hasOrg: !!org, orgId: org?.id });
+    if (!staff.orgId) {
+      return res.json({ hasOrg: false, alreadyOnboarded: true });
+    }
+    const [org] = await db.select().from(organizationsTable).where(eq(organizationsTable.id, staff.orgId));
+    return res.json({ hasOrg: !!org, alreadyOnboarded: true, orgId: org?.id });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

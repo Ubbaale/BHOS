@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, Redirect } from "wouter";
 import { useUser } from "@clerk/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Rocket, BedDouble, Users, UserSquare, Pill, ClipboardList,
-  FileText, UserPlus, LogOut, Shield, BarChart3, CheckCircle, Loader2
+  FileText, UserPlus, LogOut, Shield, BarChart3, CheckCircle, Loader2,
 } from "lucide-react";
 import logoImg from "@assets/bhos-logo.png";
 
@@ -37,12 +37,20 @@ const FEATURES = [
   { icon: Users, label: "Workforce Mgmt", desc: "Shifts & scheduling" },
 ];
 
+type MyOrgResponse = { hasOrg: boolean; alreadyOnboarded?: boolean; orgId?: number };
+
 export default function TrialSetupPage() {
   const [companyName, setCompanyName] = useState("");
   const [, navigate] = useLocation();
   const { user } = useUser();
   const [seeded, setSeeded] = useState(false);
   const qc = useQueryClient();
+
+  const { data: orgCheck, isLoading: orgLoading } = useQuery({
+    queryKey: ["my-org-check"],
+    queryFn: () => fetchApi("/organizations/my-org") as Promise<MyOrgResponse>,
+    staleTime: 30_000,
+  });
 
   const seedDemo = useMutation({
     mutationFn: () => fetchApi("/organizations/seed-demo", {
@@ -58,7 +66,27 @@ export default function TrialSetupPage() {
       qc.invalidateQueries({ queryKey: ["my-org-check"] });
       setTimeout(() => navigate("/dashboard"), 2000);
     },
+    onError: (err) => {
+      const msg = (err as Error)?.message ?? "";
+      if (msg.includes("already linked")) {
+        qc.invalidateQueries({ queryKey: ["my-org-check"] });
+        navigate("/dashboard", { replace: true });
+      }
+    },
   });
+
+  if (orgLoading && !orgCheck) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex flex-col items-center justify-center gap-3 p-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm text-gray-600">Checking your workspace…</p>
+      </div>
+    );
+  }
+
+  if (orgCheck?.hasOrg || orgCheck?.alreadyOnboarded) {
+    return <Redirect to="/dashboard" />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center p-4">

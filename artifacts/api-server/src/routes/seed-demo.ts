@@ -4,14 +4,25 @@ import {
   organizationsTable, subscriptionsTable, licenseEventsTable,
   homesTable, staffTable, patientsTable,
   medicationsTable, bedAssignmentsTable,
-  referralsTable, treatmentPlansTable, treatmentGoalsTable,
+  treatmentPlansTable, treatmentGoalsTable,
   progressNotesTable, dischargePlansTable,
   incidentsTable, dailyLogsTable, shiftsTable,
+  careReferralsTable,
 } from "@workspace/db";
 import { eq, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
 
 const router = Router();
+
+function formatSeedError(e: unknown): string {
+  const x = e as { message?: string; cause?: { detail?: string; message?: string; constraint?: string } };
+  const base = x?.message ?? String(e);
+  const c = x?.cause;
+  if (c?.detail) return `${base} | ${c.detail}`;
+  if (c?.constraint) return `${base} | constraint: ${c.constraint}`;
+  if (c?.message && c.message !== base) return `${base} | ${c.message}`;
+  return base;
+}
 
 const DEMO_HOMES = [
   { name: "Sunrise Behavioral Home", address: "142 Maple Street", city: "Austin", state: "TX", region: "South", capacity: 8, phone: "(512) 555-0101", licenseNumber: "TX-BH-2024-001", geofenceLatitude: "30.2672", geofenceLongitude: "-97.7431" },
@@ -68,7 +79,7 @@ router.post("/organizations/seed-demo", requireAuth, async (req, res) => {
     const { companyName, planTier } = req.body;
     const orgName = companyName || "Demo Behavioral Health Co.";
     const plan = planTier || "professional";
-    const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const baseSlug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
     const startDate = new Date();
     const endDate = new Date(startDate);
@@ -79,6 +90,20 @@ router.post("/organizations/seed-demo", requireAuth, async (req, res) => {
     const priceMap: Record<string, number> = { starter: 199, professional: 299, enterprise: 399, unlimited: 499 };
 
     const result = await db.transaction(async (tx) => {
+      // Keep slug unique across repeated trial attempts with similar names.
+      let slug = baseSlug || "demo-behavioral-health";
+      let slugAttempt = 0;
+      while (true) {
+        const [existingOrg] = await tx
+          .select({ id: organizationsTable.id })
+          .from(organizationsTable)
+          .where(eq(organizationsTable.slug, slug))
+          .limit(1);
+        if (!existingOrg) break;
+        slugAttempt += 1;
+        slug = `${baseSlug || "demo-behavioral-health"}-${slugAttempt}`;
+      }
+
       const [org] = await tx.insert(organizationsTable).values({
         name: orgName, slug, contactName: "Trial User", contactEmail: req.body.email || "trial@demo.bhos.app",
         address: "123 Demo Boulevard", city: "Austin", state: "TX", zipCode: "78701",
@@ -100,7 +125,22 @@ router.post("/organizations/seed-demo", requireAuth, async (req, res) => {
 
       const homeIds: number[] = [];
       for (const home of DEMO_HOMES) {
-        const [h] = await tx.insert(homesTable).values({ ...home, orgId: org.id, status: "active" }).returning();
+        const [h] = await tx
+          .insert(homesTable)
+          .values({
+            orgId: org.id,
+            name: home.name,
+            address: home.address,
+            city: home.city,
+            state: home.state,
+            region: home.region,
+            capacity: home.capacity,
+            phone: home.phone,
+            status: "active",
+            latitude: home.geofenceLatitude,
+            longitude: home.geofenceLongitude,
+          } as any)
+          .returning();
         homeIds.push(h.id);
       }
 
@@ -108,8 +148,18 @@ router.post("/organizations/seed-demo", requireAuth, async (req, res) => {
       for (let i = 0; i < DEMO_STAFF.length; i++) {
         const s = DEMO_STAFF[i];
         const homeId = homeIds[i % homeIds.length];
+        // Emails must be unique globally on `staff.email` — never reuse the static demo list across orgs.
         const [created] = await tx.insert(staffTable).values({
-          ...s, homeId, status: "active", hireDate: new Date("2024-01-15"),
+          firstName: s.firstName,
+          lastName: s.lastName,
+          email: `seed-org${org.id}-staff${i}@demo.bhos.app`,
+          phone: s.phone,
+          role: s.role,
+          employeeType: s.employeeType,
+          homeId,
+          orgId: org.id,
+          status: "active",
+          hireDate: new Date("2024-01-15"),
         } as any).returning();
         staffIds.push(created.id);
       }
@@ -123,8 +173,20 @@ router.post("/organizations/seed-demo", requireAuth, async (req, res) => {
         const p = DEMO_PATIENTS[i];
         const homeId = homeIds[i % homeIds.length];
         const [created] = await tx.insert(patientsTable).values({
-          ...p, homeId, status: "active", admissionDate: new Date("2024-06-01"),
-          emergencyContactName: "Emergency Contact", emergencyContactPhone: "(512) 555-9999",
+          firstName: p.firstName,
+          lastName: p.lastName,
+          dateOfBirth: new Date(p.dateOfBirth),
+          gender: p.gender,
+          mrn: `MRN-${org.id}-${String(i + 1).padStart(3, "0")}`,
+          diagnosis: p.diagnosis,
+          allergies: p.allergies,
+          insuranceProvider: p.insuranceProvider,
+          insurancePolicyNumber: p.insurancePolicyNumber,
+          homeId,
+          status: "active",
+          admissionDate: new Date("2024-06-01"),
+          emergencyContact: "Emergency Contact",
+          emergencyPhone: "(512) 555-9999",
         } as any).returning();
         patientIds.push(created.id);
       }
@@ -160,8 +222,21 @@ router.post("/organizations/seed-demo", requireAuth, async (req, res) => {
         { firstName: "Morgan", lastName: "Davis", referralSource: "family", referralSourceName: "Patricia Davis (mother)", diagnosis: "Schizoaffective Disorder", priorityLevel: "normal", stage: "contacted", status: "active" },
         { firstName: "Avery", lastName: "Thompson", referralSource: "insurance", referralSourceName: "Aetna Case Manager", diagnosis: "PTSD with co-morbid anxiety", priorityLevel: "normal", stage: "waitlist", status: "active" },
       ];
+      const urgencyForCare = (p: string) =>
+        p === "urgent" ? "urgent" : p === "high" ? "high" : "routine";
       for (const ref of referralData) {
-        await tx.insert(referralsTable).values(ref as any);
+        const who = `${ref.firstName} ${ref.lastName}`;
+        const fromParts = [ref.referralSource, ref.referralSourceName].filter(Boolean);
+        await tx.insert(careReferralsTable).values({
+          orgId: org.id,
+          referralType: "incoming",
+          referredFrom: fromParts.join(" — ") || ref.referralSource,
+          reason: `${who}: ${ref.diagnosis ?? "Referral"}`,
+          urgency: urgencyForCare(ref.priorityLevel),
+          status: ref.status,
+          notes: `Admissions-style stage (demo): ${ref.stage}`,
+          createdBy: staffIds[0],
+        } as any);
       }
 
       for (let i = 0; i < 5; i++) {
@@ -288,7 +363,7 @@ router.post("/organizations/seed-demo", requireAuth, async (req, res) => {
     res.status(201).json({ message: "Demo data seeded successfully!", trialEndsAt: result.subscription.endDate, ...result });
   } catch (e: any) {
     console.error("Seed demo error:", e);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: formatSeedError(e) });
   }
 });
 

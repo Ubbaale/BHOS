@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
-import { QueryClient, QueryClientProvider, useQueryClient, useQuery } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
 import { Toaster } from "@/components/ui/toaster";
 import bgMedical from "@assets/bg-medical.jpg";
@@ -99,17 +100,33 @@ function SignUpPage() {
   );
 }
 
+function fetchMyOrg(): Promise<{ hasOrg: boolean; alreadyOnboarded?: boolean }> {
+  const base = import.meta.env.BASE_URL;
+  return fetch(`${base}api/organizations/my-org`, { credentials: "include" }).then((r) => {
+    if (!r.ok) throw new Error("my-org");
+    return r.json();
+  });
+}
+
+/** After login: dashboard if trial/org already set up, otherwise trial setup (first visit). */
 function SignedInRedirect() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["my-org-check"],
-    queryFn: () => fetch(`${import.meta.env.BASE_URL}api/organizations/my-org`, { credentials: "include" }).then(r => r.ok ? r.json() : { hasOrg: false }),
-    retry: false,
-    staleTime: 30000,
+    queryFn: fetchMyOrg,
+    staleTime: 60_000,
   });
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
-  if (!data?.hasOrg) return <Redirect to="/trial-setup" />;
-  return <Redirect to="/dashboard" />;
+  if (isLoading && data === undefined) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-teal-50/20">
+        <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" aria-hidden />
+      </div>
+    );
+  }
+
+  const skipTrial =
+    !isError && (data?.hasOrg === true || data?.alreadyOnboarded === true);
+  return <Redirect to={skipTrial ? "/dashboard" : "/trial-setup"} />;
 }
 
 function HomeRedirect() {
